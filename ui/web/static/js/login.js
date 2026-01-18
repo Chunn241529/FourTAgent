@@ -9,7 +9,7 @@ class AIAssistantLoginForm {
     this.tokenWidget = document.getElementById("tokenWidget");
     this.tokenValue = document.getElementById("tokenValue");
     this.socialButtons = document.querySelectorAll(".social-neural");
-    this.API_BASE_URL = "https://living-tortoise-polite.ngrok-free.app";
+    this.API_BASE_URL = "http://127.0.0.1:8000";
     this.userId = null;
     this.authCode = new URLSearchParams(window.location.search).get("code");
     this.state = new URLSearchParams(window.location.search).get("state");

@@ -25,6 +25,16 @@ class ResetPassword(BaseModel):
     new_password: str
 
 
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class UpdateProfile(BaseModel):
+    username: Optional[str] = None
+    gender: Optional[str] = None
+
+
 class TaskPrompt(BaseModel):
     prompt: str
 

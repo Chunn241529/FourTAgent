@@ -162,5 +162,6 @@ class TokenDialog(QDialog):
         return self.token_input.text().strip()
 
     def open_token_url(self):
-        url = QUrl("https://living-tortoise-polite.ngrok-free.app/")
+        # url = QUrl("https://living-tortoise-polite.ngrok-free.app/")  # ngrok disabled
+        url = QUrl("http://localhost:8000/")
         QDesktopServices.openUrl(url)

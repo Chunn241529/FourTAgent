@@ -26,6 +26,7 @@ class ChatLogic:
         self.parent.user_scrolling = False
         self.last_resize_time = 0
         self.resize_throttle_ms = 100  # Throttle resizing to every 100ms
+        self.scroll_animation = None  # Animation for smooth scrolling
 
     def setup_connections(self) -> None:
         self.parent.ui.send_stop_button.send_clicked.connect(self.send_prompt)
@@ -49,6 +50,7 @@ class ChatLogic:
 
         # Handle commands
         if prompt_text.startswith("/"):
+            # REMOVED: /deepsearch now works as a tool, not a command
             self.handle_command(prompt_text)
             self.parent.ui.input_box.clear()
             return
@@ -118,6 +120,7 @@ class ChatLogic:
         self.ollama_thread.conversation_id_received.connect(
             self.on_conversation_id_received
         )
+        self.ollama_thread.deep_search_received.connect(self.on_deep_search_received)
         self.ollama_thread.start()
         print("OllamaWorker started")
 
@@ -181,9 +184,11 @@ class ChatLogic:
                 )
 
         elif cmd == "/history":
+            chat_display.clear()
             self.start_command_worker("history")
 
         elif cmd == "/load":
+            chat_display.clear()
             if args.isdigit():
                 self.start_command_worker("load", conversation_id=int(args))
             else:
@@ -201,6 +206,43 @@ class ChatLogic:
 
         elif cmd == "/delete_all":
             self.start_command_worker("delete_all")
+
+        elif cmd == "/deepsearch":
+            if not args:
+                chat_display.append(
+                    "<span style='color:yellow'>Vui lòng nhập chủ đề: /deepsearch &lt;topic&gt;</span>"
+                )
+            else:
+                # Send as a regular prompt but with /deepsearch prefix, which the backend now handles
+                # We need to bypass the command handling and send it via send_prompt logic
+                # But send_prompt reads from input_box.
+                # So we can just let it fall through if we didn't clear input_box?
+                # Actually, handle_command is called from send_prompt.
+                # If we return here, send_prompt continues? No, send_prompt returns after handle_command if it was a command.
+
+                # We want to treat this as a message sent to backend, but maybe with special UI state?
+                # For now, let's just send it.
+
+                # We need to set the input box text back to the full command so send_prompt can send it?
+                # Or better, just call the worker directly or modify send_prompt to not treat /deepsearch as a client-side command only.
+
+                # Let's change how send_prompt handles commands.
+                # If it's /deepsearch, we want to proceed to sending it to backend.
+                pass  # Fall through to "Lệnh không xác định" is not what we want.
+
+                # Actually, the cleanest way is to NOT handle /deepsearch here if we want it to go to backend.
+                # But we want to show help for it.
+
+                # Let's modify send_prompt to check for /deepsearch specifically and NOT call handle_command,
+                # OR, we can just send it from here.
+
+                # But send_prompt logic sets up UI state (spinner, etc).
+                # So, let's remove /deepsearch from here and let it pass through?
+                # But send_prompt checks `if prompt_text.startswith("/"): handle_command... return`
+
+                # So we MUST handle it here or change send_prompt.
+                # Let's change send_prompt to allow /deepsearch to pass through.
+                pass
 
         else:
             chat_display.append(
@@ -222,7 +264,10 @@ class ChatLogic:
             self.cmd_worker.wait()
 
         token = self.parent.token
-        base_url = "http://localhost:8000"  # Should be configurable
+        base_url = (
+            # "https://living-tortoise-polite.ngrok-free.app"  # ngrok disabled
+            "http://localhost:8000"  # Should be configurable
+        )
 
         self.cmd_worker = CommandWorker(command, base_url, token, **kwargs)
         self.cmd_worker.result_ready.connect(self.handle_command_result)
@@ -249,11 +294,25 @@ class ChatLogic:
             chat_display.clear()
             chat_display.append(f"<i>Đang xem cuộc hội thoại #{conv_id}</i><br>")
             for msg in data:
-                if msg["role"] == "user":
-                    chat_display.append(f"<br><b>&gt;&gt;&gt; {msg['content']}</b><br>")
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                print(f"Loading message: role={role}, content_length={len(content)}")
+
+                if role == "user":
+                    chat_display.append(f"<br><b>&gt;&gt;&gt; {content}</b><br>")
+                elif role == "assistant":
+                    # Render markdown for assistant messages
+                    html_content = markdown.markdown(
+                        content, extensions=["fenced_code", "tables", "codehilite"]
+                    )
+                    chat_display.append(f"{html_content}<br>")
                 else:
-                    content = markdown.markdown(msg["content"])
-                    chat_display.append(f"{content}<br>")
+                    # Handle any other roles
+                    print(f"Unknown role: {role}")
+                    html_content = markdown.markdown(
+                        content, extensions=["fenced_code", "tables", "codehilite"]
+                    )
+                    chat_display.append(f"{html_content}<br>")
 
         elif result["type"] == "delete":
             self.parent.conversation_id = None
@@ -361,14 +420,23 @@ class ChatLogic:
             self.last_resize_time = current_time
 
     def on_search_started(self, query: str):
-        """Display search started message"""
-        # Hide spinner so message is visible
-        self.parent.spinner_logic.reset_to_idle()
+        """Display search started message in-line with conversation"""
+        if query:
+            # Stop spinner to prevent overlap with search box
+            self.parent.spinner_logic._hide_spinner()
 
-        if query and query.strip():
-            search_msg = (
-                f'<div style="'
-                f"background-color: rgba(255, 255, 255, 0.05); "
+            # Check if query already contains a formatted message (e.g., from deep_search)
+            if query.startswith("🔬") or query.startswith("🔍"):
+                # Already formatted, use as-is
+                display_text = query
+            else:
+                # Format for web_search
+                display_text = f"🔍 Đang tìm kiếm: {query.strip()}..."
+
+            # Create HTML box for search status
+            search_box_html = (
+                f'\n\n<div style="'
+                f"background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); "
                 f"color: white; "
                 f"font-weight: bold; "
                 f"padding: 15px 20px; "
@@ -376,16 +444,32 @@ class ChatLogic:
                 f"border-bottom: 4px solid rgba(0, 0, 0, 0.5); "
                 f"border-radius: 12px; "
                 f"margin: 15px 0; "
-                f"font-size: 14px;"
-                f'">'
-                f"🔍 Đang tìm kiếm: {query.strip()}..."
-                f"</div>"
+                f'font-size: 14px;">'
+                f"{display_text}"
+                f"</div>\n\n"
             )
-            self.parent.ui.response_display.append(search_msg)
+
+            # Append to full_response_md (markdown allows raw HTML)
+            self.parent.full_response_md += search_box_html
+
+            # Trigger immediate render
+            html_content = markdown.markdown(
+                self.parent.full_response_md,
+                extensions=["fenced_code", "tables", "codehilite"],
+            )
+            wrapped_html = f'<div style="padding: 15px 10px;">{html_content}</div>'
+            self.parent.ui.response_display.setHtml(wrapped_html)
+
+            # Scroll to bottom
+            if not self.parent.user_scrolling:
+                cursor = self.parent.ui.response_display.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                self.parent.ui.response_display.setTextCursor(cursor)
+                self.parent.ui.response_display.ensureCursorVisible()
 
     def on_search_complete(self, data: dict):
-        """Display search completion message"""
-        # User requested to remove "Found X results" message
+        """Called when search completes"""
+        # Search status is already in markdown, no action needed
         pass
 
     def on_search_sources(self, sources_json: str):
@@ -442,6 +526,45 @@ class ChatLogic:
             print(f"Error parsing sources JSON: {e}")
         except Exception as e:
             print(f"Error processing sources: {e}")
+
+    def on_deep_search_received(self, data: dict):
+        """Handle deep search updates"""
+        status = data.get("status")
+        message = data.get("message")
+
+        # Show widget if hidden
+        if not self.parent.ui.deep_search_widget.isVisible():
+            self.parent.ui.deep_search_widget.show()
+            self.parent.ui.adjust_window_height(staged=True)
+
+        # # Icons
+        # status_icons = {
+        #     "started": "🚀",
+        #     "searching": "🔍",
+        #     "summarizing": "📝",
+        #     "reflecting": "🤔",
+        #     "planning": "📅",
+        #     "synthesizing": "✨",
+        #     "info": "ℹ️",
+        #     "warning": "⚠️",
+        #     "error": "❌",
+        # }
+        # icon = status_icons.get(status, "🔹")
+
+        # Format HTML
+        html_msg = (
+            f"<div style='margin-bottom: 5px;'>"
+            f"<span style='color: #4ec9b0; font-weight: bold;'>{status}:</span> "
+            f"<span style='color: #e0e0e0;'>{message}</span>"
+            f"</div>"
+        )
+
+        self.parent.ui.deep_search_display.append(html_msg)
+
+        # Scroll to bottom
+        cursor = self.parent.ui.deep_search_display.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.parent.ui.deep_search_display.setTextCursor(cursor)
 
     def on_content_started(self):
         self.parent.spinner_logic.start_thinking()
@@ -512,8 +635,55 @@ class ChatLogic:
             self.parent.ui.toggle_thinking(show_full_content=True)
         else:
             self.parent.ui.thinking_widget.hide()
-        # Tăng height tối đa sau khi response hoàn tất
-        self.parent.ui.adjust_window_height(staged=False)
+
+        # Hide deep search widget on finish
+        self.parent.ui.deep_search_widget.hide()
+        self.parent.ui.deep_search_display.clear()
+
+        # Cuộn lên đầu TRƯỚC KHI maximize để user thấy phần đầu response
+        from PySide6.QtCore import QPropertyAnimation, QEasingCurve
+
+        # Scroll response_display, không phải scroll_area
+        scroll_bar = self.parent.ui.response_display.verticalScrollBar()
+        current_value = scroll_bar.value()
+        max_value = scroll_bar.maximum()
+
+        print(
+            f"Before maximize - scroll position: current={current_value}, max={max_value}"
+        )
+
+        # Reset user_scrolling flag to allow auto-scroll
+        self.parent.user_scrolling = False
+
+        # Scroll to top first (if needed), then maximize
+        if max_value > 0 and current_value > 0:
+            # Stop any existing scroll animation
+            if (
+                self.scroll_animation
+                and self.scroll_animation.state() == QPropertyAnimation.Running
+            ):
+                self.scroll_animation.stop()
+
+            # Create smooth scroll animation
+            self.scroll_animation = QPropertyAnimation(scroll_bar, b"value")
+            self.scroll_animation.setDuration(800)  # 800ms for smooth scroll
+            self.scroll_animation.setStartValue(current_value)
+            self.scroll_animation.setEndValue(0)  # Scroll to top
+            self.scroll_animation.setEasingCurve(QEasingCurve.InOutQuad)
+
+            # Maximize window AFTER scroll animation completes
+            def on_scroll_finished():
+                print("Scroll animation completed, now maximizing window")
+                self.parent.ui.adjust_window_height(staged=False)
+
+            self.scroll_animation.finished.connect(on_scroll_finished)
+            self.scroll_animation.start()
+            print(f"Scroll animation started from {current_value} to 0")
+        else:
+            # No scroll needed, just maximize
+            print(f"No scroll needed, maximizing directly")
+            self.parent.ui.adjust_window_height(staged=False)
+
         if self.ollama_thread:
             if self.ollama_thread.isRunning():
                 self.ollama_thread.quit()

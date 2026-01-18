@@ -5,7 +5,14 @@ from app.services.device_detection import DeviceDetectionService
 from app.services.device_service import DeviceService
 from app.services.auth_service import AuthService
 from app.models import User
-from app.schemas import UserRegister, UserLogin, VerifyCode, ResetPassword
+from app.schemas import (
+    UserRegister,
+    UserLogin,
+    VerifyCode,
+    ResetPassword,
+    ChangePassword,
+    UpdateProfile,
+)
 from app.utils import (
     hash_password,
     verify_password,
@@ -314,3 +321,45 @@ def remove_device(
         return {"message": f"Device {device_id} removed successfully"}
     else:
         raise HTTPException(404, f"Device {device_id} not found")
+
+
+@router.post("/change-password")
+def change_password(
+    data: ChangePassword,
+    user_id: int = Depends(verify_jwt),
+    db: Session = Depends(get_db),
+):
+    """Đổi mật khẩu cho user đang đăng nhập"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(400, "Incorrect password")
+
+    user.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+@router.put("/profile")
+def update_profile(
+    data: UpdateProfile,
+    user_id: int = Depends(verify_jwt),
+    db: Session = Depends(get_db),
+):
+    """Cập nhật thông tin profile"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if data.username is not None:
+        user.username = data.username
+    if data.gender is not None:
+        user.gender = data.gender
+
+    db.commit()
+    return {
+        "message": "Profile updated",
+        "user": {"username": user.username, "gender": user.gender},
+    }

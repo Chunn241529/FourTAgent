@@ -60,3 +60,7 @@ cachetools
 faiss-cpu
 
 trafilatura
+duckduckgo-search 
+beautifulsoup4 
+requests
+ddgs

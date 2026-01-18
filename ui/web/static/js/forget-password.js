@@ -5,7 +5,7 @@ class AIAssistantForgetPasswordForm {
         this.submitButton = this.form.querySelector('.neural-button');
         this.successMessage = document.getElementById('successMessage');
         this.emailError = document.getElementById('emailError');
-        this.API_BASE_URL = 'https://living-tortoise-polite.ngrok-free.app';
+        this.API_BASE_URL = 'http://127.0.0.1:8000';
         this.init();
     }
 

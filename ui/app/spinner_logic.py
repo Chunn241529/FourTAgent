@@ -109,23 +109,24 @@ class SpinnerLogic:
             display_text = f"Đang tìm kiếm {one_line_query}"
 
         self.parent.ui.scroll_area.setVisible(True)
-        scroll_width = max(self.parent.ui.scroll_area.width(), 100)
-        scroll_height = max(self.parent.ui.scroll_area.height(), 50)
-        print(f"scroll_area set visible, size: {scroll_width}x{scroll_height}")
+
+        # Install event filter to handle resize
+        self.parent.ui.scroll_area.installEventFilter(self.parent)
+        # We need to handle eventFilter in ChatWindow or define a local one.
+        # Since we can't easily modify ChatWindow to delegate back here without circular imports or complex logic,
+        # let's just update on timer or use a simpler approach.
+        # Actually, we can just update in _update_spinner which runs on timer!
 
         self.overlay = QWidget(self.parent.ui.scroll_area)
         self.overlay.setStyleSheet("background: transparent;")
-        self.overlay.setGeometry(0, 0, scroll_width, 50)
-        self.overlay.raise_()
-        print(
-            f"Spinner overlay created, geometry: {self.overlay.geometry().width()}x{self.overlay.geometry().height()}, visible: {self.overlay.isVisible()}"
-        )
+        self.overlay.hide()  # Start hidden
 
         # Container widget cho spinner và text
         container = QWidget(self.overlay)
         container_layout = QHBoxLayout(container)
         container_layout.setContentsMargins(10, 5, 10, 5)
         container_layout.setSpacing(5)
+        container_layout.setAlignment(Qt.AlignLeft)  # Left align content
 
         # Spinner label
         self.spinner_label = QLabel(self.spinner_chars[self.spinner_index])
@@ -137,38 +138,55 @@ class SpinnerLogic:
         # Text label
         self.text_label = QLabel(display_text)
         self.text_label.setStyleSheet("color: #e0e0e0; font-size: 14px;")
-        self.text_label.setWordWrap(False)  # Không wrap text để tránh xuống hàng
-        self.text_label.setMinimumWidth(10)  # Đảm bảo có kích thước tối thiểu
-        container_layout.addWidget(self.text_label, stretch=1)
-        container_layout.addStretch()
+        self.text_label.setWordWrap(False)
+        self.text_label.setMinimumWidth(10)
+        container_layout.addWidget(self.text_label)
 
-        container.setGeometry(0, 0, self.overlay.width(), 50)
-        container.show()
+        container.adjustSize()
 
-        # Điều chỉnh kích thước overlay dựa trên text
-        text_width = (
-            self.text_label.fontMetrics().boundingRect(self.text_label.text()).width()
-            + 20
-        )
-        spinner_width = self.spinner_label.width()
-        total_width = max(text_width + spinner_width + 20, scroll_width)
-        self.overlay.setGeometry(0, 0, total_width, 50)
-        print(
-            f"Text label shown with text: {display_text}, visible: {self.text_label.isVisible()}"
-        )
+        # Initial positioning
+        self._update_overlay_geometry()
+
+        self.overlay.show()
+        self.overlay.raise_()
+        print(f"Spinner overlay shown")
 
         # Khởi tạo timer nếu chưa có
         if not self.spinner_timer:
             self.spinner_timer = QTimer(self.overlay)
-            self.spinner_timer.setInterval(200)  # Tăng interval để giảm tải
+            self.spinner_timer.setInterval(100)  # Faster update for smooth animation
             self.spinner_timer.timeout.connect(self._update_spinner)
-            print(f"Spinner timer initialized, active: {self.spinner_timer.isActive()}")
+            print(f"Spinner timer initialized")
 
         self.spinner_timer.start()
-        self.overlay.show()
-        self.overlay.raise_()
-        print(f"Spinner overlay shown, visible: {self.overlay.isVisible()}")
         self.parent.ui.adjust_window_height()
+
+    def _update_overlay_geometry(self):
+        """Update overlay position to center it in scroll_area"""
+        if self.overlay and self.parent.ui.scroll_area:
+            sa_width = self.parent.ui.scroll_area.width()
+            sa_height = self.parent.ui.scroll_area.height()
+
+            # Size overlay to fit content (approx 200x50) or full width?
+            # Let's make overlay full width but centered content
+            # Actually, let's just center the overlay widget itself
+
+            container = self.overlay.findChild(QWidget)
+            if container:
+                container.adjustSize()
+                w = container.width()
+                h = container.height()
+
+                x = 20  # Fixed left margin
+                y = (sa_height - h) // 2
+
+                # Ensure y is at least 0 (top) if scroll area is small
+                y = max(0, y)
+                # Ensure x is at least 0
+                x = max(0, x)
+
+                self.overlay.setGeometry(x, y, w, h)
+                container.setGeometry(0, 0, w, h)
 
     def _hide_spinner(self):
         """Ẩn spinner"""
@@ -192,6 +210,7 @@ class SpinnerLogic:
         if self.spinner_label and self.overlay and self.overlay.isVisible():
             self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
             self.spinner_label.setText(self.spinner_chars[self.spinner_index])
+            self._update_overlay_geometry()  # Keep centered
 
     def start_search(self, query=None):
         """Trigger chuyển sang trạng thái search với query"""

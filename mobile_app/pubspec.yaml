@@ -1,0 +1,36 @@
+name: fourt_chat
+description: "FourT AI - Mobile Chat App"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # State management
+  provider: ^6.1.1
+  # HTTP requests
+  http: ^1.1.0
+  # Secure storage for tokens
+  flutter_secure_storage: ^9.0.0
+  # Simple storage
+  shared_preferences: ^2.2.2
+  # Markdown rendering
+  flutter_markdown: ^0.6.18
+  # Custom fonts
+  google_fonts: ^6.1.0
+  # Text animations
+  animated_text_kit: ^4.2.2
+  # Loading shimmer effects
+  shimmer: ^3.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

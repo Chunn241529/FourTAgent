@@ -20,6 +20,7 @@ class OllamaWorker(QThread):
     image_processing = Signal()
     image_description = Signal(str)
     error_received = Signal(str)
+    deep_search_received = Signal(dict)
     finished = Signal()
     conversation_id_received = Signal(int)
 
@@ -37,7 +38,8 @@ class OllamaWorker(QThread):
         self.image_base64 = image_base64
         self.is_thinking = is_thinking
         self.conversation_id = conversation_id
-        self.base_url = "https://living-tortoise-polite.ngrok-free.app"
+        # self.base_url = "https://living-tortoise-polite.ngrok-free.app"  # ngrok disabled
+        self.base_url = "http://localhost:8000"
         self.max_image_size = 20 * 1024 * 1024  # 20MB giới hạn
         self.partial_buffer = ""  # Biến để lưu phần còn lại nếu thẻ bị chia cắt
         self.thinking_buffer = ""  # Biến để tích lũy nội dung thinking
@@ -178,6 +180,12 @@ class OllamaWorker(QThread):
                                         query = args.get("query", "")
                                         self.search_started.emit(query)
 
+                            if "deep_search_started" in data:
+                                message = data["deep_search_started"].get(
+                                    "message", "Đang thực hiện nghiên cứu sâu..."
+                                )
+                                self.search_started.emit(message)
+
                             if "search_complete" in data:
                                 self.search_complete.emit(data["search_complete"])
 
@@ -279,13 +287,16 @@ class OllamaWorker(QThread):
                             if "thinking" in data and data["thinking"]:
                                 self.thinking_received.emit(data["thinking"])
 
+                            if "deep_search_update" in data:
+                                self.deep_search_received.emit(
+                                    data["deep_search_update"]
+                                )
+
                         except json.JSONDecodeError as e:
                             logger.error(
                                 f"Lỗi giải mã JSON: {e}, Raw line: {line[:100]}"
                             )
                             continue
-                        finally:
-                            gc.collect()
         except Exception as e:
             self.error_received.emit(f"Lỗi kết nối server: {str(e)}")
             print(f"Server connection error: {str(e)}")
