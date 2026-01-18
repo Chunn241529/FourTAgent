@@ -221,10 +221,20 @@ class ChatProvider extends ChangeNotifier {
                         final lastIndex = _messages.length - 1;
                         if (lastIndex >= 0) {
                           final currentSearches = List<String>.from(_messages[lastIndex].activeSearches);
-                          if (!currentSearches.contains(query)) {
-                            currentSearches.add(query);
+                          final currentCompleted = _messages[lastIndex].completedSearches;
+                          
+                          // Deduplicate: Don't add if already active OR already completed
+                          if (!currentSearches.contains(query) && !currentCompleted.contains(query)) {
+                            currentSearches.add(query!);
+                            
+                            // Append marker to content for interleaved display
+                            // We add double newlines to ensure it breaks from previous text
+                            final marker = '\n\n[[SEARCH:$query]]\n\n';
+                            fullResponse += marker; // CRITICAL: Update source of truth accumulator
+                            
                             _messages[lastIndex] = _messages[lastIndex].copyWith(
                               activeSearches: currentSearches,
+                              content: fullResponse, 
                             );
                             shouldNotify = true;
                             print('>>> Search started: $query');
@@ -247,7 +257,11 @@ class ChatProvider extends ChangeNotifier {
                       // Move from active to completed
                       if (currentActive.contains(query)) {
                         currentActive.remove(query);
-                        currentCompleted.add(query);
+                        // Only add to completed if not already there
+                        if (!currentCompleted.contains(query)) {
+                          currentCompleted.add(query!);
+                        }
+                        
                         _messages[lastIndex] = _messages[lastIndex].copyWith(
                           activeSearches: currentActive,
                           completedSearches: currentCompleted,

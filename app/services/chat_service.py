@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 import logging
+import asyncio
 from sqlalchemy.orm import Session
 from concurrent.futures import ThreadPoolExecutor
 from app.db import SessionLocal
@@ -139,14 +140,18 @@ class ChatService:
         )
         logger.info(f"Selected model: {model_name}, level_think: {level_think}")
 
-        # Lấy context từ RAG
-        rag_context = RAGService.get_rag_context(
-            effective_query, user_id, conversation.id, db
+        # Get RAG context (Non-blocking)
+        loop = asyncio.get_running_loop()
+        rag_context = await loop.run_in_executor(
+            None,
+            lambda: RAGService.get_rag_context(
+                effective_query, user_id, conversation.id, db
+            ),
         )
 
-        # Get preferred response examples (from liked responses)
-        preference_examples = PreferenceService.get_similar_preferences(
-            effective_query, user_id, top_k=2
+        preference_examples = await loop.run_in_executor(
+            None,
+            lambda: PreferenceService.get_similar_preferences(effective_query, user_id),
         )
         if preference_examples:
             logger.info(f"Found preference examples for context injection")
@@ -162,7 +167,9 @@ class ChatService:
 
         # Save user message IMMEDIATELY to DB (before streaming)
         # This ensures next request can see this message in history
-        query_emb = EmbeddingService.get_embedding(effective_query)
+        query_emb = await loop.run_in_executor(
+            None, lambda: EmbeddingService.get_embedding(effective_query)
+        )
         user_msg = ModelChatMessage(
             user_id=user_id,
             conversation_id=conversation.id,
@@ -546,10 +553,13 @@ class ChatService:
             full_response = []
 
             # Get hierarchical memory (summary + semantic + working)
-            summary, semantic_messages, working_memory = (
-                ChatService._get_hierarchical_memory(
+            # Use run_in_executor for embedding generation inside this method
+            loop = asyncio.get_running_loop()
+            summary, semantic_messages, working_memory = await loop.run_in_executor(
+                None,
+                lambda: ChatService._get_hierarchical_memory(
                     db, conversation_id, current_query=full_prompt, user_id=user_id
-                )
+                ),
             )
 
             # Update system prompt with conversation summary AND semantic memory

@@ -156,7 +156,9 @@ class _ChatScreenState extends State<ChatScreen> {
               left: 0,
               right: 0,
               top: 0,
-              bottom: 160, // Space for input below
+              // Input is at Alignment(0, 0.4), approx 70% down. 
+              // Reserve bottom 40% of screen for valid margin to avoid overlap.
+              bottom: MediaQuery.of(context).size.height * 0.4, 
               child: Center(
                 child: SingleChildScrollView(
                   child: Padding(

@@ -99,22 +99,17 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Searches indicator (both active and completed)
-                if (message.activeSearches.isNotEmpty || message.completedSearches.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: SearchIndicator(
-                      activeSearches: message.activeSearches,
-                      completedSearches: message.completedSearches,
-                    ),
-                  ),
-                // Markdown content
+
+                // Thinking indicator
                 if (message.thinking != null && message.thinking!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _ThinkingIndicator(thinking: message.thinking!),
                   ),
-                _buildMarkdownContent(theme, isDark),
+
+                // Content with interleaved searches
+                _buildInterleavedContent(theme, isDark),
+
                 // Streaming indicator
                 if (message.isStreaming)
                   Padding(
@@ -135,6 +130,100 @@ class MessageBubble extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildInterleavedContent(ThemeData theme, bool isDark) {
+    if (message.content.isEmpty) return const SizedBox.shrink();
+
+    // Regex to find search markers: [[SEARCH:query]]
+    final regex = RegExp(r'\[\[SEARCH:(.*?)\]\]');
+    final children = <Widget>[];
+    int lastIndex = 0;
+    
+    final content = message.content;
+
+    for (final match in regex.allMatches(content)) {
+      // Add text before match
+      if (match.start > lastIndex) {
+        final text = content.substring(lastIndex, match.start);
+        if (text.trim().isNotEmpty) {
+           children.add(
+             MarkdownBody(
+                data: text,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: theme.textTheme.bodyMedium?.copyWith(
+                    color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    height: 1.5,
+                  ),
+                  code: theme.textTheme.bodyMedium?.copyWith(
+                    fontFamily: 'monospace',
+                    backgroundColor: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+             )
+           );
+        }
+      }
+      
+      // Add search widget
+      final query = match.group(1);
+      if (query != null) {
+          final isCompleted = message.completedSearches.contains(query);
+          // If not in completed, assumes active
+          
+          children.add(Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: SearchIndicator(
+                  activeSearches: isCompleted ? [] : [query],
+                  completedSearches: isCompleted ? [query] : [],
+              ),
+          ));
+      }
+      
+      lastIndex = match.end;
+    }
+    
+    // Add remaining text
+    if (lastIndex < content.length) {
+       final text = content.substring(lastIndex);
+       if (text.trim().isNotEmpty) {
+          children.add(
+             MarkdownBody(
+                data: text,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: theme.textTheme.bodyMedium?.copyWith(
+                    color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    height: 1.5,
+                  ),
+                  code: theme.textTheme.bodyMedium?.copyWith(
+                    fontFamily: 'monospace',
+                    backgroundColor: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+             )
+           );
+       }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  // Deprecated _buildMarkdownContent removed/replaced
+  // Widget _buildMarkdownContent(ThemeData theme, bool isDark) { ... } preserved if needed but replacing call site.
+
+
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
     return MarkdownBody(
