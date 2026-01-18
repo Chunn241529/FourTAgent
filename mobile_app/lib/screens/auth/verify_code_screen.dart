@@ -140,12 +140,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
               const SizedBox(height: 16),
               // Resend code
               TextButton(
-                onPressed: () {
-                  // TODO: Implement resend code
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã gửi lại mã xác minh')),
-                  );
-                },
+                onPressed: _isLoading ? null : _resendCode,
                 child: const Text('Gửi lại mã'),
               ),
             ],
@@ -153,5 +148,27 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
         ),
       ),
     );
+  }
+
+  void _resendCode() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.resendCode(widget.userId);
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã gửi lại mã xác minh')),
+      );
+    } else {
+      setState(() => _errorMessage = authProvider.error ?? 'Gửi lại mã thất bại');
+    }
   }
 }

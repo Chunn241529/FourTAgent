@@ -73,6 +73,18 @@ class AuthService {
     return user;
   }
 
+  /// Resend verification code
+  static Future<void> resendVerificationCode(int userId) async {
+    final response = await ApiService.post(
+      '${ApiConfig.resendCode}?user_id=$userId',
+    );
+    
+    if (response.statusCode != 200) {
+      final data = ApiService.parseResponse(response);
+      throw ApiException(data['detail'] ?? 'Failed to resend code', response.statusCode);
+    }
+  }
+
   /// Request password reset
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     final response = await ApiService.post(ApiConfig.forgetPassword, body: {
@@ -156,6 +168,18 @@ class AuthService {
     final response = await ApiService.delete('${ApiConfig.devices}/$deviceId');
     if (response.statusCode != 200) {
       throw ApiException('Failed to remove device', response.statusCode);
+    }
+  }
+
+  /// Delete account
+  static Future<void> deleteAccount(String password) async {
+    final response = await ApiService.post(ApiConfig.deleteAccount, body: {
+      'password': password,
+    });
+    
+    if (response.statusCode != 200) {
+      final data = ApiService.parseResponse(response);
+      throw ApiException(data['detail'] ?? 'Delete account failed', response.statusCode);
     }
   }
 

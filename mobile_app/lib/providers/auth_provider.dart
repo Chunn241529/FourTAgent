@@ -118,6 +118,24 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Resend verification code
+  Future<bool> resendCode(int userId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await AuthService.resendVerificationCode(userId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Forgot password
   Future<bool> forgotPassword(String email) async {
     _isLoading = true;
@@ -194,6 +212,24 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _isAuthenticated = false;
     notifyListeners();
+  }
+
+  /// Delete account
+  Future<bool> deleteAccount(String password) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await AuthService.deleteAccount(password);
+      await logout(); // Logout and clear data
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// Clear error

@@ -514,13 +514,75 @@ class _SettingsDialogState extends State<SettingsDialog> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tính năng đang phát triển')),
-              );
+              _showDeleteAccountDialog();
             },
             child: Text('Xóa tài khoản', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog() {
+    final passwordController = TextEditingController();
+    bool isLoading = false;
+    String? error;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Xác nhận xóa tài khoản'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Vui lòng nhập mật khẩu để xác nhận.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu',
+                  errorText: error,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isLoading ? null : () => Navigator.pop(ctx),
+              child: const Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: isLoading ? null : () async {
+                setState(() {
+                  isLoading = true;
+                  error = null;
+                });
+                
+                final authProvider = context.read<AuthProvider>();
+                final success = await authProvider.deleteAccount(passwordController.text);
+                
+                if (!mounted) return;
+                
+                if (success) {
+                   Navigator.pop(ctx); // Close password dialog
+                   Navigator.pop(context); // Close settings dialog
+                   // AuthWrapper handles navigation
+                } else {
+                   setState(() {
+                     isLoading = false;
+                     error = authProvider.error ?? 'Mật khẩu không đúng';
+                   });
+                }
+              },
+              child: isLoading 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : Text('Xóa vĩnh viễn', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+          ],
+        ),
       ),
     );
   }

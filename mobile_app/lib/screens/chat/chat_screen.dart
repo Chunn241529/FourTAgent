@@ -87,32 +87,56 @@ class _ChatScreenState extends State<ChatScreen> {
           await chatProvider.createConversation();
         },
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Messages list
-          Expanded(
-            child: chatProvider.currentConversation == null
-                ? _buildWelcomeView(theme)
-                : chatProvider.messages.isEmpty
-                    ? _buildEmptyChat(theme)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.only(top: 16, bottom: 8),
-                        itemCount: chatProvider.messages.length,
-                        itemBuilder: (context, index) {
-                          return MessageBubble(
-                            message: chatProvider.messages[index],
-                          );
-                        },
-                      ),
-          ),
-          // Input
-          MessageInput(
-            onSend: (message) {
-              chatProvider.sendMessage(message);
-            },
-            isLoading: chatProvider.isStreaming,
-            onStop: () => chatProvider.stopStreaming(),
+          // 1. Messages Layer (Always at bottom/fill, but hidden if empty to show welcome)
+          if (chatProvider.currentConversation != null && chatProvider.messages.isNotEmpty)
+            Positioned.fill(
+              bottom: 120, // Space for input
+              child: ListView.builder(
+                controller: _scrollController,
+                reverse: false, // Start from top
+                padding: const EdgeInsets.only(top: 16, bottom: 24),
+                itemCount: chatProvider.messages.length,
+                itemBuilder: (context, index) {
+                  return MessageBubble(
+                    message: chatProvider.messages[index],
+                  );
+                },
+              ),
+            ),
+
+          // 2. Welcome/Suggestions Layer (Visible only when empty)
+          if (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
+            Align(
+              alignment: const Alignment(0, -0.3),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _buildWelcomeView(theme),
+                ),
+              ),
+            ),
+
+          // 3. Input Layer
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutCubic,
+            alignment: (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
+                ? const Alignment(0, 0.4)
+                : Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: MessageInput(
+                onSend: (message) {
+                  chatProvider.sendMessage(message);
+                  // Scroll to bottom after user sends
+                  Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                },
+                isLoading: chatProvider.isStreaming,
+                onStop: () => chatProvider.stopStreaming(),
+              ),
+            ),
           ),
         ],
       ),
@@ -168,12 +192,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   theme,
                 ),
                 _buildSuggestionChip(
-                  'Viết code Python',
+                  'Viết code Python tính tổng',
                   Icons.code,
                   theme,
                 ),
                 _buildSuggestionChip(
-                  'Giải thích khái niệm',
+                  'Giải thích khái niệm Micro Services',
                   Icons.lightbulb_outline,
                   theme,
                 ),

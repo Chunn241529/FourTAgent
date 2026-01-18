@@ -54,7 +54,17 @@ class AuthService:
                 # Case 1: Client provided device_id (Preferred)
                 logger.info(f"Using client-provided device_id: {device_id}")
                 try:
+                    # Check fingerprint for debugging mismatch
+                    server_fingerprint = (
+                        DeviceDetectionService.generate_device_fingerprint(request)
+                    )
                     device_info = DeviceDetectionService.get_device_info(request)
+
+                    if device_id != server_fingerprint:
+                        logger.warning(
+                            f"Device ID mismatch! Client provided: {device_id}, Server generated: {server_fingerprint}. "
+                            f"Public IP: {device_info.get('public_ip')}"
+                        )
                 except:
                     pass
             else:
@@ -227,3 +237,109 @@ class AuthService:
         except Exception as e:
             logger.error(f"Verification service error: {str(e)}")
             return {"error": "Verification failed", "status": 500}
+
+    @staticmethod
+    async def resend_verification_code(
+        user_id: int, request: Request, db: Session
+    ) -> Dict:
+        """
+        Gửi lại mã xác minh
+        """
+        try:
+            from app.routers.auth import verify_codes
+
+            # Find user
+            db_user = db.query(User).filter(User.id == user_id).first()
+            if not db_user:
+                return {"error": "User not found", "status": 404}
+
+            # Detect device (reuse logic or get from existing if consistent?)
+            # Usually we need to know WHICH device needs verification.
+            # If user asks to resend, we assume it's for the current pending session.
+            # Check if pending code exists
+            if db_user.email not in verify_codes:
+                # If no code pending, maybe user is trying to resend expired code?
+                # Or session verified?
+                # Generate NEW code.
+                logger.info(f"Generating new code for user {user_id} (resend)")
+                device_id = None
+                device_info = {}
+                try:
+                    device_id = DeviceDetectionService.generate_device_fingerprint(
+                        request
+                    )
+                    device_info = DeviceDetectionService.get_device_info(request)
+                except:
+                    import uuid
+
+                    device_id = f"fallback_{uuid.uuid4().hex}"
+            else:
+                # Reuse device_id from pending
+                stored = verify_codes[db_user.email]
+                if isinstance(stored, dict):
+                    device_id = stored.get("device_id")
+                    device_info = stored.get("device_info", {})
+                else:
+                    device_id = None  # will be re-detected
+                    device_info = {}
+
+            # Generate new code
+            new_code = generate_verify_code()
+
+            # Update store
+            verify_codes[db_user.email] = {
+                "code": new_code,
+                "device_id": device_id,
+                "device_info": device_info,
+            }
+
+            send_email(db_user.email, new_code, template_type="verification")
+            logger.info(f"Resent code {new_code} to {db_user.email}")
+
+            return {"message": "Code resent successfully", "status": 200}
+
+        except Exception as e:
+            logger.error(f"Resend code error: {str(e)}")
+            return {"error": "Failed to resend code", "status": 500}
+
+    @staticmethod
+    async def delete_user(user_id: int, password: str, db: Session) -> Dict:
+        """
+        Xóa tài khoản user và toàn bộ dữ liệu liên quan
+        """
+        try:
+            from app.models import ChatMessage, Conversation, Task
+
+            # Find user
+            db_user = db.query(User).filter(User.id == user_id).first()
+            if not db_user:
+                return {"error": "User not found", "status": 404}
+
+            # Verify password
+            if not verify_password(password, db_user.password_hash):
+                return {"error": "Invalid password", "status": 400}
+
+            logger.warning(f"DELETING USER {user_id} and all associated data")
+
+            # Delete related data manually to ensure cleanup
+            # 1. Chat Messages
+            db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete()
+
+            # 2. Conversations
+            db.query(Conversation).filter(Conversation.user_id == user_id).delete()
+
+            # 3. Tasks
+            db.query(Task).filter(Task.user_id == user_id).delete()
+
+            # 4. Delete User
+            db.delete(db_user)
+
+            db.commit()
+            logger.info(f"User {user_id} deleted successfully")
+
+            return {"message": "Account deleted successfully", "status": 200}
+
+        except Exception as e:
+            logger.error(f"Delete user error: {str(e)}")
+            db.rollback()
+            return {"error": "Failed to delete account", "status": 500}

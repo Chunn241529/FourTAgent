@@ -43,6 +43,10 @@ class ForgetPasswordRequest(BaseModel):
     email: str
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
 @router.post("/register")
 def register(user: UserRegister, db: Session = Depends(get_db)):
     existing = (
@@ -72,7 +76,7 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         "device_info": {},  # Sẽ được tạo trong verify
     }
 
-    send_email(user.email, code, template_type="verification")
+    # send_email(user.email, code, template_type="verification")
     logger.debug(
         f"Registered user: {user.username}, email: {user.email}, code: {code}, gender: {user.gender}"
     )
@@ -131,6 +135,18 @@ async def verify(
             samesite="lax",
         )
 
+    return result
+
+
+@router.post("/resend-code")
+async def resend_code(
+    user_id: int = Query(...),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    result = await AuthService.resend_verification_code(user_id, request, db)
+    if result.get("error"):
+        raise HTTPException(result["status"], result["error"])
     return result
 
 
@@ -363,3 +379,16 @@ def update_profile(
         "message": "Profile updated",
         "user": {"username": user.username, "gender": user.gender},
     }
+
+
+@router.post("/delete-account")
+async def delete_account(
+    data: DeleteAccountRequest,
+    user_id: int = Depends(verify_jwt),
+    db: Session = Depends(get_db),
+):
+    """Xóa tài khoản user"""
+    result = await AuthService.delete_user(user_id, data.password, db)
+    if result.get("error"):
+        raise HTTPException(result["status"], result["error"])
+    return result

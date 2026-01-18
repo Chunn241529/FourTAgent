@@ -112,6 +112,9 @@ class ChatProvider extends ChangeNotifier {
   /// Send message and handle streaming response
   Future<void> sendMessage(String content) async {
     if (_currentConversation == null || content.trim().isEmpty) return;
+    
+    // Stop any existing stream
+    stopStreaming();
 
     final userId = await StorageService.getUserId() ?? 0;
 
@@ -148,63 +151,106 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       String fullResponse = '';
+      DateTime lastUpdate = DateTime.now();
       
-      await for (final chunk in ChatService.sendMessage(
+      // Use listen instead of await for to enable cancellation
+      final stream = ChatService.sendMessage(
         _currentConversation!.id,
         content,
-      )) {
-        // Parse SSE data - each chunk may contain multiple lines
-        final lines = chunk.split('\n');
-        for (final line in lines) {
-          if (line.startsWith('data: ')) {
-            final jsonStr = line.substring(6).trim(); // Remove 'data: ' prefix
-            
-            // Skip [DONE] marker
-            if (jsonStr == '[DONE]') continue;
-            
-            try {
-              final data = _parseJson(jsonStr);
-              if (data == null) continue;
-              
-              // Extract content from message.content
-              if (data['message'] != null && data['message']['content'] != null) {
-                final contentDelta = data['message']['content'] as String;
-                if (contentDelta.isNotEmpty) {
-                  fullResponse += contentDelta;
-                  // Update the last message with new content
-                  final lastIndex = _messages.length - 1;
-                  _messages[lastIndex] = _messages[lastIndex].copyWith(
-                    content: fullResponse,
-                  );
-                  notifyListeners();
+      );
+
+      final completer = Completer<void>();
+
+      _streamSubscription = stream.listen(
+        (chunk) {
+          final lines = chunk.split('\n');
+          bool shouldNotify = false;
+
+          for (final line in lines) {
+            String? jsonStr;
+            if (line.startsWith('data: ')) {
+               jsonStr = line.substring(6).trim();
+            } else if (line.startsWith('data:')) {
+               jsonStr = line.substring(5).trim();
+            }
+
+            if (jsonStr != null) {
+              if (jsonStr == '[DONE]') continue;
+
+              try {
+                final data = _parseJson(jsonStr);
+                if (data == null) continue;
+
+                if (data['message'] != null && data['message']['content'] != null) {
+                  final contentDelta = data['message']['content'] as String;
+                  if (contentDelta.isNotEmpty) {
+                    fullResponse += contentDelta;
+                    
+                    // Throttling: Update UI every 50ms max
+                    final now = DateTime.now();
+                    if (now.difference(lastUpdate).inMilliseconds > 50) {
+                      final lastIndex = _messages.length - 1;
+                      if (lastIndex >= 0) {
+                         _messages[lastIndex] = _messages[lastIndex].copyWith(
+                           content: fullResponse,
+                         );
+                         lastUpdate = now;
+                         shouldNotify = true;
+                      }
+                    }
+                  }
                 }
+                
+                if (data['error'] != null) {
+                  fullResponse += '\n\nError: ${data['error']}';
+                  shouldNotify = true;
+                }
+              } catch (e) {
+                print('JSON parse error: $e');
               }
-              
-              // Handle error
-              if (data['error'] != null) {
-                fullResponse += '\n\nError: ${data['error']}';
-              }
-              
-              // Handle thinking (optional - can show later)
-              // if (data['thinking'] != null) { ... }
-              
-            } catch (e) {
-              // If JSON parsing fails, try to use raw content
-              // This handles edge cases
-              print('JSON parse error: $e for chunk: $jsonStr');
             }
           }
-        }
-      }
 
-      // Mark streaming complete
-      final lastIndex = _messages.length - 1;
-      _messages[lastIndex] = _messages[lastIndex].copyWith(
-        isStreaming: false,
+          if (shouldNotify) {
+            notifyListeners();
+          }
+        },
+        onError: (e) {
+          _error = e.toString();
+          final lastIndex = _messages.length - 1;
+          if (lastIndex >= 0) {
+            _messages[lastIndex] = _messages[lastIndex].copyWith(
+              content: 'Error: ${e.toString()}',
+              isStreaming: false,
+            );
+          }
+          notifyListeners();
+          completer.complete();
+        },
+        onDone: () {
+          // Final update to ensure complete message is shown
+          final lastIndex = _messages.length - 1;
+          if (lastIndex >= 0) {
+             // If fullResponse is still empty, maybe show a fallback
+             if (fullResponse.isEmpty) {
+                fullResponse = '...'; // Placeholder if totally empty
+             }
+             
+             _messages[lastIndex] = _messages[lastIndex].copyWith(
+               content: fullResponse, 
+               isStreaming: false,
+             );
+          }
+          notifyListeners();
+          completer.complete();
+        },
+        cancelOnError: true,
       );
+
+      await completer.future;
+
     } catch (e) {
       _error = e.toString();
-      // Update message to show error
       final lastIndex = _messages.length - 1;
       _messages[lastIndex] = _messages[lastIndex].copyWith(
         content: 'Error: ${e.toString()}',
@@ -212,6 +258,7 @@ class ChatProvider extends ChangeNotifier {
       );
     } finally {
       _isStreaming = false;
+      _streamSubscription = null;
       notifyListeners();
     }
   }
