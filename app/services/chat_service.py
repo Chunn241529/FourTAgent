@@ -94,7 +94,7 @@ class ChatService:
                 return StreamingResponse(
                     iter(
                         [
-                            f"data: {json.dumps({'message': {'content': 'Vui lòng nhập chủ đề cần nghiên cứu'}})}\n\n"
+                            f"data: {json.dumps({'message': {'content': 'Vui lòng nhập chủ đề cần nghiên cứu'}}, separators=(',', ':'))}\n\n"
                         ]
                     ),
                     media_type="text/event-stream",
@@ -201,19 +201,21 @@ class ChatService:
             BẠN BẮT BUỘC PHẢI SỬ DỤNG CÔNG CỤ `web_search` để tìm thông tin chính xác và mới nhất trước khi trả lời.
             
             **KHI GỌI TOOL `web_search`**:
+            - Nếu cần tìm nhiều thông tin khác nhau, hãy gọi `web_search` NHIỀU LẦN (ví dụ: search A, nhận kết quả, rồi search B).
             - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN (ví dụ: "Vietnam flood 2025", "Python install Ubuntu")
-            - KHÔNG dùng câu hỏi dài (ví dụ: KHÔNG dùng "Làm sao để cài Python trên Ubuntu?")
-            - Chỉ dùng từ khóa quan trọng nhất
+            - KHÔNG dùng câu hỏi dài.
             
             KHÔNG được bịa đặt thông tin. Nếu không tìm thấy, hãy nói rõ.
+            TRẢ LỜI NGẮN GỌN, ĐI THẲNG VÀO VẤN ĐỀ. KHÔNG DÀI DÒNG.
             """
         else:
             # Even when not forced, add general guideline
             prompt += """
             
             **KHI CẦN TÌM KIẾM THÔNG TIN** (dùng tool `web_search`):
-            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN (ví dụ: "machine learning tutorial", "latest news AI")
-            - KHÔNG dùng câu hỏi hoặc câu văn dài
+            - Có thể gọi `web_search` NHIỀU LẦN để thu thập đủ thông tin.
+            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN.
+            - TRẢ LỜI ĐÚNG TRỌNG TÂM CÂU HỎI. KHÔNG LAN MAN.
             """
 
         return prompt
@@ -390,7 +392,7 @@ class ChatService:
             "hẹn gặp lại",
             "kết thúc",
         ]
-        is_closure = len(current_query.split()) < 10 and any(
+        is_closure = len(current_query.split()) < 6 and any(
             kw in current_query.lower() for kw in closure_keywords
         )
 
@@ -403,7 +405,7 @@ class ChatService:
             db.query(ModelChatMessage)
             .filter(ModelChatMessage.conversation_id == conversation_id)
             .order_by(ModelChatMessage.timestamp.desc())
-            .limit(3)
+            .limit(5)
             .all()
         )
         working_memory = list(reversed(working_memory))  # Chronological order
@@ -523,7 +525,7 @@ class ChatService:
         """Generate streaming response với level_think"""
 
         def generate_stream():
-            yield f"data: {json.dumps({'conversation_id': conversation_id})}\n\n"
+            yield f"data: {json.dumps({'conversation_id': conversation_id}, separators=(',', ':'))}\n\n"
             full_response = []
 
             # Get hierarchical memory (summary + semantic + working)
@@ -618,7 +620,7 @@ class ChatService:
                                     }
                                     for tc in msg_chunk["tool_calls"]
                                 ]
-                                yield f"data: {json.dumps({'tool_calls': serialized_tool_calls})}\n\n"
+                                yield f"data: {json.dumps({'tool_calls': serialized_tool_calls}, separators=(',', ':'))}\n\n"
 
                                 for tc in msg_chunk["tool_calls"]:
                                     if "function" in tc:
@@ -636,24 +638,24 @@ class ChatService:
                                 and msg_chunk["reasoning_content"]
                             ):
                                 delta = msg_chunk["reasoning_content"]
-                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                                yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "think" in msg_chunk and msg_chunk["think"]:
                                 delta = msg_chunk["think"]
-                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                                yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "reasoning" in msg_chunk and msg_chunk["reasoning"]:
                                 delta = msg_chunk["reasoning"]
-                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                                yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "thought" in msg_chunk and msg_chunk["thought"]:
                                 delta = msg_chunk["thought"]
-                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                                yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
 
                         # Check top-level chunk for thinking fields (some models might put it here)
                         if "reasoning_content" in chunk and chunk["reasoning_content"]:
                             delta = chunk["reasoning_content"]
-                            yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                            yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                         elif "think" in chunk and chunk["think"]:
                             delta = chunk["think"]
-                            yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                            yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
 
                         # Always stream the raw chunk if it's not a tool call
                         if not iteration_has_tool_calls:
@@ -663,7 +665,7 @@ class ChatService:
                                 if hasattr(chunk, "model_dump")
                                 else chunk
                             )
-                            yield f"data: {json.dumps(chunk_data)}\n\n"
+                            yield f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
 
                     messages.append(current_message)
 
@@ -682,7 +684,7 @@ class ChatService:
 
                                     query = args.get("query", "")
                                     # Emit search_started event
-                                    yield f"data: {json.dumps({'tool_calls': [tool_call]})}\n\n"
+                                    yield f"data: {json.dumps({'tool_calls': [tool_call]}, separators=(',', ':'))}\n\n"
                                 except Exception as e:
                                     logger.debug(
                                         f"Could not parse web_search args: {e}"
@@ -700,7 +702,7 @@ class ChatService:
                                         f"🔬 Đang thực hiện nghiên cứu sâu: {topic}..."
                                     )
 
-                                    yield f"data: {json.dumps({'deep_search_started': {'topic': topic, 'message': status_msg}})}\n\n"
+                                    yield f"data: {json.dumps({'deep_search_started': {'topic': topic, 'message': status_msg}}, separators=(',', ':'))}\n\n"
                                 except Exception as e:
                                     logger.debug(
                                         f"Could not parse deep_search args: {e}"
@@ -771,7 +773,7 @@ class ChatService:
 
             except Exception as e:
                 logger.error(f"Lỗi trong streaming: {e}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield f"data: {json.dumps({'error': str(e)}, separators=(',', ':'))}\n\n"
             finally:
                 yield "data: [DONE]\n\n"
 
