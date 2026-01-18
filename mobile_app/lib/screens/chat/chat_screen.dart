@@ -51,17 +51,28 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _scrollToBottom() {
-    // Only auto-scroll if user hasn't scrolled up
+  void _scrollToBottom({bool isStreaming = false}) {
+    // Only auto-scroll if user hasn't scrolled up (and isn't at the very bottom)
     if (_isUserScrolling) return;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        
+        if (isStreaming) {
+           // For streaming, jump to bottom to keep up with the spinner instantly
+           // and avoid animation lag/jank
+           if (_scrollController.position.pixels < maxScroll) {
+             _scrollController.jumpTo(maxScroll);
+           }
+        } else {
+          // For new messages (not streaming), animate smoothly
+          _scrollController.animateTo(
+            maxScroll,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       }
     });
   }
@@ -73,7 +84,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Scroll to bottom when new messages arrive (only if not user scrolling)
     if (chatProvider.messages.isNotEmpty) {
-      _scrollToBottom();
+      _scrollToBottom(isStreaming: chatProvider.isStreaming);
     }
 
     return Scaffold(

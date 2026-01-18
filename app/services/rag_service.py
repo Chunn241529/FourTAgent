@@ -249,9 +249,34 @@ class RAGService:
         os.makedirs(index_dir, exist_ok=True)
         return os.path.join(index_dir, f"faiss_{user_id}_{conversation_id}.index")
 
+    # Simple in-memory cache for FAISS indices: key=(user_id, conversation_id), value=index
+    _index_cache = {}
+    _MAX_CACHE_SIZE = 5
+
+    @staticmethod
+    def _get_from_cache(user_id: int, conversation_id: int) -> Optional[Any]:
+        return RAGService._index_cache.get((user_id, conversation_id))
+
+    @staticmethod
+    def _add_to_cache(user_id: int, conversation_id: int, index: Any):
+        if len(RAGService._index_cache) >= RAGService._MAX_CACHE_SIZE:
+            # Very simple eviction: pop random item. For better logical LRU, requires more complex structure.
+            # Given small size, popping first key is fine.
+            try:
+                key = next(iter(RAGService._index_cache))
+                RAGService._index_cache.pop(key)
+            except:
+                pass
+        RAGService._index_cache[(user_id, conversation_id)] = index
+
     @staticmethod
     def load_faiss(user_id: int, conversation_id: int) -> Tuple[Any, bool]:
-        """Tải hoặc tạo mới FAISS index"""
+        """Tải hoặc tạo mới FAISS index (có caching)"""
+        # Check cache first
+        cached_index = RAGService._get_from_cache(user_id, conversation_id)
+        if cached_index:
+            return cached_index, True
+
         path = RAGService.get_faiss_path(user_id, conversation_id)
 
         if os.path.exists(path) and os.path.getsize(path) > 100:
@@ -260,6 +285,7 @@ class RAGService:
                 logger.info(
                     f"Loaded FAISS index with {index.ntotal} vectors from {path}"
                 )
+                RAGService._add_to_cache(user_id, conversation_id, index)
                 return index, True
             except Exception as e:
                 logger.error(f"Error loading FAISS index {path}: {e}")
@@ -273,6 +299,8 @@ class RAGService:
             f"Creating new FAISS index for user {user_id}, conversation {conversation_id}"
         )
         index = faiss.IndexFlatIP(EmbeddingService.DIM)
+        # Don't cache empty new index until it has data? Or cache it. Cache it is fine.
+        RAGService._add_to_cache(user_id, conversation_id, index)
         return index, False
 
     @staticmethod

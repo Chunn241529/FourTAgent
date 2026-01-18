@@ -14,6 +14,7 @@ from app.routers.feedback import router as feedback_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import logging
 import os
 
@@ -66,6 +67,10 @@ app.add_middleware(
         "Access-Control-Allow-Headers",
     ],
 )
+
+
+# Enable GZip compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # Route để render login.html tại '/'
