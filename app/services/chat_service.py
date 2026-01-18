@@ -292,7 +292,7 @@ class ChatService:
     ) -> tuple:
         """Chọn model phù hợp dựa trên input evaluation"""
         if file and FileService.is_image_file(file):
-            return "qwen3-vl:235b-cloud", None, False
+            return "4T-New", None, False
 
         # Evaluate using keywords instead of LLM
         input_lower = effective_query.lower()
@@ -387,7 +387,7 @@ class ChatService:
         elif needs_reasoning:
             return "4T-Reasoning", tools, level_think
         else:
-            return "4T-New", tools, False
+            return "4T", tools, False
 
     @staticmethod
     def _get_hierarchical_memory(

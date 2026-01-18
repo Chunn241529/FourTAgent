@@ -184,6 +184,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   // Scroll to bottom after user sends
                   Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
                 },
+                onSendWithFile: (message, file) {
+                  chatProvider.sendMessage(message, file: file);
+                  // Scroll to bottom after user sends
+                  Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                },
                 isLoading: chatProvider.isStreaming,
                 onStop: () => chatProvider.stopStreaming(),
               ),
@@ -242,11 +247,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   Icons.help_outline,
                   theme,
                 ),
-                _buildSuggestionChip(
-                  'Viết code Python tính tổng',
-                  Icons.code,
-                  theme,
-                ),
+                // _buildSuggestionChip(
+                //   'Viết code Python tính tổng',
+                //   Icons.code,
+                //   theme,
+                // ),
                 _buildSuggestionChip(
                   'Giải thích khái niệm Micro Services',
                   Icons.lightbulb_outline,

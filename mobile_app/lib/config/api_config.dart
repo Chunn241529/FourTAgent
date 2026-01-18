@@ -1,10 +1,9 @@
 /// API Configuration for FourT Chat App
 class ApiConfig {
   // Change this to your backend URL
-  // For web: http://localhost:8000
-  // For Android emulator: http://10.0.2.2:8000
-  // For physical device: use your local IP or ngrok URL
-  static const String baseUrl = 'http://localhost:8000';
+  // For local development: http://localhost:8000
+  // For production: https://api.fourt.io.vn
+  static const String baseUrl = 'https://api.fourt.io.vn';
   
   // Auth endpoints (prefix: /auth)
   static const String login = '/auth/login';

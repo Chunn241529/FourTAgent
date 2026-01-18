@@ -266,7 +266,7 @@ class ChatLogic:
         token = self.parent.token
         base_url = (
             # "https://living-tortoise-polite.ngrok-free.app"  # ngrok disabled
-            "http://localhost:8000"  # Should be configurable
+            "https://api.fourt.io.vn"  # Production URL
         )
 
         self.cmd_worker = CommandWorker(command, base_url, token, **kwargs)

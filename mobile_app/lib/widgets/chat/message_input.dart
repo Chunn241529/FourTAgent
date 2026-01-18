@@ -1,4 +1,6 @@
 // import 'dart:io'; // Removed for Web compatibility
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,12 +12,14 @@ import 'package:record/record.dart';
 /// Modern message input - input on top, icons on bottom
 class MessageInput extends StatefulWidget {
   final Function(String) onSend;
+  final Function(String, String?)? onSendWithFile; // message, base64 file
   final bool isLoading;
   final VoidCallback? onStop;
 
   const MessageInput({
     super.key,
     required this.onSend,
+    this.onSendWithFile,
     this.isLoading = false,
     this.onStop,
   });
@@ -34,9 +38,10 @@ class _MessageInputState extends State<MessageInput> {
   
   // Attachments (Paths or Names)
   String? _selectedImagePath;
-  String? _selectedFileName; // FilePicker on web might not give path, so use name
+  Uint8List? _selectedImageBytes; // Image bytes for upload
+  String? _selectedFileName;
+  Uint8List? _selectedFileBytes; // File bytes for upload
   String? _recordedAudioPath;
-  // For file upload later, we might need bytes, but for now just UI
   
   @override
   void initState() {
@@ -56,14 +61,43 @@ class _MessageInputState extends State<MessageInput> {
     _audioRecorder.dispose();
     super.dispose();
   }
+  // Maximum image size in bytes (5MB)
+  static const int _maxImageSizeBytes = 5 * 1024 * 1024;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    // Pick with compression to reduce size
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 80, // Compress to 80% quality
+    );
     if (picked != null) {
+      // Read bytes for upload
+      final bytes = await picked.readAsBytes();
+      
+      // Check file size
+      if (bytes.length > _maxImageSizeBytes) {
+        // Show error dialog
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Ảnh quá lớn (${(bytes.length / 1024 / 1024).toStringAsFixed(1)}MB). Tối đa 5MB.',
+              ),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        return;
+      }
+      
       setState(() {
-        _selectedImagePath = picked.path; // On web this is blob URL or similar
+        _selectedImagePath = picked.path;
+        _selectedImageBytes = bytes;
         _selectedFileName = null;
+        _selectedFileBytes = null;
         _recordedAudioPath = null;
       });
     }
@@ -131,22 +165,42 @@ class _MessageInputState extends State<MessageInput> {
     }
   }
 
-  void _send() {
+  void _send() async {
     final text = _controller.text.trim();
     
-    if (text.isEmpty && _selectedImagePath == null && _selectedFileName == null && _recordedAudioPath == null) return;
+    if (text.isEmpty && _selectedImageBytes == null && _selectedFileBytes == null && _recordedAudioPath == null) return;
     
     String message = text;
-    if (_selectedImagePath != null) message += '\n[Image: ${_selectedImagePath!.split('/').last}]';
-    if (_selectedFileName != null) message += '\n[File: $_selectedFileName]';
-    if (_recordedAudioPath != null) message += '\n[Audio: ${_recordedAudioPath!.split('/').last}]';
-
-    widget.onSend(message);
+    String? fileBase64;
+    
+    // Encode image/file to base64 with data URL prefix for backend detection
+    if (_selectedImageBytes != null) {
+      final rawBase64 = base64Encode(_selectedImageBytes!);
+      // Add data URL prefix so backend recognizes as image
+      fileBase64 = 'data:image/jpeg;base64,$rawBase64';
+      if (text.isEmpty) {
+        message = '[Đã gửi hình ảnh]';
+      }
+    } else if (_selectedFileBytes != null) {
+      fileBase64 = base64Encode(_selectedFileBytes!);
+      if (text.isEmpty) {
+        message = '[Đã gửi file: $_selectedFileName]';
+      }
+    }
+    
+    // Use onSendWithFile if available and we have a file
+    if (widget.onSendWithFile != null && fileBase64 != null) {
+      widget.onSendWithFile!(message, fileBase64);
+    } else {
+      widget.onSend(message);
+    }
     
     _controller.clear();
     setState(() {
       _selectedImagePath = null;
+      _selectedImageBytes = null;
       _selectedFileName = null;
+      _selectedFileBytes = null;
       _recordedAudioPath = null;
     });
   }

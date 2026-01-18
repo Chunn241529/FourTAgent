@@ -39,7 +39,7 @@ class OllamaWorker(QThread):
         self.is_thinking = is_thinking
         self.conversation_id = conversation_id
         # self.base_url = "https://living-tortoise-polite.ngrok-free.app"  # ngrok disabled
-        self.base_url = "http://localhost:8000"
+        self.base_url = "https://api.fourt.io.vn"
         self.max_image_size = 20 * 1024 * 1024  # 20MB giới hạn
         self.partial_buffer = ""  # Biến để lưu phần còn lại nếu thẻ bị chia cắt
         self.thinking_buffer = ""  # Biến để tích lũy nội dung thinking

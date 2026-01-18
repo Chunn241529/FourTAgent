@@ -85,7 +85,7 @@ def send_email(to_email: str, code: str, template_type: str = "verification"):
         """
     else:  # reset_password
         # Plain text version for reset password
-        text = f"Click the following link to reset your password:\nhttps://living-tortoise-polite.ngrok-free.app/reset-password?token={code}\n\nThis link is valid for 1 hour.\nIf you did not request a password reset, please ignore this email."
+        text = f"Click the following link to reset your password:\nhttps://api.fourt.io.vn/reset-password?token={code}\n\nThis link is valid for 1 hour.\nIf you did not request a password reset, please ignore this email."
 
         # HTML version for reset password
         html = f"""
@@ -95,7 +95,7 @@ def send_email(to_email: str, code: str, template_type: str = "verification"):
                     <h2 style="color: #2c3e50;">Reset Your Password</h2>
                     <p style="font-size: 16px;">Hello,</p>
                     <p style="font-size: 16px;">We received a request to reset your password. Please click the button below to set a new password:</p>
-                    <a href="https://living-tortoise-polite.ngrok-free.app/reset-password?token={code}" style="display: inline-block; background-color: #e74c3c; color: white; font-size: 16px; font-weight: bold; padding: 15px 30px; border-radius: 5px; margin: 20px 0; text-decoration: none;">
+                    <a href="https://api.fourt.io.vn/reset-password?token={code}" style="display: inline-block; background-color: #e74c3c; color: white; font-size: 16px; font-weight: bold; padding: 15px 30px; border-radius: 5px; margin: 20px 0; text-decoration: none;">
                         Reset Password
                     </a>
                     <p style="font-size: 14px;">This link is valid for <strong>1 hour</strong>.</p>

@@ -205,7 +205,7 @@ def authorize(
         + timedelta(minutes=10),  # Code hết hạn sau 10 phút
         "state": state,
     }
-    login_url = f"https://living-tortoise-polite.ngrok-free.app/?code={auth_code}&state={state}&redirect_uri={redirect_uri}"
+    login_url = f"https://api.fourt.io.vn/?code={auth_code}&state={state}&redirect_uri={redirect_uri}"
     logger.debug(f"Generated login_url: {login_url}")
     return {"login_url": login_url}
 

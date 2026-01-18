@@ -9,6 +9,7 @@ class Message {
   bool isStreaming;
   String? feedback; // "like", "dislike", or null
   String? thinking; // AI thinking/reasoning content
+  String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
   List<String> completedSearches; // Completed searches to keep visible
 
@@ -22,6 +23,7 @@ class Message {
     this.isStreaming = false,
     this.feedback,
     this.thinking,
+    this.imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
   }) : activeSearches = activeSearches ?? [],
@@ -57,6 +59,7 @@ class Message {
     bool? isStreaming,
     String? feedback,
     String? thinking,
+    String? imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
   }) {
@@ -70,6 +73,7 @@ class Message {
       isStreaming: isStreaming ?? this.isStreaming,
       feedback: feedback ?? this.feedback,
       thinking: thinking ?? this.thinking,
+      imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
       completedSearches: completedSearches ?? this.completedSearches,
     );

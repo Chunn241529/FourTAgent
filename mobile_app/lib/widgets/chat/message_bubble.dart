@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -39,14 +40,45 @@ class MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                SelectableText(
-                  message.content,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    height: 1.5,
-                    color: theme.colorScheme.onSurface,
+                // Display image if present
+                if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
+                  Builder(
+                    builder: (context) {
+                      // Handle both raw base64 and data URL format
+                      String base64Data = message.imageBase64!;
+                      if (base64Data.contains(',')) {
+                        base64Data = base64Data.split(',').last;
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            base64Decode(base64Data),
+                            width: 200,
+                            height: 200,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 200,
+                              height: 100,
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              child: const Icon(Icons.broken_image, size: 40),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  textAlign: TextAlign.right,
-                ),
+                // Display text content
+                if (message.content.isNotEmpty && !message.content.startsWith('[Đã gửi'))
+                  SelectableText(
+                    message.content,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      height: 1.5,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
               ],
             ),
           ),

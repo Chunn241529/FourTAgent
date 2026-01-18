@@ -36,8 +36,7 @@ fi
 # Kiểm tra sự tồn tại của file app/main.py
 if [ -f "app/main.py" ]; then
     echo "Chạy ứng dụng FastAPI từ app/main.py..."
-    # python3 app/main.py
-    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    python3 -m app.main
 else
     echo "Lỗi: Không tìm thấy file app/main.py trong thư mục hiện tại."
     exit 1

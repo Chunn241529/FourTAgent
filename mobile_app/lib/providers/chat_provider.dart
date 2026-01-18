@@ -110,7 +110,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Send message and handle streaming response
-  Future<void> sendMessage(String content) async {
+  Future<void> sendMessage(String content, {String? file}) async {
     if (_currentConversation == null || content.trim().isEmpty) return;
     
     // Stop any existing stream
@@ -125,6 +125,7 @@ class ChatProvider extends ChangeNotifier {
       content: content,
       role: 'user',
       timestamp: DateTime.now(),
+      imageBase64: file, // Store image for display
     );
     _messages.add(userMessage);
     notifyListeners();
@@ -158,6 +159,7 @@ class ChatProvider extends ChangeNotifier {
       final stream = ChatService.sendMessage(
         _currentConversation!.id,
         content,
+        file: file,
       );
 
       final completer = Completer<void>();

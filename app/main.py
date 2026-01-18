@@ -17,6 +17,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import logging
 import os
+import subprocess
+import signal
+import atexit
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +54,8 @@ app.mount("/static", StaticFiles(directory="ui/web/static"), name="static")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://living-tortoise-polite.ngrok-free.app",
+        "https://api.fourt.io.vn",  # Cloudflare Tunnel
+        "https://fourt.io.vn",
         "http://localhost:8080",  # Flutter web dev server
         "http://127.0.0.1:8080",
         "http://localhost:3000",
@@ -103,8 +107,51 @@ app.include_router(rag_router)
 app.include_router(feedback_router)
 
 
+# Global reference to cloudflared process
+cloudflared_process = None
+
+
+def start_cloudflared():
+    """Start Cloudflare Tunnel as a subprocess"""
+    global cloudflared_process
+    try:
+        cloudflared_process = subprocess.Popen(
+            ["cloudflared", "tunnel", "run", "fourt-api"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        logger.info(f"Started Cloudflare Tunnel (PID: {cloudflared_process.pid})")
+        logger.info("API available at: https://api.fourt.io.vn")
+    except FileNotFoundError:
+        logger.warning("cloudflared not found. Tunnel not started.")
+    except Exception as e:
+        logger.error(f"Failed to start cloudflared: {e}")
+
+
+def stop_cloudflared():
+    """Stop Cloudflare Tunnel subprocess"""
+    global cloudflared_process
+    if cloudflared_process:
+        logger.info("Stopping Cloudflare Tunnel...")
+        cloudflared_process.terminate()
+        try:
+            cloudflared_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            cloudflared_process.kill()
+        logger.info("Cloudflare Tunnel stopped.")
+
+
 def main():
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Start Cloudflare Tunnel
+    start_cloudflared()
+
+    # Register cleanup
+    atexit.register(stop_cloudflared)
+
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    finally:
+        stop_cloudflared()
 
 
 if __name__ == "__main__":
