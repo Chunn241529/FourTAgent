@@ -2,7 +2,10 @@ import base64
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import ollama
-from ollama import web_search, web_fetch
+
+# NOTE: We don't use ollama's web_search/web_fetch anymore
+# ToolService provides custom implementations
+from app.services.tool_service import ToolService
 import json
 import os
 from datetime import datetime
@@ -23,7 +26,7 @@ from app.services.file_service import FileService
 from app.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
-executor = ThreadPoolExecutor(max_workers=4)
+tool_service = ToolService()
 
 
 SEARCH_TRIGGERS = [
@@ -35,9 +38,16 @@ SEARCH_TRIGGERS = [
     "thời tiết",
     "sự kiện",
     "lịch thi đấu",
-    "bảng xếp hạng",
     "review",
     "so sánh giá",
+]
+
+DEEP_SEARCH_TRIGGERS = [
+    "tìm hiểu",
+    "nghiên cứu",
+    "research",
+    "deep search",
+    "tìm hiểu sâu",
 ]
 
 
@@ -58,6 +68,46 @@ class ChatService:
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
+        # Xử lý conversation (Create/Get conversation FIRST)
+        conversation, is_new_conversation = ChatService._get_or_create_conversation(
+            db, user_id, conversation_id
+        )
+        logger.info(
+            f"Using conversation {conversation.id}, is_new: {is_new_conversation}"
+        )
+
+        # Check for Deep Search command or triggers
+        is_deep_search = message.message.strip().startswith("/deepsearch") or any(
+            trigger in message.message.lower() for trigger in DEEP_SEARCH_TRIGGERS
+        )
+
+        if is_deep_search:
+            from app.services.deep_search_service import DeepSearchService
+
+            topic = message.message.strip().replace("/deepsearch", "", 1).strip()
+
+            # If triggered by keyword but no topic (e.g. "nghiên cứu giúp tôi"), use the whole message
+            if not topic or topic == message.message.strip():
+                topic = message.message.strip()
+
+            if not topic:
+                return StreamingResponse(
+                    iter(
+                        [
+                            f"data: {json.dumps({'message': {'content': 'Vui lòng nhập chủ đề cần nghiên cứu'}})}\n\n"
+                        ]
+                    ),
+                    media_type="text/event-stream",
+                )
+
+            deep_search_service = DeepSearchService()
+            return StreamingResponse(
+                deep_search_service.execute_deep_search(
+                    topic, user_id, conversation.id, db
+                ),
+                media_type="text/event-stream",
+            )
+
         gender = user.gender
         xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
         current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
@@ -74,20 +124,6 @@ class ChatService:
             xung_ho, current_time, force_search
         )
 
-        # Xử lý conversation
-        conversation, is_new_conversation = ChatService._get_or_create_conversation(
-            db, user_id, conversation_id
-        )
-
-        logger.info(
-            f"Using conversation {conversation.id}, is_new: {is_new_conversation}"
-        )
-
-        # ĐẢM BẢO RAG FILES ĐƯỢC LOAD
-        logger.info("Ensuring RAG files are loaded...")
-        rag_loaded = RAGService._ensure_rag_loaded(user_id, conversation.id)
-        logger.info(f"RAG loaded: {rag_loaded}")
-
         # Xử lý file và context
         file_context = FileService.process_file_for_chat(file, user_id, conversation.id)
         effective_query = ChatService._build_effective_query(
@@ -98,7 +134,7 @@ class ChatService:
 
         # Chọn model dựa trên input evaluation
         model_name, tools, level_think = ChatService._select_model(
-            effective_query, file
+            effective_query, file, conversation.id, db
         )
         logger.info(f"Selected model: {model_name}, level_think: {level_think}")
 
@@ -116,6 +152,20 @@ class ChatService:
 
         logger.info(f"Full prompt length: {len(full_prompt)} characters")
 
+        # Save user message IMMEDIATELY to DB (before streaming)
+        # This ensures next request can see this message in history
+        query_emb = EmbeddingService.get_embedding(effective_query)
+        user_msg = ModelChatMessage(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            content=effective_query,
+            role="user",
+            embedding=json.dumps(query_emb.tolist()),
+        )
+        db.add(user_msg)
+        db.commit()
+        logger.info("User message saved to DB immediately")
+
         # Generate stream response
         return ChatService._generate_stream_response(
             system_prompt=system_prompt,
@@ -132,7 +182,9 @@ class ChatService:
 
     @staticmethod
     def _build_system_prompt(
-        xung_ho: str, current_time: str, force_search: bool = False
+        xung_ho: str,
+        current_time: str,
+        force_search: bool = False,
     ) -> str:
         """Xây dựng system prompt với hướng dẫn sử dụng RAG"""
         prompt = f"""
@@ -147,7 +199,21 @@ class ChatService:
             
             QUAN TRỌNG: Người dùng đang yêu cầu tìm kiếm thông tin cụ thể hoặc cập nhật.
             BẠN BẮT BUỘC PHẢI SỬ DỤNG CÔNG CỤ `web_search` để tìm thông tin chính xác và mới nhất trước khi trả lời.
+            
+            **KHI GỌI TOOL `web_search`**:
+            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN (ví dụ: "Vietnam flood 2025", "Python install Ubuntu")
+            - KHÔNG dùng câu hỏi dài (ví dụ: KHÔNG dùng "Làm sao để cài Python trên Ubuntu?")
+            - Chỉ dùng từ khóa quan trọng nhất
+            
             KHÔNG được bịa đặt thông tin. Nếu không tìm thấy, hãy nói rõ.
+            """
+        else:
+            # Even when not forced, add general guideline
+            prompt += """
+            
+            **KHI CẦN TÌM KIẾM THÔNG TIN** (dùng tool `web_search`):
+            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN (ví dụ: "machine learning tutorial", "latest news AI")
+            - KHÔNG dùng câu hỏi hoặc câu văn dài
             """
 
         return prompt
@@ -195,90 +261,226 @@ class ChatService:
             return effective_query
 
     @staticmethod
-    def _select_model(effective_query: str, file) -> tuple:
+    def _select_model(
+        effective_query: str, file, conversation_id: int = None, db: Session = None
+    ) -> tuple:
         """Chọn model phù hợp dựa trên input evaluation"""
         if file and FileService.is_image_file(file):
             return "qwen3-vl:235b-cloud", None, False
 
-        eval_result = ChatService._evaluate_user_input(effective_query)
-        logger.debug(f"Input evaluation: {eval_result}")
+        # Evaluate using keywords instead of LLM
+        input_lower = effective_query.lower()
 
-        level_think = ChatService._determine_think_level(effective_query, eval_result)
-        tools = [web_search, web_fetch]
+        # Logic keywords (math, coding, technical)
+        logic_keywords = [
+            "code",
+            "python",
+            "java",
+            "c++",
+            "javascript",
+            "sql",
+            "lập trình",
+            "thuật toán",
+            "bug",
+            "error",
+            "fix",
+            "debug",
+            "toán",
+            "tính toán",
+            "công thức",
+            "phương trình",
+            "logic",
+            "function",
+            "class",
+            "api",
+        ]
+        needs_logic = any(k in input_lower for k in logic_keywords)
 
-        if eval_result["needs_logic"]:
+        # Sticky Logic: If current query doesn't trigger logic, check previous message
+        if not needs_logic and conversation_id and db:
+            try:
+                # Get the last user message
+                last_user_msg = (
+                    db.query(ModelChatMessage)
+                    .filter(
+                        ModelChatMessage.conversation_id == conversation_id,
+                        ModelChatMessage.role == "user",
+                    )
+                    .order_by(ModelChatMessage.timestamp.desc())
+                    .first()
+                )
+
+                if last_user_msg:
+                    last_content_lower = last_user_msg.content.lower()
+                    if any(k in last_content_lower for k in logic_keywords):
+                        logger.info(
+                            "Sticky Logic triggered: Previous message required logic, maintaining 4T-Logic context."
+                        )
+                        needs_logic = True
+            except Exception as e:
+                logger.warning(f"Error checking sticky logic: {e}")
+
+        # Reasoning keywords (analysis, comparison, explanation)
+        reasoning_keywords = [
+            "tại sao",
+            "vì sao",
+            "như thế nào",
+            "giải thích",
+            "phân tích",
+            "so sánh",
+            "đánh giá",
+            "ý nghĩa",
+            "nguyên nhân",
+            "hệ quả",
+            "suy luận",
+            "quan điểm",
+            "nhận xét",
+            "ưu điểm",
+            "nhược điểm",
+            "khác nhau",
+            "giống nhau",
+        ]
+        needs_reasoning = any(k in input_lower for k in reasoning_keywords)
+
+        # Determine think level based on keywords and length
+        level_think = "low"
+        if needs_reasoning or needs_logic:
+            if (
+                len(effective_query) > 200
+                or "chi tiết" in input_lower
+                or "sâu" in input_lower
+            ):
+                level_think = "high"
+            else:
+                level_think = "medium"
+
+        tools = tool_service.get_tools()
+
+        if needs_logic:
             return "4T-Logic", tools, False
-        elif eval_result["needs_reasoning"]:
+        elif needs_reasoning:
             return "4T", tools, level_think
         else:
             return "4T-S", tools, False
 
     @staticmethod
-    def _determine_think_level(
-        query: str, eval_result: Dict[str, bool]
-    ) -> Union[str, bool]:
-        """Xác định mức độ think"""
-        if not eval_result["needs_logic"] and not eval_result["needs_reasoning"]:
-            return "medium"
+    def _get_hierarchical_memory(
+        db: Session, conversation_id: int, current_query: str, user_id: int
+    ) -> tuple:
+        """
+        Get hierarchical memory: summary + semantic + working memory.
+        Returns: (summary: str, messages: List[Dict])
+        """
+        import numpy as np
+        import json
+        import faiss
+        from app.services.rag_service import RAGService
+        from app.services.embedding_service import EmbeddingService
 
-        query_length = len(query)
-        has_complex_keywords = any(
-            keyword in query.lower()
-            for keyword in [
-                "so sánh",
-                "phân tích",
-                "đánh giá",
-                "giải thích chi tiết",
-                "tại sao",
-                "như thế nào",
-                "mối quan hệ",
-                "ưu nhược điểm",
-                "phân tích",
-                "suy luận",
-                "suy nghĩ",
-                "think",
-                "reasoning",
-            ]
+        # 1. Get conversation summary
+        conversation = db.query(ModelConversation).get(conversation_id)
+        summary = conversation.summary if conversation and conversation.summary else ""
+
+        # 0. Closure Detection: If user is ending conversation, minimize context
+        closure_keywords = [
+            "cảm ơn",
+            "thank",
+            "tạm biệt",
+            "bye",
+            "hẹn gặp lại",
+            "kết thúc",
+        ]
+        is_closure = len(current_query.split()) < 10 and any(
+            kw in current_query.lower() for kw in closure_keywords
         )
 
-        if query_length > 2000 and has_complex_keywords:
-            return "high"
-        elif eval_result["needs_logic"] or eval_result["needs_reasoning"]:
-            return "medium"
-        elif query_length > 100:
-            return "medium"
-        else:
-            return "low"
+        if is_closure:
+            logger.info("Closure detected, resetting working and semantic memory")
+            return summary, [], []
+
+        # 2. Working memory (last 3 messages for conversation flow)
+        working_memory = (
+            db.query(ModelChatMessage)
+            .filter(ModelChatMessage.conversation_id == conversation_id)
+            .order_by(ModelChatMessage.timestamp.desc())
+            .limit(3)
+            .all()
+        )
+        working_memory = list(reversed(working_memory))  # Chronological order
+        working_ids = [msg.id for msg in working_memory]
+
+        # 3. Semantic memory (top 5 relevant, excluding working memory)
+        semantic_messages = []
+        try:
+            # Generate query embedding
+            query_emb = EmbeddingService.get_embedding(current_query)
+
+            # Get all messages except working memory
+            all_messages = (
+                db.query(ModelChatMessage)
+                .filter(
+                    ModelChatMessage.conversation_id == conversation_id,
+                    ~ModelChatMessage.id.in_(working_ids) if working_ids else True,
+                )
+                .all()
+            )
+
+            if all_messages and len(all_messages) > 0:
+                # Score by cosine similarity
+                scored_messages = []
+                for msg in all_messages:
+                    if msg.embedding:
+                        try:
+                            msg_emb = np.array(json.loads(msg.embedding))
+                            # Normalize
+                            query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
+                            msg_norm = msg_emb / (np.linalg.norm(msg_emb) + 1e-8)
+                            similarity = np.dot(query_norm, msg_norm)
+                            scored_messages.append((similarity, msg))
+                        except:
+                            continue
+
+                # Sort and take top 5 with threshold
+                scored_messages.sort(reverse=True, key=lambda x: x[0])
+
+                # Filter by threshold (0.5 for stricter relevance)
+                threshold = 0.5
+                relevant_messages = [
+                    (score, msg) for score, msg in scored_messages if score >= threshold
+                ]
+
+                semantic_messages = [msg for _, msg in relevant_messages[:5]]
+
+                logger.info(
+                    f"Semantic memory: {len(semantic_messages)} relevant messages (threshold={threshold}, top score={scored_messages[0][0] if scored_messages else 0:.2f})"
+                )
+        except Exception as e:
+            logger.warning(f"Error getting semantic memory: {e}")
+
+        # 4. Return components separately
+        logger.info(
+            f"Hierarchical memory: summary={bool(summary)}, semantic={len(semantic_messages)}, working={len(working_memory)}"
+        )
+
+        return summary, semantic_messages, working_memory
 
     @staticmethod
-    def _evaluate_user_input(input_text: str) -> Dict[str, bool]:
-        """Đánh giá input của người dùng"""
-        try:
-            eval_prompt = f"""
-            Đánh giá input người dùng và trả về JSON:
-            - "needs_logic": true nếu liên quan đến toán học, lập trình, logic phức tạp
-            - "needs_reasoning": true nếu yêu cầu suy luận sâu, phân tích phức tạp
-            Input: {input_text}
-            Chỉ trả về JSON: {{"needs_logic": bool, "needs_reasoning": bool}}
-            """
-            response = ollama.chat(
-                model="4T-Evaluate:latest",
-                messages=[{"role": "system", "content": eval_prompt}],
-                stream=False,
-                options={"temperature": 0, "top_p": 0},
-            )
-            try:
-                result = json.loads(response["message"]["content"])
-                return {
-                    "needs_logic": bool(result.get("needs_logic", False)),
-                    "needs_reasoning": bool(result.get("needs_reasoning", False)),
-                }
-            except json.JSONDecodeError:
-                logger.error("Lỗi khi parse JSON từ đánh giá input")
-                return {"needs_logic": False, "needs_reasoning": False}
-        except Exception as e:
-            logger.error(f"Lỗi khi đánh giá input: {e}")
-            return {"needs_logic": False, "needs_reasoning": False}
+    def _get_conversation_history(
+        db: Session, conversation_id: int, limit: int = 20
+    ) -> List[Dict[str, str]]:
+        """
+        DEPRECATED: Use _get_hierarchical_memory instead.
+        Kept for backward compatibility.
+        """
+        messages = (
+            db.query(ModelChatMessage)
+            .filter(ModelChatMessage.conversation_id == conversation_id)
+            .order_by(ModelChatMessage.timestamp.asc())
+            .limit(limit)
+            .all()
+        )
+
+        return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     @staticmethod
     def _build_full_prompt(rag_context: str, effective_query: str, file) -> str:
@@ -323,10 +525,43 @@ class ChatService:
         def generate_stream():
             yield f"data: {json.dumps({'conversation_id': conversation_id})}\n\n"
             full_response = []
+
+            # Get hierarchical memory (summary + semantic + working)
+            summary, semantic_messages, working_memory = (
+                ChatService._get_hierarchical_memory(
+                    db, conversation_id, current_query=full_prompt, user_id=user_id
+                )
+            )
+
+            # Update system prompt with conversation summary AND semantic memory
+            enhanced_system_prompt = system_prompt
+
+            # Add Summary
+            if summary:
+                enhanced_system_prompt += f"\n\n**Conversation Summary**:\n{summary}"
+
+            # Add Semantic Memory as Context (Reference Only)
+            if semantic_messages:
+                enhanced_system_prompt += "\n\n**Relevant Past Context (Use ONLY if relevant to current query)**:\n"
+                for msg in semantic_messages:
+                    enhanced_system_prompt += f"- [{msg.role}]: {msg.content}\n"
+                logger.info(
+                    f"Added {len(semantic_messages)} semantic messages to system prompt"
+                )
+
+            # Build messages
             messages: List[Dict[str, Any]] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt},
+                {"role": "system", "content": enhanced_system_prompt}
             ]
+
+            # Add Working Memory (Flow)
+            for msg in working_memory:
+                messages.append({"role": msg.role, "content": msg.content})
+
+            logger.info(f"Using {len(working_memory)} messages from working memory")
+
+            # Add current user message
+            messages.append({"role": "user", "content": full_prompt})
 
             if file and FileService.is_image_file(file):
                 file_bytes = FileService.get_file_bytes(file)
@@ -342,7 +577,6 @@ class ChatService:
                 options = {
                     "temperature": 0.6,
                     "repeat_penalty": 1.2,
-                    "num_predict": 8192,
                 }
 
                 max_iterations = 5
@@ -389,13 +623,47 @@ class ChatService:
                                 for tc in msg_chunk["tool_calls"]:
                                     if "function" in tc:
                                         tool_calls.append(tc)
+
                             if "content" in msg_chunk and msg_chunk["content"]:
                                 delta = msg_chunk["content"]
                                 current_message["content"] += delta
+                                full_response.append(delta)
 
-                                if not iteration_has_tool_calls:
-                                    full_response.append(delta)
-                                    yield f"data: {json.dumps({'content': delta})}\n\n"
+                            # Handle thinking/reasoning content
+                            # Check in message chunk
+                            if (
+                                "reasoning_content" in msg_chunk
+                                and msg_chunk["reasoning_content"]
+                            ):
+                                delta = msg_chunk["reasoning_content"]
+                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                            elif "think" in msg_chunk and msg_chunk["think"]:
+                                delta = msg_chunk["think"]
+                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                            elif "reasoning" in msg_chunk and msg_chunk["reasoning"]:
+                                delta = msg_chunk["reasoning"]
+                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                            elif "thought" in msg_chunk and msg_chunk["thought"]:
+                                delta = msg_chunk["thought"]
+                                yield f"data: {json.dumps({'thinking': delta})}\n\n"
+
+                        # Check top-level chunk for thinking fields (some models might put it here)
+                        if "reasoning_content" in chunk and chunk["reasoning_content"]:
+                            delta = chunk["reasoning_content"]
+                            yield f"data: {json.dumps({'thinking': delta})}\n\n"
+                        elif "think" in chunk and chunk["think"]:
+                            delta = chunk["think"]
+                            yield f"data: {json.dumps({'thinking': delta})}\n\n"
+
+                        # Always stream the raw chunk if it's not a tool call
+                        if not iteration_has_tool_calls:
+                            # Convert ChatResponse to dict if needed
+                            chunk_data = (
+                                chunk.model_dump()
+                                if hasattr(chunk, "model_dump")
+                                else chunk
+                            )
+                            yield f"data: {json.dumps(chunk_data)}\n\n"
 
                     messages.append(current_message)
 
@@ -403,116 +671,177 @@ class ChatService:
                         for tool_call in tool_calls:
                             function_name = tool_call["function"]["name"]
                             args_str = tool_call["function"]["arguments"]
-                            try:
-                                if isinstance(args_str, str):
-                                    args = json.loads(args_str)
-                                else:
-                                    args = args_str
 
+                            # Show status message BEFORE execution
+                            if function_name == "web_search":
+                                try:
+                                    if isinstance(args_str, str):
+                                        args = json.loads(args_str)
+                                    else:
+                                        args = args_str
+
+                                    query = args.get("query", "")
+                                    # Emit search_started event
+                                    yield f"data: {json.dumps({'tool_calls': [tool_call]})}\n\n"
+                                except Exception as e:
+                                    logger.debug(
+                                        f"Could not parse web_search args: {e}"
+                                    )
+
+                            elif function_name == "deep_search":
+                                try:
+                                    if isinstance(args_str, str):
+                                        args = json.loads(args_str)
+                                    else:
+                                        args = args_str
+
+                                    topic = args.get("topic", "")
+                                    status_msg = (
+                                        f"🔬 Đang thực hiện nghiên cứu sâu: {topic}..."
+                                    )
+
+                                    yield f"data: {json.dumps({'deep_search_started': {'topic': topic, 'message': status_msg}})}\n\n"
+                                except Exception as e:
+                                    logger.debug(
+                                        f"Could not parse deep_search args: {e}"
+                                    )
+
+                            # Execute tool via service
+                            execution_result = tool_service.execute_tool(
+                                function_name, args_str
+                            )
+
+                            if execution_result["error"]:
+                                tool_msg = {
+                                    "role": "tool",
+                                    "content": f"Error: {execution_result['error']}",
+                                    "tool_name": function_name,
+                                }
+                            else:
+                                result = execution_result["result"]
+
+                                # Handle search specific logic (sending status)
                                 if function_name == "web_search":
-                                    result = executor.submit(
-                                        web_search, **args
-                                    ).result()
-                                elif function_name == "web_fetch":
-                                    result = executor.submit(web_fetch, **args).result()
-                                else:
-                                    result = f"Tool {function_name} not found"
+                                    try:
+                                        # Parse args for query
+                                        if isinstance(args_str, str):
+                                            args = json.loads(args_str)
+                                        else:
+                                            args = args_str
+
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+                                        result_count = (
+                                            len(result_data.get("results", []))
+                                            if isinstance(result_data, dict)
+                                            else 0
+                                        )
+
+                                        # Clean query: remove newlines and truncate
+                                        query = args.get("query", "")
+                                        query = (
+                                            query.replace("\n", " ")
+                                            .replace("\r", " ")
+                                            .strip()
+                                        )
+                                        if len(query) > 100:
+                                            query = query[:100] + "..."
+
+                                        # Use separators to ensure compact JSON
+                                        yield f"data: {json.dumps({'search_complete': {'query': query, 'count': result_count}}, separators=(',', ':'))}\n\n"
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"Could not parse search results for count: {e}"
+                                        )
 
                                 tool_msg = {
                                     "role": "tool",
                                     "content": str(result)[:8000],
                                     "tool_name": function_name,
                                 }
-                                messages.append(tool_msg)
 
-                            except Exception as e:
-                                logger.error(
-                                    f"Error executing tool {function_name}: {e}"
-                                )
-                                tool_msg = {
-                                    "role": "tool",
-                                    "content": f"Error: {str(e)}",
-                                    "tool_name": function_name,
-                                }
-                                messages.append(tool_msg)
+                            messages.append(tool_msg)
 
                         continue
                     else:
                         break
 
-                # Final response với tool results
-                if has_tool_calls and len(messages) > 2:
-                    final_stream = ollama.chat(
-                        model=model_name,
-                        messages=messages,
-                        stream=True,
-                        options=options,
-                    )
-
-                    for chunk in final_stream:
-                        if "message" in chunk and "content" in chunk["message"]:
-                            delta = chunk["message"]["content"]
-                            current_message["content"] += delta
-                            full_response.append(delta)
-                            yield f"data: {json.dumps({'content': delta})}\n\n"
-
-                yield f"data: {json.dumps({'done': True})}\n\n"
-
-                if full_response:
-                    executor.submit(
-                        ChatService._save_conversation_after_stream,
-                        "".join(full_response),
-                        effective_query,
-                        user_id,
-                        conversation_id,
-                    )
-
             except Exception as e:
-                logger.error(f"Lỗi trong stream generation: {e}")
+                logger.error(f"Lỗi trong streaming: {e}")
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            finally:
+                yield "data: [DONE]\n\n"
+
+                # Save assistant message IMMEDIATELY after stream completes
+                # This ensures next request sees this response in history
+                # (User message was already saved before streaming started)
+                final_content = "".join(full_response)
+                if final_content and final_content.strip():
+                    try:
+                        # Create new DB session for save
+                        save_db = SessionLocal()
+                        try:
+                            # Save assistant message
+                            ass_emb = EmbeddingService.get_embedding(final_content)
+                            ass_msg = ModelChatMessage(
+                                user_id=user_id,
+                                conversation_id=conversation_id,
+                                content=final_content,
+                                role="assistant",
+                                embedding=json.dumps(ass_emb.tolist()),
+                            )
+                            save_db.add(ass_msg)
+                            save_db.flush()  # Flush to get IDs before FAISS update
+
+                            # Update FAISS index
+                            RAGService.update_faiss_index(
+                                user_id, conversation_id, save_db
+                            )
+                            save_db.commit()
+
+                            # Auto-update conversation summary if needed
+                            from app.services.conversation_summary_service import (
+                                ConversationSummaryService,
+                            )
+
+                            if ConversationSummaryService.should_update_summary(
+                                conversation_id, save_db
+                            ):
+                                logger.info("Updating conversation summary...")
+                                try:
+                                    # Get the messages we just saved
+                                    new_summary = ConversationSummaryService.update_summary_incremental(
+                                        conversation_id,
+                                        [
+                                            ass_msg
+                                        ],  # Only assistant message (user already saved before)
+                                        save_db,
+                                    )
+                                    # Update conversation
+                                    conv = save_db.query(ModelConversation).get(
+                                        conversation_id
+                                    )
+                                    if conv:
+                                        conv.summary = new_summary
+                                        save_db.commit()
+                                        logger.info(
+                                            f"Summary updated: {len(new_summary)} chars"
+                                        )
+                                except Exception as sum_err:
+                                    logger.error(f"Error updating summary: {sum_err}")
+                                    # Don't fail the save if summary update fails
+
+                            logger.info(
+                                "Assistant message saved to DB immediately after stream"
+                            )
+                        finally:
+                            save_db.close()
+                    except Exception as e:
+                        logger.error(f"Error saving assistant message: {e}")
+                else:
+                    logger.warning("Empty response, skipping save")
 
         return StreamingResponse(generate_stream(), media_type="text/event-stream")
-
-    @staticmethod
-    def _save_conversation_after_stream(
-        full_response: str,
-        effective_query: str,
-        user_id: int,
-        conversation_id: int,
-    ):
-        """Lưu conversation sau khi stream kết thúc"""
-        if not full_response or not full_response.strip():
-            logger.warning("Empty response from stream, skipping save")
-            return
-
-        db = SessionLocal()
-        try:
-            query_emb = EmbeddingService.get_embedding(effective_query)
-            ass_emb = EmbeddingService.get_embedding(full_response)
-
-            user_msg = ModelChatMessage(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                content=effective_query,
-                role="user",
-                embedding=json.dumps(query_emb.tolist()),
-            )
-            ass_msg = ModelChatMessage(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                content=full_response,
-                role="assistant",
-                embedding=json.dumps(ass_emb.tolist()),
-            )
-
-            db.add_all([user_msg, ass_msg])
-            db.flush()
-
-            RAGService.update_faiss_index(user_id, conversation_id, db)
-            db.commit()
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Lỗi khi lưu tin nhắn: {e}")
-        finally:
-            db.close()

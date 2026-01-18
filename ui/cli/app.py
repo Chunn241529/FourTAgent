@@ -196,9 +196,7 @@ class FourTAIApp(App):
     # Các phương thức còn lại giữ nguyên...
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "get-token-button":
-            url_open = os.getenv(
-                "API_URL", "https://living-tortoise-polite.ngrok-free.app"
-            )
+            url_open = os.getenv("API_URL", "http://127.0.0.1:8000")
             webbrowser.open(url_open)
         elif event.button.id == "login-submit-button":
             # Lấy token từ input và xử lý đăng nhập

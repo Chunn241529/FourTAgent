@@ -25,6 +25,19 @@ from minimize_button import MinimizeButton
 import time
 
 
+class HorizontalScrollTextBrowser(QTextBrowser):
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ShiftModifier:
+            # Scroll horizontal
+            delta = event.angleDelta().y()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - delta
+            )
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
+
 class UIComponents:
     def __init__(self, parent):
         self.parent = parent
@@ -46,6 +59,7 @@ class UIComponents:
         self.thinking_widget = None
         self.thinking_display = None
         self.toggle_button = None
+        self.status_label = None  # Status widget for search/tool notifications
 
         # Khởi tạo các đối tượng animation
         self.height_animation = None
@@ -142,12 +156,66 @@ class UIComponents:
         self.thinking_display = QTextBrowser()
         self.thinking_display.setObjectName("thinkingDisplay")
         self.thinking_display.setOpenExternalLinks(True)
-        self.thinking_display.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.thinking_display.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.thinking_display.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.thinking_display.setLineWrapMode(QTextBrowser.NoWrap)
         self.thinking_display.setFixedHeight(0)
         thinking_layout.addWidget(self.thinking_display)
 
         frame_layout.addWidget(self.thinking_widget)
         self.thinking_widget.hide()
+
+        # Deep Search Widget (New)
+        self.deep_search_widget = QWidget(self.main_frame)
+        self.deep_search_widget.setObjectName("deepSearchWidget")
+        ds_layout = QVBoxLayout(self.deep_search_widget)
+        ds_layout.setContentsMargins(10, 5, 10, 5)
+        ds_layout.setSpacing(5)
+
+        self.deep_search_display = QTextBrowser()
+        self.deep_search_display.setObjectName("deepSearchDisplay")
+        self.deep_search_display.setOpenExternalLinks(True)
+        self.deep_search_display.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.deep_search_display.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.deep_search_display.setLineWrapMode(QTextBrowser.WidgetWidth)  # Wrap text
+        self.deep_search_display.setFixedHeight(100)  # Initial height
+
+        # Add shadow to deep_search_display
+        ds_shadow = QGraphicsDropShadowEffect()
+        ds_shadow.setBlurRadius(20)
+        ds_shadow.setXOffset(0)
+        ds_shadow.setYOffset(4)
+        ds_shadow.setColor(QColor(28, 29, 35, 255))  # Main background color
+        self.deep_search_display.setGraphicsEffect(ds_shadow)
+
+        ds_layout.addWidget(self.deep_search_display)
+
+        frame_layout.addWidget(self.deep_search_widget)
+        self.deep_search_widget.hide()
+
+        # Status label for search/tool notifications
+        self.status_label = QLabel(self.main_frame)
+        self.status_label.setObjectName("statusLabel")
+        self.status_label.setWordWrap(True)
+        self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.status_label.setStyleSheet(
+            """
+            QLabel#statusLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e3c72, stop:1 #2a5298);
+                color: white;
+                font-weight: bold;
+                padding: 12px 16px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-bottom: 3px solid rgba(0, 0, 0, 0.4);
+                border-radius: 10px;
+                margin: 0px 5px 8px 5px;
+                font-size: 13px;
+            }
+        """
+        )
+        self.status_label.hide()  # Initially hidden
+        frame_layout.addWidget(self.status_label)
 
         self.scroll_area = QScrollArea(self.main_frame)
         self.scroll_area.setWidgetResizable(True)
@@ -158,7 +226,7 @@ class UIComponents:
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.response_display = QTextBrowser(self.scroll_area)
+        self.response_display = HorizontalScrollTextBrowser(self.scroll_area)
         self.response_display.setObjectName("responseDisplay")
         self.response_display.setOpenExternalLinks(True)
         self.scroll_area.setWidget(self.response_display)
@@ -282,52 +350,6 @@ class UIComponents:
             font-size: 14px;
             border: none;
         }
-        #responseDisplay a {
-            color: #61afef;
-            text-decoration: none;
-        }
-        #responseDisplay a:hover {
-            text-decoration: underline;
-        }
-        #responseDisplay table {
-            border-collapse: collapse;
-            margin: 1em 0;
-            width: 100%;
-            border: 1px solid #705050;
-        }
-        #responseDisplay th, #responseDisplay td {
-            border: 1px solid #705050;
-            padding: 8px;
-            text-align: left;
-        }
-        #responseDisplay th {
-            background-color: #3a3b45;
-            color: #e0e0e0;
-            font-weight: bold;
-        }
-        #responseDisplay td {
-            background-color: #2c2d35;
-        }
-        .codehilite {
-            background: #2c2d35;
-            border-radius: 5px;
-            padding: 10px;
-            font-size: 13px;
-            margin: 1em 0;
-        }
-        .codehilite pre {
-            margin: 0;
-            white-space: pre-wrap;
-        }
-        .codehilite .k { color: #c678dd; }
-        .codehilite .s2 { color: #98c379; }
-        .codehilite .nf { color: #61afef; }
-        .codehilite .mi { color: #d19a66; }
-        .codehilite .n { color: #abb2bf; }
-        .codehilite .p { color: #abb2bf; }
-        .codehilite .o { color: #56b6c2; }
-        .codehilite .nb { color: #d19a66; }
-        .codehilite .c1 { color: #7f848e; font-style: italic; }
         #screenshotButton {
             background-color: rgba(28, 29, 35, 0.85);
             border: 1px solid #505050;
@@ -361,8 +383,79 @@ class UIComponents:
         QScrollBar:vertical {
             width: 0px;
         }
+        QScrollBar:horizontal {
+            height: 0px;
+        }
+        #deepSearchWidget {
+            background-color: transparent;
+        }
+        #deepSearchDisplay {
+            background-color: rgba(30, 60, 114, 0.3);
+            border: 1px solid #4ec9b0;
+            border-radius: 10px;
+            color: #e0e0e0;
+            font-size: 13px;
+            padding: 10px;
+        }
         """
         self.parent.setStyleSheet(stylesheet)
+
+        # Apply HTML-specific stylesheet for QTextBrowser content
+        html_stylesheet = """
+        a {
+            color: #61afef;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 1em 0;
+            width: auto;
+            min-width: 100%;
+            border: 1px solid #606060;
+        }
+        th, td {
+            border: 1px solid #606060;
+            padding: 8px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            background-color: #3a3b45;
+            color: #e0e0e0;
+            font-weight: bold;
+        }
+        td {
+            background-color: #2c2d35;
+        }
+        .codehilite {
+            background: #2c2d35;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 13px;
+            margin: 1em 0;
+        }
+        .codehilite pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        .codehilite .k { color: #c678dd; }
+        .codehilite .s2 { color: #98c379; }
+        .codehilite .nf { color: #61afef; }
+        .codehilite .mi { color: #d19a66; }
+        .codehilite .n { color: #abb2bf; }
+        .codehilite .p { color: #abb2bf; }
+        .codehilite .o { color: #56b6c2; }
+        .codehilite .nb { color: #d19a66; }
+        .codehilite .c1 { color: #7f848e; font-style: italic; }
+        """
+        self.response_display.document().setDefaultStyleSheet(html_stylesheet)
+
+        # Disable scrollbars on response_display (content) to hide them
+        self.response_display.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.response_display.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
     def mouse_press_event(self, event):
         if event.button() == Qt.LeftButton:
@@ -433,7 +526,7 @@ class UIComponents:
             target_height = (
                 min(doc_height + 20, 200)
                 if show_full_content and doc_height > 0
-                else 100
+                else 130
             )
 
             max_anim = QPropertyAnimation(self.thinking_display, b"maximumHeight")
@@ -518,6 +611,10 @@ class UIComponents:
             else:
                 thinking_height = 40
 
+        deep_search_height = 0
+        if self.deep_search_widget.isVisible():
+            deep_search_height = self.deep_search_display.height() + 20
+
         if staged:
             target_height = self.parent.height()
         else:
@@ -526,6 +623,7 @@ class UIComponents:
                 + doc_height
                 + preview_height
                 + thinking_height
+                + deep_search_height
                 + button_height
                 + container_margin
                 + frame_margin
@@ -538,10 +636,14 @@ class UIComponents:
         current_height = self.parent.height()
 
         if current_height != final_height:
+            # Avoid starting new animation if one is already running
             if (
                 self.height_animation
                 and self.height_animation.state() == QPropertyAnimation.Running
             ):
+                # Only restart if the target is significantly different
+                if abs(self.height_animation.endValue().height() - final_height) < 10:
+                    return
                 self.height_animation.stop()
 
             self.height_animation = QPropertyAnimation(self.parent, b"geometry")

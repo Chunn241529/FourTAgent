@@ -3,6 +3,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func  # SỬA: Sử dụng func.now() thay vì datetime.utcnow
 from app.db import Base
 
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
@@ -11,6 +12,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     verified_devices = Column(JSON, nullable=False, default=[])
     gender = Column(String, nullable=True)
+
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -23,11 +25,14 @@ class Task(Base):
     original_query = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())  # SỬA: Dùng func.now()
 
+
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=func.now())  # SỬA: Dùng func.now()
+    summary = Column(String, nullable=True)  # Hierarchical memory: conversation summary
+
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"

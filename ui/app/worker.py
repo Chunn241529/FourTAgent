@@ -14,11 +14,13 @@ class OllamaWorker(QThread):
     chunk_received = Signal(str)
     thinking_received = Signal(str)
     search_started = Signal(str)
+    search_complete = Signal(dict)  # Emits {'query': str, 'count': int}
     search_sources = Signal(str)
     content_started = Signal()
     image_processing = Signal()
     image_description = Signal(str)
     error_received = Signal(str)
+    deep_search_received = Signal(dict)
     finished = Signal()
     conversation_id_received = Signal(int)
 
@@ -36,7 +38,8 @@ class OllamaWorker(QThread):
         self.image_base64 = image_base64
         self.is_thinking = is_thinking
         self.conversation_id = conversation_id
-        self.base_url = "https://living-tortoise-polite.ngrok-free.app"
+        # self.base_url = "https://living-tortoise-polite.ngrok-free.app"  # ngrok disabled
+        self.base_url = "http://localhost:8000"
         self.max_image_size = 20 * 1024 * 1024  # 20MB giới hạn
         self.partial_buffer = ""  # Biến để lưu phần còn lại nếu thẻ bị chia cắt
         self.thinking_buffer = ""  # Biến để tích lũy nội dung thinking
@@ -177,73 +180,123 @@ class OllamaWorker(QThread):
                                         query = args.get("query", "")
                                         self.search_started.emit(query)
 
-                            if "content" in data:
+                            if "deep_search_started" in data:
+                                message = data["deep_search_started"].get(
+                                    "message", "Đang thực hiện nghiên cứu sâu..."
+                                )
+                                self.search_started.emit(message)
+
+                            if "search_complete" in data:
+                                self.search_complete.emit(data["search_complete"])
+
+                            if "thinking" in data:
+                                thinking_content = data["thinking"]
+                                if thinking_content:
+                                    self.thinking_received.emit(thinking_content)
+
+                            # Handle raw Ollama chunk structure
+                            if "message" in data:
+                                msg_data = data["message"]
+
+                                # Handle content
+                                if "content" in msg_data:
+                                    content = msg_data["content"]
+                                    if content:
+                                        # Existing logic for parsing <think> tags
+                                        content = content.replace(
+                                            "\\u003c", "<"
+                                        ).replace("\\u003e", ">")
+                                        content = self.partial_buffer + content
+                                        self.partial_buffer = ""
+
+                                        if not self.in_thinking:
+                                            think_start = content.find("<think>")
+                                            if think_start == -1:
+                                                if content:
+                                                    self.chunk_received.emit(content)
+                                            else:
+                                                before = content[:think_start]
+                                                if before:
+                                                    self.chunk_received.emit(before)
+                                                content = content[
+                                                    think_start + len("<think>") :
+                                                ]
+                                                self.in_thinking = True
+                                                self.thinking_buffer += content
+                                                if self.thinking_buffer:
+                                                    self.thinking_received.emit(
+                                                        self.thinking_buffer
+                                                    )
+                                                    self.thinking_buffer = ""
+                                        else:
+                                            think_end = content.find("</think>")
+                                            if think_end == -1:
+                                                self.thinking_buffer += content
+                                                if self.thinking_buffer:
+                                                    self.thinking_received.emit(
+                                                        self.thinking_buffer
+                                                    )
+                                                    self.thinking_buffer = ""
+                                            else:
+                                                thinking_part = content[:think_end]
+                                                if thinking_part:
+                                                    self.thinking_buffer += (
+                                                        thinking_part
+                                                    )
+                                                    self.thinking_received.emit(
+                                                        self.thinking_buffer
+                                                    )
+                                                    self.thinking_buffer = ""
+                                                after = content[
+                                                    think_end + len("</think>") :
+                                                ]
+                                                if after:
+                                                    self.chunk_received.emit(after)
+                                                self.in_thinking = False
+
+                                        if content and (
+                                            content.endswith("<think")
+                                            or content.endswith("</think")
+                                            or content.endswith("<")
+                                        ):
+                                            self.partial_buffer = content
+
+                                # Handle thinking field (gpt-oss style)
+                                if "thinking" in msg_data and msg_data["thinking"]:
+                                    self.thinking_received.emit(msg_data["thinking"])
+                                elif (
+                                    "reasoning_content" in msg_data
+                                    and msg_data["reasoning_content"]
+                                ):
+                                    self.thinking_received.emit(
+                                        msg_data["reasoning_content"]
+                                    )
+                                elif "think" in msg_data and msg_data["think"]:
+                                    self.thinking_received.emit(msg_data["think"])
+                                elif "reasoning" in msg_data and msg_data["reasoning"]:
+                                    self.thinking_received.emit(msg_data["reasoning"])
+                                elif "thought" in msg_data and msg_data["thought"]:
+                                    self.thinking_received.emit(msg_data["thought"])
+
+                            # Fallback for flat structure (if any legacy or custom events)
+                            elif "content" in data:
                                 content = data["content"]
                                 if content and isinstance(content, str):
-                                    # Existing logic for parsing <think> tags
-                                    content = content.replace("\\u003c", "<").replace(
-                                        "\\u003e", ">"
-                                    )
-                                    content = self.partial_buffer + content
-                                    self.partial_buffer = ""
+                                    self.chunk_received.emit(content)
 
-                                    if not self.in_thinking:
-                                        think_start = content.find("<think>")
-                                        if think_start == -1:
-                                            if content:
-                                                self.chunk_received.emit(content)
-                                        else:
-                                            before = content[:think_start]
-                                            if before:
-                                                self.chunk_received.emit(before)
-                                            content = content[
-                                                think_start + len("<think>") :
-                                            ]
-                                            self.in_thinking = True
-                                            self.thinking_buffer += content
-                                            if self.thinking_buffer:
-                                                self.thinking_received.emit(
-                                                    self.thinking_buffer
-                                                )
-                                                self.thinking_buffer = ""
-                                    else:
-                                        think_end = content.find("</think>")
-                                        if think_end == -1:
-                                            self.thinking_buffer += content
-                                            if self.thinking_buffer:
-                                                self.thinking_received.emit(
-                                                    self.thinking_buffer
-                                                )
-                                                self.thinking_buffer = ""
-                                        else:
-                                            thinking_part = content[:think_end]
-                                            if thinking_part:
-                                                self.thinking_buffer += thinking_part
-                                                self.thinking_received.emit(
-                                                    self.thinking_buffer
-                                                )
-                                                self.thinking_buffer = ""
-                                            after = content[
-                                                think_end + len("</think>") :
-                                            ]
-                                            if after:
-                                                self.chunk_received.emit(after)
-                                            self.in_thinking = False
+                            if "thinking" in data and data["thinking"]:
+                                self.thinking_received.emit(data["thinking"])
 
-                                    if content and (
-                                        content.endswith("<think")
-                                        or content.endswith("</think")
-                                        or content.endswith("<")
-                                    ):
-                                        self.partial_buffer = content
+                            if "deep_search_update" in data:
+                                self.deep_search_received.emit(
+                                    data["deep_search_update"]
+                                )
 
                         except json.JSONDecodeError as e:
                             logger.error(
                                 f"Lỗi giải mã JSON: {e}, Raw line: {line[:100]}"
                             )
                             continue
-                        finally:
-                            gc.collect()
         except Exception as e:
             self.error_received.emit(f"Lỗi kết nối server: {str(e)}")
             print(f"Server connection error: {str(e)}")

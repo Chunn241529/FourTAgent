@@ -2,9 +2,7 @@ import os
 import platform
 
 # API Base URL
-API_BASE_URL: str = os.getenv(
-    "API_URL", "https://living-tortoise-polite.ngrok-free.app"
-)
+API_BASE_URL: str = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 
 # Hàm lấy thư mục cấu hình phù hợp theo hệ điều hành

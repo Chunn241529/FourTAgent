@@ -16,7 +16,7 @@ class AIRegisterForm {
         this.tokenWidget = document.getElementById('tokenWidget');
         this.tokenValue = document.getElementById('tokenValue');
         this.copyTokenButton = document.getElementById('copyToken');
-        this.API_BASE_URL = 'https://living-tortoise-polite.ngrok-free.app';
+        this.API_BASE_URL = 'http://127.0.0.1:8000';
         this.userId = null;
         this.init();
     }
