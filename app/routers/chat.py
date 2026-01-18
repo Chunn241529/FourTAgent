@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 @router.post("/send", response_class=StreamingResponse)
-def chat(
+async def chat(
     message: str = Body(..., embed=True),
     file: Optional[Union[UploadFile, str]] = Body(None, embed=True),
     conversation_id: Optional[int] = None,
@@ -34,7 +34,7 @@ def chat(
     message_in = ChatMessageIn(message=message)
 
     # ĐƠN GIẢN HÓA: Gọi thẳng chat service, không cần load RAG files ở đây
-    return ChatService.chat_with_rag(
+    return await ChatService.chat_with_rag(
         message=message_in,
         file=file,
         conversation_id=conversation_id,

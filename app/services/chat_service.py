@@ -24,6 +24,7 @@ from app.schemas import ChatMessageIn
 from app.services.embedding_service import EmbeddingService
 from app.services.file_service import FileService
 from app.services.rag_service import RAGService
+from app.services.preference_service import PreferenceService
 
 logger = logging.getLogger(__name__)
 tool_service = ToolService()
@@ -54,7 +55,7 @@ DEEP_SEARCH_TRIGGERS = [
 class ChatService:
 
     @staticmethod
-    def chat_with_rag(
+    async def chat_with_rag(
         message: ChatMessageIn,
         file: Optional[Union[UploadFile, str]],
         conversation_id: Optional[int],
@@ -143,6 +144,13 @@ class ChatService:
             effective_query, user_id, conversation.id, db
         )
 
+        # Get preferred response examples (from liked responses)
+        preference_examples = PreferenceService.get_similar_preferences(
+            effective_query, user_id, top_k=2
+        )
+        if preference_examples:
+            logger.info(f"Found preference examples for context injection")
+
         logger.info(
             f"RAG context retrieved: {len(rag_context) if rag_context else 0} characters"
         )
@@ -167,8 +175,17 @@ class ChatService:
         logger.info("User message saved to DB immediately")
 
         # Generate stream response
-        return ChatService._generate_stream_response(
-            system_prompt=system_prompt,
+        # Inject preference examples into system prompt if available
+        enhanced_system_prompt = system_prompt
+        if preference_examples:
+            enhanced_system_prompt += f"""
+
+**Ví dụ câu trả lời tốt (người dùng đã thích):**
+{preference_examples}
+"""
+
+        return await ChatService._generate_stream_response(
+            system_prompt=enhanced_system_prompt,
             full_prompt=full_prompt,
             model_name=model_name,
             tools=tools,
@@ -359,11 +376,11 @@ class ChatService:
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "4T-Logic", tools, False
+            return "4T-Reasoning", tools, "high"
         elif needs_reasoning:
-            return "4T", tools, level_think
+            return "4T-Reasoning", tools, level_think
         else:
-            return "4T-S", tools, False
+            return "4T-New", tools, False
 
     @staticmethod
     def _get_hierarchical_memory(
@@ -510,7 +527,7 @@ class ChatService:
         return prompt
 
     @staticmethod
-    def _generate_stream_response(
+    async def _generate_stream_response(
         system_prompt: str,
         full_prompt: str,
         model_name: str,
@@ -522,9 +539,9 @@ class ChatService:
         level_think: Union[str, bool],
         db: Session,
     ):
-        """Generate streaming response với level_think"""
+        """Generate streaming response với level_think (Async)"""
 
-        def generate_stream():
+        async def generate_stream():
             yield f"data: {json.dumps({'conversation_id': conversation_id}, separators=(',', ':'))}\n\n"
             full_response = []
 
@@ -570,11 +587,15 @@ class ChatService:
                 images = [base64.b64encode(file_bytes).decode("utf-8")]
                 messages[-1]["images"] = images
 
+            save_db = None
             try:
                 api_key = os.getenv("OLLAMA_API_KEY")
                 if not api_key:
                     raise ValueError("OLLAMA_API_KEY env var not set")
                 os.environ["OLLAMA_API_KEY"] = api_key
+
+                # Use AsyncClient
+                client = ollama.AsyncClient()
 
                 options = {
                     "temperature": 0.6,
@@ -593,7 +614,8 @@ class ChatService:
                     }
                     tool_calls: List[Dict[str, Any]] = []
 
-                    stream = ollama.chat(
+                    # Async chat call
+                    stream = await client.chat(
                         model=model_name,
                         messages=messages,
                         tools=tools,
@@ -604,7 +626,8 @@ class ChatService:
 
                     iteration_has_tool_calls = False
 
-                    for chunk in stream:
+                    # Async iteration over stream
+                    async for chunk in stream:
                         if "message" in chunk:
                             msg_chunk = chunk["message"]
                             if "tool_calls" in msg_chunk and msg_chunk["tool_calls"]:
@@ -708,8 +731,8 @@ class ChatService:
                                         f"Could not parse deep_search args: {e}"
                                     )
 
-                            # Execute tool via service
-                            execution_result = tool_service.execute_tool(
+                            # Execute tool via service (ASYNC)
+                            execution_result = await tool_service.execute_tool_async(
                                 function_name, args_str
                             )
 
@@ -775,18 +798,16 @@ class ChatService:
                 logger.error(f"Lỗi trong streaming: {e}")
                 yield f"data: {json.dumps({'error': str(e)}, separators=(',', ':'))}\n\n"
             finally:
-                yield "data: [DONE]\n\n"
-
-                # Save assistant message IMMEDIATELY after stream completes
-                # This ensures next request sees this response in history
-                # (User message was already saved before streaming started)
+                # Save assistant message BEFORE sending [DONE]
                 final_content = "".join(full_response)
+                logger.info(f"[DEBUG] full_response length: {len(final_content)}")
+
                 if final_content and final_content.strip():
                     try:
+                        logger.info("[DEBUG] Attempting to save assistant message...")
                         # Create new DB session for save
                         save_db = SessionLocal()
                         try:
-                            # Save assistant message
                             ass_emb = EmbeddingService.get_embedding(final_content)
                             ass_msg = ModelChatMessage(
                                 user_id=user_id,
@@ -796,54 +817,40 @@ class ChatService:
                                 embedding=json.dumps(ass_emb.tolist()),
                             )
                             save_db.add(ass_msg)
-                            save_db.flush()  # Flush to get IDs before FAISS update
+                            save_db.commit()  # Commit to save
 
                             # Update FAISS index
                             RAGService.update_faiss_index(
-                                user_id, conversation_id, save_db
+                                user_id,
+                                conversation_id,
+                                save_db,
                             )
-                            save_db.commit()
-
-                            # Auto-update conversation summary if needed
-                            from app.services.conversation_summary_service import (
-                                ConversationSummaryService,
-                            )
-
-                            if ConversationSummaryService.should_update_summary(
-                                conversation_id, save_db
-                            ):
-                                logger.info("Updating conversation summary...")
-                                try:
-                                    # Get the messages we just saved
-                                    new_summary = ConversationSummaryService.update_summary_incremental(
-                                        conversation_id,
-                                        [
-                                            ass_msg
-                                        ],  # Only assistant message (user already saved before)
-                                        save_db,
-                                    )
-                                    # Update conversation
-                                    conv = save_db.query(ModelConversation).get(
-                                        conversation_id
-                                    )
-                                    if conv:
-                                        conv.summary = new_summary
-                                        save_db.commit()
-                                        logger.info(
-                                            f"Summary updated: {len(new_summary)} chars"
-                                        )
-                                except Exception as sum_err:
-                                    logger.error(f"Error updating summary: {sum_err}")
-                                    # Don't fail the save if summary update fails
 
                             logger.info(
-                                "Assistant message saved to DB immediately after stream"
+                                f"[DEBUG] Assistant message saved to DB with id={ass_msg.id}"
                             )
+
+                            # Send message_id to client for feedback feature BEFORE [DONE]
+                            msg_saved_data = json.dumps(
+                                {"message_saved": {"id": ass_msg.id}},
+                                separators=(",", ":"),
+                            )
+                            logger.info(f"[DEBUG] Yielding: {msg_saved_data}")
+                            yield f"data: {msg_saved_data}\n\n"
                         finally:
                             save_db.close()
                     except Exception as e:
-                        logger.error(f"Error saving assistant message: {e}")
+                        logger.error(f"[DEBUG] Error saving assistant message: {e}")
+                        import traceback
+
+                        traceback.print_exc()
                 else:
-                    logger.warning("Empty response, skipping save")
+                    logger.warning(
+                        f"[DEBUG] Empty response (len={len(final_content)}), skipping save"
+                    )
+
+                # Send [DONE] LAST
+                logger.info("[DEBUG] Sending [DONE]")
+                yield "data: [DONE]\n\n"
 
         return StreamingResponse(generate_stream(), media_type="text/event-stream")

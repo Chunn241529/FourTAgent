@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// App theme definitions - Claude-like modern design
+/// App theme definitions - ChatGPT-like modern design
 class AppTheme {
-  // Dark theme colors (default)
-  static const Color _darkBgPrimary = Color(0xFF1A1A2E);
-  static const Color _darkBgSecondary = Color(0xFF16213E);
-  static const Color _darkBgTertiary = Color(0xFF0F0F23);
-  static const Color _darkAccent = Color(0xFFE94560);
-  static const Color _darkAccentSecondary = Color(0xFF533483);
-  static const Color _darkTextPrimary = Color(0xFFEAEAEA);
-  static const Color _darkTextSecondary = Color(0xFFA0A0A0);
-  static const Color _darkBorder = Color(0xFF2A2A4A);
-  static const Color _darkSuccess = Color(0xFF10B981);
+  // Dark theme colors (ChatGPT-like dark)
+  static const Color _darkBgPrimary = Color(0xFF212121);     // Main background - dark gray
+  static const Color _darkBgSecondary = Color(0xFF2F2F2F);   // Cards/surfaces - slightly lighter
+  static const Color _darkBgTertiary = Color(0xFF171717);    // Even darker for contrast
+  static const Color _darkAccent = Color(0xFF10A37F);        // ChatGPT green accent
+  static const Color _darkAccentSecondary = Color(0xFF19C37D);
+  static const Color _darkTextPrimary = Color(0xFFEFEFEF);   // Bright white text
+  static const Color _darkTextSecondary = Color(0xFF8E8E8E); // Muted gray text
+  static const Color _darkBorder = Color(0xFF3F3F3F);        // Border color
+  static const Color _darkSuccess = Color(0xFF10A37F);
   static const Color _darkError = Color(0xFFEF4444);
+  static const Color _darkInputBg = Color(0xFF40414F);       // Input field background - lighter
 
-  // Light theme colors
-  static const Color _lightBgPrimary = Color(0xFFF5F5F7);
-  static const Color _lightBgSecondary = Color(0xFFFFFFFF);
-  static const Color _lightBgTertiary = Color(0xFFE8E8ED);
-  static const Color _lightAccent = Color(0xFFE94560);
-  static const Color _lightAccentSecondary = Color(0xFF6B46C1);
-  static const Color _lightTextPrimary = Color(0xFF1A1A2E);
-  static const Color _lightTextSecondary = Color(0xFF6B7280);
-  static const Color _lightBorder = Color(0xFFE5E5EA);
-  static const Color _lightSuccess = Color(0xFF059669);
+  // Light theme colors (contrasting light)
+  static const Color _lightBgPrimary = Color(0xFFF7F7F8);    // Main background - light gray
+  static const Color _lightBgSecondary = Color(0xFFFFFFFF);  // Cards/surfaces - white
+  static const Color _lightBgTertiary = Color(0xFFECECEC);   // Slightly darker for contrast
+  static const Color _lightAccent = Color(0xFF10A37F);       // Same green accent
+  static const Color _lightAccentSecondary = Color(0xFF19C37D);
+  static const Color _lightTextPrimary = Color(0xFF1A1A1A);  // Dark text
+  static const Color _lightTextSecondary = Color(0xFF6E6E80);// Muted text
+  static const Color _lightBorder = Color(0xFFD1D5DB);       // Light border
+  static const Color _lightSuccess = Color(0xFF10A37F);
   static const Color _lightError = Color(0xFFDC2626);
+  static const Color _lightInputBg = Color(0xFFFFFFFF);      // Input field - pure white
 
   /// Dark theme
   static ThemeData darkTheme = ThemeData(

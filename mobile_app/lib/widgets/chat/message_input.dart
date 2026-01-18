@@ -164,8 +164,19 @@ class _MessageInputState extends State<MessageInput> {
         bottom: MediaQuery.of(context).viewPadding.bottom + 12,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFE8E8E8),
+        color: isDark ? const Color(0xFF40414F) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF565869) : const Color(0xFFD1D5DB),
+          width: 1,
+        ),
+        boxShadow: isDark ? null : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),

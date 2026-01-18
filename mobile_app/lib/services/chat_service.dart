@@ -62,4 +62,38 @@ class ChatService {
       {'message': message},
     );
   }
+
+  /// Submit feedback (like/dislike) for a message
+  static Future<void> submitFeedback(int messageId, String feedbackType) async {
+    final response = await ApiService.post(
+      '${ApiConfig.feedback}/',
+      body: {
+        'message_id': messageId,
+        'feedback_type': feedbackType,
+      },
+    );
+    if (response.statusCode != 200) {
+      throw ApiException('Failed to submit feedback', response.statusCode);
+    }
+  }
+
+  /// Get feedback for a specific message
+  static Future<String?> getFeedback(int messageId) async {
+    try {
+      final response = await ApiService.get('${ApiConfig.feedback}/$messageId');
+      if (response.statusCode == 200) {
+        final data = ApiService.parseResponse(response);
+        return data['feedback_type'] as String?;
+      }
+      return null;
+    } catch (e) {
+      return null; // No feedback found is not an error
+    }
+  }
+
+  /// Delete feedback for a message
+  static Future<void> deleteFeedback(int messageId) async {
+    await ApiService.delete('${ApiConfig.feedback}/$messageId');
+  }
 }
+

@@ -9,6 +9,7 @@ from app.db import get_db
 from app.models import (
     ChatMessage as ModelChatMessage,
     Conversation as ModelConversation,
+    MessageFeedback,
     User,
 )
 from app.schemas import ChatMessage, ChatMessageUpdate
@@ -52,15 +53,31 @@ def get_messages(
         .all()
     )
 
+    # Get all feedback for this user's messages in this conversation
+    message_ids = [msg.id for msg in messages]
+    feedbacks = (
+        db.query(MessageFeedback)
+        .filter(
+            MessageFeedback.message_id.in_(message_ids),
+            MessageFeedback.user_id == user_id,
+        )
+        .all()
+    )
+    feedback_map = {f.message_id: f.feedback_type for f in feedbacks}
+
     result = []
     for msg in messages:
-        msg_dict = msg.__dict__
+        msg_dict = msg.__dict__.copy()
         if msg.embedding and isinstance(msg.embedding, str):
             try:
                 parsed_embedding = json.loads(msg.embedding)
                 msg_dict["embedding"] = parsed_embedding
             except json.JSONDecodeError:
                 msg_dict["embedding"] = None
+
+        # Add feedback status
+        msg_dict["feedback"] = feedback_map.get(msg.id)
+
         result.append(ChatMessage(**msg_dict))
 
     return result

@@ -27,4 +27,7 @@ class ApiConfig {
   
   // Chat endpoint
   static const String chat = '/send';
+  
+  // Feedback endpoint
+  static const String feedback = '/feedback';
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:provider/provider.dart';
 import '../../models/message.dart';
+import '../../providers/chat_provider.dart';
+import 'search_indicator.dart';
 
 /// Modern message bubble widget - User on right, AI on left
 class MessageBubble extends StatelessWidget {
@@ -96,7 +99,21 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
+                // Searches indicator (both active and completed)
+                if (message.activeSearches.isNotEmpty || message.completedSearches.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SearchIndicator(
+                      activeSearches: message.activeSearches,
+                      completedSearches: message.completedSearches,
+                    ),
+                  ),
                 // Markdown content
+                if (message.thinking != null && message.thinking!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ThinkingIndicator(thinking: message.thinking!),
+                  ),
                 _buildMarkdownContent(theme, isDark),
                 // Streaming indicator
                 if (message.isStreaming)
@@ -162,29 +179,19 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildStreamingIndicator(ThemeData theme) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'Đang suy nghĩ...',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.primary,
-          ),
-        ),
-      ],
+    return Padding(
+      padding: EdgeInsets.zero, // Fixed alignment
+      child: _TypingIndicator(
+        dotCount: message.content.isEmpty ? 3 : 1, // 3 dots when thinking/empty, 1 dot when streaming text
+      ),
     );
   }
 
   Widget _buildActions(BuildContext context, ThemeData theme) {
+    final chatProvider = context.read<ChatProvider>();
+    final isLiked = message.feedback == 'like';
+    final isDisliked = message.feedback == 'dislike';
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -192,15 +199,33 @@ class MessageBubble extends StatelessWidget {
           icon: Icons.copy_outlined,
           onTap: () {
             Clipboard.setData(ClipboardData(text: message.content));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã sao chép'), duration: Duration(seconds: 1)),
-            );
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Đã sao chép'), duration: Duration(seconds: 1)),
+              );
+            }
           },
         ),
         const SizedBox(width: 4),
-        _ActionButton(icon: Icons.thumb_up_outlined, onTap: () {}),
+        _ActionButton(
+          icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+          isActive: isLiked,
+          onTap: () {
+            if (message.id != null && context.mounted) {
+              chatProvider.submitFeedback(message.id!, 'like');
+            }
+          },
+        ),
         const SizedBox(width: 4),
-        _ActionButton(icon: Icons.thumb_down_outlined, onTap: () {}),
+        _ActionButton(
+          icon: isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+          isActive: isDisliked,
+          onTap: () {
+            if (message.id != null && context.mounted) {
+              chatProvider.submitFeedback(message.id!, 'dislike');
+            }
+          },
+        ),
       ],
     );
   }
@@ -209,8 +234,13 @@ class MessageBubble extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
+  final bool isActive;
 
-  const _ActionButton({required this.icon, required this.onTap});
+  const _ActionButton({
+    required this.icon,
+    required this.onTap,
+    this.isActive = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +250,147 @@ class _ActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(4),
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: Icon(icon, size: 14, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+        child: Icon(
+          icon,
+          size: 14,
+          color: isActive
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withOpacity(0.4),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ThinkingIndicator extends StatefulWidget {
+  final String thinking;
+
+  const _ThinkingIndicator({required this.thinking});
+
+  @override
+  State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
+}
+
+class _ThinkingIndicatorState extends State<_ThinkingIndicator> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                  size: 16,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Thinking Process',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isExpanded)
+          Container(
+            padding: const EdgeInsets.only(left: 12, top: 4, bottom: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: theme.colorScheme.onSurface.withOpacity(0.2),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Text(
+              widget.thinking,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                height: 1.4,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TypingIndicator extends StatefulWidget {
+  final int dotCount;
+  const _TypingIndicator({this.dotCount = 3});
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Modern accent color or just onSurface
+    final color = Theme.of(context).brightness == Brightness.dark 
+        ? Colors.white 
+        : Colors.black; 
+        
+    return Container(
+      // Reduced padding to fix alignment, removing left padding
+      padding: const EdgeInsets.symmetric(vertical: 8), 
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(widget.dotCount, (index) {
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              // Creating a wave effect
+              double wave = (_controller.value + index * 0.2) % 1.0;
+              double opacity = 0.2 + 0.8 * (0.5 - (0.5 - wave).abs()) * 2; // Triangle 0.2 -> 1.0 -> 0.2
+              opacity = opacity.clamp(0.2, 1.0);
+              
+              return Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 4), // Space between dots
+                decoration: BoxDecoration(
+                  color: color.withOpacity(opacity),
+                  shape: BoxShape.circle,
+                ),
+              );
+            },
+          );
+        }),
       ),
     );
   }

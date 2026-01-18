@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Union
 import json
@@ -288,4 +289,39 @@ class ToolService:
 
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {e}")
+            return {"error": str(e), "result": None, "tool_name": tool_name}
+
+    async def execute_tool_async(
+        self, tool_name: str, args: Union[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Execute a tool asynchronously (using thread pool for sync underlying tools)"""
+        try:
+            if isinstance(args, str):
+                try:
+                    tool_args = json.loads(args)
+                except json.JSONDecodeError:
+                    tool_args = args
+            else:
+                tool_args = args
+
+            if tool_name not in self.tools_map:
+                return {"error": f"Tool {tool_name} not found", "result": None}
+
+            tool_func = self.tools_map[tool_name]
+
+            # Execute sync function in thread pool to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self.executor, lambda: tool_func(**tool_args)
+            )
+
+            return {
+                "error": None,
+                "result": result,
+                "tool_name": tool_name,
+                "args": tool_args,
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing tool async {tool_name}: {e}")
             return {"error": str(e), "result": None, "tool_name": tool_name}

@@ -90,6 +90,7 @@ class ChatMessage(BaseModel):
     role: str
     timestamp: datetime
     embedding: Optional[Union[list, dict]]
+    feedback: Optional[str] = None  # "like", "dislike", or None
 
     class Config:
         from_attributes = True
@@ -97,3 +98,19 @@ class ChatMessage(BaseModel):
 
 class ChatMessageUpdate(BaseModel):
     content: Optional[str]
+
+
+class FeedbackCreate(BaseModel):
+    message_id: int
+    feedback_type: str  # "like" or "dislike"
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    message_id: int
+    user_id: int
+    feedback_type: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

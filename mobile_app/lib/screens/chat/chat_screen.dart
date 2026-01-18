@@ -14,14 +14,47 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
+  bool _isUserScrolling = false;
+  bool _isNearBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.offset;
+    final threshold = 100.0; // Distance from bottom to consider "near bottom"
+    
+    final wasNearBottom = _isNearBottom;
+    _isNearBottom = (maxScroll - currentScroll) <= threshold;
+    
+    // If user scrolled away from bottom, mark as user scrolling
+    if (wasNearBottom && !_isNearBottom) {
+      _isUserScrolling = true;
+    }
+    
+    // If user scrolled back to bottom, re-enable auto-scroll
+    if (!wasNearBottom && _isNearBottom) {
+      _isUserScrolling = false;
+    }
+  }
+
   void _scrollToBottom() {
+    // Only auto-scroll if user hasn't scrolled up
+    if (_isUserScrolling) return;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -38,7 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
     final chatProvider = context.watch<ChatProvider>();
 
-    // Scroll to bottom when new messages arrive
+    // Scroll to bottom when new messages arrive (only if not user scrolling)
     if (chatProvider.messages.isNotEmpty) {
       _scrollToBottom();
     }
@@ -108,12 +141,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // 2. Welcome/Suggestions Layer (Visible only when empty)
           if (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
-            Align(
-              alignment: const Alignment(0, -0.3),
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _buildWelcomeView(theme),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 160, // Space for input below
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _buildWelcomeView(theme),
+                  ),
                 ),
               ),
             ),

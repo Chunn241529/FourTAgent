@@ -151,6 +151,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       String fullResponse = '';
+      String fullThinking = '';
       DateTime lastUpdate = DateTime.now();
       
       // Use listen instead of await for to enable cancellation
@@ -175,24 +176,110 @@ class ChatProvider extends ChangeNotifier {
             }
 
             if (jsonStr != null) {
-              if (jsonStr == '[DONE]') continue;
+              if (jsonStr == '[DONE]') {
+                print('>>> Stream [DONE] received');
+                continue;
+              }
+
+              // Debug: log every data chunk
+              print('>>> Chunk: $jsonStr');
 
               try {
                 final data = _parseJson(jsonStr);
                 if (data == null) continue;
 
-                if (data['message'] != null && data['message']['content'] != null) {
-                  final contentDelta = data['message']['content'] as String;
+                // Handle message_saved event to get the message ID
+                if (data['message_saved'] != null) {
+                  final messageId = data['message_saved']['id'] as int?;
+                  print('>>> message_saved found! ID: $messageId');
+                  if (messageId != null) {
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
+                      _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
+                      shouldNotify = true;
+                      print('>>> Message ID applied: $messageId');
+                    }
+                  }
+                }
+
+                // Handle tool_calls event - add search to active searches
+                if (data['tool_calls'] != null) {
+                  final toolCalls = data['tool_calls'] as List;
+                  for (final tc in toolCalls) {
+                    if (tc['function'] != null && tc['function']['name'] == 'web_search') {
+                      final args = tc['function']['arguments'];
+                      String? query;
+                      if (args is Map) {
+                        query = args['query'] as String?;
+                      } else if (args is String) {
+                        try {
+                          final parsed = _parseJson(args);
+                          query = parsed?['query'] as String?;
+                        } catch (_) {}
+                      }
+                      if (query != null) {
+                        final lastIndex = _messages.length - 1;
+                        if (lastIndex >= 0) {
+                          final currentSearches = List<String>.from(_messages[lastIndex].activeSearches);
+                          if (!currentSearches.contains(query)) {
+                            currentSearches.add(query);
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(
+                              activeSearches: currentSearches,
+                            );
+                            shouldNotify = true;
+                            print('>>> Search started: $query');
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+
+                // Handle search_complete event - move to completed searches (keep visible)
+                if (data['search_complete'] != null) {
+                  final query = data['search_complete']['query'] as String?;
+                  if (query != null) {
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0) {
+                      final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
+                      final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                      
+                      // Move from active to completed
+                      if (currentActive.contains(query)) {
+                        currentActive.remove(query);
+                        currentCompleted.add(query);
+                        _messages[lastIndex] = _messages[lastIndex].copyWith(
+                          activeSearches: currentActive,
+                          completedSearches: currentCompleted,
+                        );
+                        shouldNotify = true;
+                        print('>>> Search complete: $query');
+                      }
+                    }
+                  }
+                }
+
+
+                if (data['message'] != null) {
+                  final contentDelta = data['message']['content'] as String? ?? '';
+                  final thinkingDelta = data['message']['thinking'] as String? ?? '';
+                  
                   if (contentDelta.isNotEmpty) {
                     fullResponse += contentDelta;
-                    
-                    // Throttling: Update UI every 50ms max
+                  }
+                  if (thinkingDelta.isNotEmpty) {
+                    fullThinking += thinkingDelta;
+                  }
+                  
+                  // Throttling: Update UI every 50ms max
+                  if (contentDelta.isNotEmpty || thinkingDelta.isNotEmpty) {
                     final now = DateTime.now();
                     if (now.difference(lastUpdate).inMilliseconds > 50) {
                       final lastIndex = _messages.length - 1;
                       if (lastIndex >= 0) {
                          _messages[lastIndex] = _messages[lastIndex].copyWith(
                            content: fullResponse,
+                           thinking: fullThinking.isNotEmpty ? fullThinking : null,
                          );
                          lastUpdate = now;
                          shouldNotify = true;
@@ -298,4 +385,21 @@ class ChatProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  /// Submit feedback for a message
+  Future<void> submitFeedback(int messageId, String feedbackType) async {
+    try {
+      await ChatService.submitFeedback(messageId, feedbackType);
+      // Update local message state
+      final index = _messages.indexWhere((m) => m.id == messageId);
+      if (index != -1) {
+        _messages[index] = _messages[index].copyWith(feedback: feedbackType);
+        notifyListeners();
+      }
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }
+

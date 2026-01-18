@@ -43,3 +43,16 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)
     timestamp = Column(DateTime, default=func.now())  # SỬA: Dùng func.now()
     embedding = Column(JSON)
+
+
+class MessageFeedback(Base):
+    """Stores user feedback (like/dislike) for AI messages to improve LLM"""
+
+    __tablename__ = "message_feedback"
+    id = Column(Integer, primary_key=True)
+    message_id = Column(
+        Integer, ForeignKey("chat_messages.id"), nullable=False, unique=True
+    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    feedback_type = Column(String, nullable=False)  # "like" or "dislike"
+    created_at = Column(DateTime, default=func.now())

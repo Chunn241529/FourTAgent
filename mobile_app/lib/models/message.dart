@@ -7,6 +7,10 @@ class Message {
   final String role; // 'user' or 'assistant'
   final DateTime timestamp;
   bool isStreaming;
+  String? feedback; // "like", "dislike", or null
+  String? thinking; // AI thinking/reasoning content
+  List<String> activeSearches; // Active search queries being executed
+  List<String> completedSearches; // Completed searches to keep visible
 
   Message({
     this.id,
@@ -16,7 +20,12 @@ class Message {
     required this.role,
     required this.timestamp,
     this.isStreaming = false,
-  });
+    this.feedback,
+    this.thinking,
+    List<String>? activeSearches,
+    List<String>? completedSearches,
+  }) : activeSearches = activeSearches ?? [],
+       completedSearches = completedSearches ?? [];
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
@@ -26,6 +35,7 @@ class Message {
       content: json['content'],
       role: json['role'],
       timestamp: DateTime.parse(json['timestamp']),
+      feedback: json['feedback'],
     );
   }
 
@@ -37,18 +47,33 @@ class Message {
       'content': content,
       'role': role,
       'timestamp': timestamp.toIso8601String(),
+      'feedback': feedback,
     };
   }
 
-  Message copyWith({String? content, bool? isStreaming}) {
+  Message copyWith({
+    int? id,
+    String? content,
+    bool? isStreaming,
+    String? feedback,
+    String? thinking,
+    List<String>? activeSearches,
+    List<String>? completedSearches,
+  }) {
     return Message(
-      id: id,
+      id: id ?? this.id,
       userId: userId,
       conversationId: conversationId,
       content: content ?? this.content,
       role: role,
       timestamp: timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
+      feedback: feedback ?? this.feedback,
+      thinking: thinking ?? this.thinking,
+      activeSearches: activeSearches ?? this.activeSearches,
+      completedSearches: completedSearches ?? this.completedSearches,
     );
   }
 }
+
+
