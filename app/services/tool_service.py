@@ -255,16 +255,16 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "play_music",
-                    "description": "Play music from a URL or by searching for a query. If a query is provided, it plays the top result.",
+                    "description": "Play music from a YouTube URL. Call search_music first to get a list of tracks, then use this to play a specific track by its URL.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "url_or_query": {
+                            "url": {
                                 "type": "string",
-                                "description": "The URL of the song/video to play, OR a search query (e.g. 'Lo-Fi beats').",
+                                "description": "The YouTube video URL to play (from search_music results)",
                             }
                         },
-                        "required": ["url_or_query"],
+                        "required": ["url"],
                     },
                 },
             },

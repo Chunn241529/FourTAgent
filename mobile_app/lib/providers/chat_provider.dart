@@ -108,7 +108,11 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Send message and handle streaming response
-  Future<void> sendMessage(String content, {String? file}) async {
+  Future<void> sendMessage(
+    String content, {
+    String? file,
+    void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
+  }) async {
     if (_currentConversation == null || content.trim().isEmpty) return;
     
     // Stop any existing stream
@@ -175,7 +179,7 @@ class ChatProvider extends ChangeNotifier {
               }
 
               // Debug: log every data chunk
-              print('>>> Chunk: $jsonStr');
+              // print('>>> Chunk: $jsonStr');
 
               try {
                 final data = _parseJson(jsonStr);
@@ -300,6 +304,20 @@ class ChatProvider extends ChangeNotifier {
                     _messages[lastIndex] = _messages[lastIndex].copyWith(plan: plan);
                     shouldNotify = true;
                     print('>>> Plan received: ${plan.length} chars');
+                  }
+                }
+
+                // Handle music_play event - trigger music player
+                if (data['music_play'] != null) {
+                  final musicData = data['music_play'];
+                  final url = musicData['url'] as String?;
+                  final title = musicData['title'] as String? ?? 'Music';
+                  final thumbnail = musicData['thumbnail'] as String?;
+                  final duration = musicData['duration'] as int?;
+                  
+                  if (url != null && onMusicPlay != null) {
+                    onMusicPlay!(url, title, thumbnail, duration);
+                    print('>>> Music play: $title');
                   }
                 }
 

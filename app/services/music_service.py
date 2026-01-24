@@ -56,46 +56,50 @@ class MusicService:
             logger.error(f"Music search error: {e}")
             return json.dumps({"results": [], "error": str(e)})
 
-    def play_music(self, url_or_query: str) -> str:
+    def play_music(self, url: str) -> str:
         """
-        Play music using mpv.
-        If input is not a URL, it searches first and plays the first result.
+        Get stream URL and metadata for client-side playback.
+        Accepts a YouTube video URL (from search_music results) and extracts the audio stream URL.
+        Returns JSON with url, title, thumbnail for the Flutter app to play.
         """
-        logger.info(f"Request to play: {url_or_query}")
+        logger.info(f"Getting stream URL for: {url}")
 
-        # Stop existing playback if any
-        self.stop_music()
-
-        target_url = url_or_query
-        title = "Music"
-
-        # If not a URL, search first
-        if not url_or_query.startswith(("http://", "https://")):
-            search_res = json.loads(self.search_music(url_or_query, max_results=1))
-            if not search_res.get("results"):
-                return "No music found for query."
-            target_url = search_res["results"][0]["url"]
-            title = search_res["results"][0]["title"]
-
-        try:
-            # Check for mpv again
-            if not shutil.which("mpv"):
-                return "Error: 'mpv' player is not installed. Please install it to play music."
-
-            # Start mpv process
-            # --no-video for audio only focus (though mpv might show album art window, which is fine)
-            # --force-window=immediate to show window if desired, or --no-terminal to suppress output
-            self.current_process = subprocess.Popen(
-                ["mpv", "--no-video", target_url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+        if not url.startswith(("http://", "https://")):
+            return json.dumps(
+                {"error": "Invalid URL. Use search_music first to get video URLs."}
             )
 
-            return f"Playing: {title}"
+        try:
+            # Get actual stream URL and thumbnail using yt-dlp
+            ydl_opts = {
+                "quiet": True,
+                "format": "bestaudio/best",
+                "noplaylist": True,
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                stream_url = info.get("url", url)
+                title = info.get("title", "Unknown")
+                thumbnail = info.get("thumbnail", "")
+                duration = info.get("duration", 0)
+
+            logger.info(f"Stream URL extracted for: {title}")
+
+            return json.dumps(
+                {
+                    "action": "play_music",
+                    "url": stream_url,
+                    "title": title,
+                    "thumbnail": thumbnail,
+                    "duration": duration,
+                },
+                ensure_ascii=False,
+            )
 
         except Exception as e:
-            logger.error(f"Playback error: {e}")
-            return f"Error playing music: {str(e)}"
+            logger.error(f"Error getting music URL: {e}")
+            return json.dumps({"error": str(e)})
 
     def stop_music(self) -> str:
         """Stop current music playback."""

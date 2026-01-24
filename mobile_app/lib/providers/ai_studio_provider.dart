@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../services/chat_service.dart';
-import '../models/conversation.dart';
+import '../services/generate_service.dart';
 
 class AiStudioProvider extends ChangeNotifier {
   // State
@@ -11,11 +10,6 @@ class AiStudioProvider extends ChangeNotifier {
   
   bool _isTranslating = false;
   bool _isGeneratingScript = false;
-  
-  // Dedicated conversations to keep context isolated if needed
-  // Or we can use one-shot requests.
-  int? _translationConvId;
-  int? _scriptConvId;
 
   // Getters
   String get inputText => _inputText;
@@ -44,32 +38,26 @@ class AiStudioProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_translationConvId == null) {
-        final conv = await ChatService.createConversation();
-        _translationConvId = conv.id;
-      }
-
-      final prompt = """
-SYSTEM INSTRUCTION: You are a professional subtitle translator.
+      const systemPrompt = """You are a professional subtitle translator.
 Your task is to translate the following subtitle text to Vietnamese.
 
 STRICT OUTPUT RULES:
 1. Output ONLY the translated text.
 2. Maintain the original SRT timestamps and numbering EXACTLY if present.
 3. Do NOT add any notes, explanations, or conversational filler.
-4. If the input is plain text, translate line-by-line.
+4. If the input is plain text, translate line-by-line.""";
 
-INPUT TEXT:
-$_inputText
-""";
-
-      final stream = ChatService.sendMessage(_translationConvId!, prompt);
+      final stream = GenerateService.generate(
+        prompt: _inputText,
+        systemPrompt: systemPrompt,
+        temperature: 0.3, // Lower for more accurate translation
+      );
       
       await for (final chunk in stream) {
-         _parseAndAppend(chunk, (text) {
-           _translatedText += text;
-           notifyListeners();
-         });
+        _parseAndAppend(chunk, (text) {
+          _translatedText += text;
+          notifyListeners();
+        });
       }
     } catch (e) {
       debugPrint("Translation error: $e");
@@ -89,32 +77,26 @@ $_inputText
     notifyListeners();
 
     try {
-      if (_scriptConvId == null) {
-        final conv = await ChatService.createConversation();
-        _scriptConvId = conv.id;
-      }
-
-      final prompt = """
-SYSTEM INSTRUCTION: You are an expert movie reviewer and script writer.
+      const systemPrompt = """You are an expert movie reviewer and script writer.
 Your goal is to write a YouTube review script based on the provided subtitle content.
 
 STRICT OUTPUT RULES:
 1. Output ONLY the script content.
 2. Do NOT include any introductory phrases like "Here is the script" or "Sure".
 3. Do NOT include any concluding remarks.
-4. Structure the script with clear sections (Intro, Plot Summary, Analysis, Conclusion).
+4. Structure the script with clear sections (Intro, Plot Summary, Analysis, Conclusion).""";
 
-SUBTITLE CONTENT FOR CONTEXT:
-$sourceText
-""";
-
-      final stream = ChatService.sendMessage(_scriptConvId!, prompt);
+      final stream = GenerateService.generate(
+        prompt: "Write a review script based on this content:\n\n$sourceText",
+        systemPrompt: systemPrompt,
+        temperature: 0.7,
+      );
 
       await for (final chunk in stream) {
-         _parseAndAppend(chunk, (text) {
-           _scriptText += text;
-           notifyListeners();
-         });
+        _parseAndAppend(chunk, (text) {
+          _scriptText += text;
+          notifyListeners();
+        });
       }
     } catch (e) {
       debugPrint("Script generation error: $e");
@@ -124,7 +106,7 @@ $sourceText
     }
   }
 
-  // Helper to parse SSE stream from ChatService
+  // Helper to parse SSE stream
   void _parseAndAppend(String chunk, Function(String) onContent) {
     final lines = chunk.split('\n');
     for (final line in lines) {
@@ -137,15 +119,9 @@ $sourceText
 
       if (jsonStr != null && jsonStr != '[DONE]') {
         try {
-          // crude json decode
-          // In a real app, use dart:convert
-          // But here we need to be careful with partial chunks? 
-          // ChatService stream usually yields complete chunks or lines.
-          // Let's assume valid JSON for now or try/catch.
-          // import 'dart:convert'; removed
           final data = jsonDecode(jsonStr);
-          if (data['message'] != null) {
-            final content = data['message']['content'] as String? ?? '';
+          if (data['content'] != null) {
+            final content = data['content'] as String;
             if (content.isNotEmpty) {
               onContent(content);
             }

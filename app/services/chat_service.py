@@ -248,6 +248,39 @@ class ChatService:
               - **KHÔNG** dùng câu dài hay tiếng Việt cho query.
             - Sau khi search xong, TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
             - Nếu cần trích dẫn nguồn, nêu tên nguồn ngắn gọn (ví dụ: "Theo VNExpress...").
+            
+            **QUY TẮC PHÁT NHẠC (BẮT BUỘC TUÂN THỦ):**
+            
+            1. Khi user yêu cầu "phát nhạc X", "nghe nhạc X", "mở bài X":
+               → BẮT BUỘC gọi `search_music(query="X")`
+            
+               **TRƯỜNG HỢP 1: TÌM THẤY KẾT QUẢ CHÍNH XÁC HOẶC RẤT KHỚP (High Confidence Match)**
+               - Nếu kết quả đầu tiên có tên bài hát và nghệ sĩ khớp với yêu cầu của user (ví dụ user hỏi "Lạc Trôi", kết quả là "Lạc Trôi - Sơn Tùng MTP"), HOẶC nếu user chỉ nói tên bài hát và kết quả đầu tiên rất phổ biến và đúng tên.
+               → **ĐƯỢC PHÉP và KHUYẾN KHÍCH** gọi ngay `play_music(url="<URL của bài đầu tiên>")` để phát luôn, không cần hỏi lại.
+               → Trả lời: "Đang phát: [Tên bài]" (ngắn gọn).
+            
+               **TRƯỜNG HỢP 2: TÌM THẤY NHIỀU KẾT QUẢ KHÁC NHAU hoặc KHÔNG CHẮC CHẮN**
+               - Trả lời với DANH SÁCH KẾT QUẢ kèm URL để user chọn:
+                  "1. [Tên bài 1] - URL: https://...
+                   2. [Tên bài 2] - URL: https://...
+                   Anh muốn nghe bài nào?"
+            
+            2. Khi user chọn bài ("bài 1", "bài số 2", "bài đầu tiên", "cái đó"):
+               → BẮT BUỘC gọi `play_music(url="<URL của bài đó>")`
+               → KHÔNG ĐƯỢC chỉ nói "Nhi sẽ phát nhạc" mà KHÔNG gọi tool!
+               → Sau khi gọi play_music, nói: "Đang phát: [Tên bài]"
+            
+            **VÍ DỤ ĐÚNG (Direct Play):**
+            User: "Phát bài Lạc Trôi"
+            → Gọi search_music("Lạc Trôi")
+            → (Thấy kết quả 1 là "Lạc Trôi - Sơn Tùng")
+            → Gọi play_music(url="...")
+            → "Đang phát: Lạc Trôi 🎵"
+            
+            **TUYỆT ĐỐI KHÔNG:**
+            - Nói "Nhi có thể phát nhạc" mà không gọi tool
+            - Hỏi "Anh muốn nghe bài nào" khi user đã chọn bài
+            - Không gọi play_music khi user đã chỉ định bài
             """
 
         return prompt
@@ -835,6 +868,34 @@ class ChatService:
                                     except Exception as e:
                                         logger.debug(
                                             f"Could not parse search results for count: {e}"
+                                        )
+
+                                # Handle play_music - emit music_play event for Flutter to play
+                                elif function_name == "play_music":
+                                    try:
+                                        logger.info(
+                                            f"[MUSIC] play_music result: {result[:200] if result else 'None'}"
+                                        )
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+                                        if (
+                                            "action" in result_data
+                                            and result_data["action"] == "play_music"
+                                        ):
+                                            logger.info(
+                                                f"[MUSIC] Emitting music_play event for: {result_data.get('title', 'Unknown')}"
+                                            )
+                                            yield f"data: {json.dumps({'music_play': result_data}, separators=(',', ':'))}\n\n"
+                                        else:
+                                            logger.warning(
+                                                f"[MUSIC] No action in result_data: {result_data}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Could not parse play_music result: {e}"
                                         )
 
                                 tool_msg = {

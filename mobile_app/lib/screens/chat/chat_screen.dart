@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/music_player_provider.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
 import '../../widgets/settings/settings_dialog.dart';
@@ -328,30 +329,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
           ),
-          // Bottom actions - subtle and clean
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              children: [
-                _buildBottomAction(Icons.settings_outlined, 'Cài đặt', hoverColor, () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => const SettingsDialog(),
-                  );
-                }),
-                _buildBottomAction(
-                  Icons.logout, 
-                  'Đăng xuất', 
-                  hoverColor, 
-                  () async {
-                    final authProvider = context.read<AuthProvider>();
-                    await authProvider.logout();
-                  },
-                  isDestructive: true,
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -489,13 +466,44 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 800),
                 child: MessageInput(
-                  onSend: (message) {
-                    chatProvider.sendMessage(message);
+                  onSend: (message) async {
+                    // Auto-create conversation if none exists
+                    if (chatProvider.currentConversation == null) {
+                      await chatProvider.createConversation();
+                    }
+                    final musicPlayer = context.read<MusicPlayerProvider>();
+                    chatProvider.sendMessage(
+                      message,
+                      onMusicPlay: (url, title, thumbnail, duration) {
+                        musicPlayer.playFromUrl(
+                          url: url,
+                          title: title,
+                          thumbnail: thumbnail,
+                          duration: duration,
+                        );
+                      },
+                    );
                     // Scroll to bottom after user sends
                     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
                   },
-                  onSendWithFile: (message, file) {
-                    chatProvider.sendMessage(message, file: file);
+                  onSendWithFile: (message, file) async {
+                    // Auto-create conversation if none exists
+                    if (chatProvider.currentConversation == null) {
+                      await chatProvider.createConversation();
+                    }
+                    final musicPlayer = context.read<MusicPlayerProvider>();
+                    chatProvider.sendMessage(
+                      message,
+                      file: file,
+                      onMusicPlay: (url, title, thumbnail, duration) {
+                        musicPlayer.playFromUrl(
+                          url: url,
+                          title: title,
+                          thumbnail: thumbnail,
+                          duration: duration,
+                        );
+                      },
+                    );
                     // Scroll to bottom after user sends
                     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
                   },
@@ -600,6 +608,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildSuggestionChip(String text, IconData icon, ThemeData theme) {
     final chatProvider = context.read<ChatProvider>();
+    final musicPlayer = context.read<MusicPlayerProvider>();
     
     return ActionChip(
       avatar: Icon(icon, size: 16),
@@ -608,7 +617,17 @@ class _ChatScreenState extends State<ChatScreen> {
         if (chatProvider.currentConversation == null) {
           await chatProvider.createConversation();
         }
-        chatProvider.sendMessage(text);
+        chatProvider.sendMessage(
+          text,
+          onMusicPlay: (url, title, thumbnail, duration) {
+            musicPlayer.playFromUrl(
+              url: url,
+              title: title,
+              thumbnail: thumbnail,
+              duration: duration,
+            );
+          },
+        );
       },
     );
   }

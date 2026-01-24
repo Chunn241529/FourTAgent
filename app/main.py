@@ -12,6 +12,7 @@ from app.routers.messages import router as messages_router
 from app.routers.rag import router as rag_router
 from app.routers.feedback import router as feedback_router
 from app.routers.tts import router as tts_router
+from app.routers.generate import router as generate_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
@@ -178,6 +179,7 @@ app.include_router(messages_router)
 app.include_router(rag_router)
 app.include_router(feedback_router)
 app.include_router(tts_router)
+app.include_router(generate_router)
 
 
 # Global reference to cloudflared process

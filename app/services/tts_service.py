@@ -134,8 +134,11 @@ class TTSService:
             if self.asr_model:
                 try:
                     print("Transcribing audio for reference text...")
-                    result = self.asr_model.transcribe(file_path, language="vi")
+                    # Auto-detect language for better accuracy
+                    result = self.asr_model.transcribe(file_path)
                     ref_text = result["text"].strip()
+                    detected_lang = result.get("language", "unknown")
+                    print(f"Detected language: {detected_lang}")
                     print(f"Transcribed text: {ref_text}")
                 except Exception as e:
                     print(f"Error transcribing audio: {e}")

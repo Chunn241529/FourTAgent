@@ -122,7 +122,7 @@ class _SubtitleTranslatorTabState extends State<SubtitleTranslatorTab> with Auto
         children: [
           Row(
             children: [
-              ElevatedButton.icon(
+              OutlinedButton.icon(
                 onPressed: () async {
                    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'txt']);
                    if (result != null && result.files.single.path != null) {
@@ -132,10 +132,10 @@ class _SubtitleTranslatorTabState extends State<SubtitleTranslatorTab> with Auto
                    }
                 },
                 icon: const Icon(Icons.upload_file),
-                label: const Text("Import File"),
+                label: const Text("Import"),
               ),
-              const SizedBox(width: 16),
-              FilledButton.icon(
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
                 onPressed: provider.isTranslating 
                    ? null 
                    : () {
@@ -143,7 +143,7 @@ class _SubtitleTranslatorTabState extends State<SubtitleTranslatorTab> with Auto
                       context.read<AiStudioProvider>().translate();
                    }, 
                 icon: provider.isTranslating 
-                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                    : const Icon(Icons.translate), 
                 label: const Text("Translate"),
               ),

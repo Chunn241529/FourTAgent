@@ -7,10 +7,12 @@ import 'providers/auth_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/music_player_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/desktop_home_screen.dart';
 import 'widgets/common/loading_indicator.dart';
+import 'widgets/music/floating_music_player.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +37,7 @@ class FourTChatApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => MusicPlayerProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -71,7 +74,12 @@ class AuthWrapper extends StatelessWidget {
 
         // Navigate based on auth state
         if (authProvider.isAuthenticated) {
-          return const DesktopHomeScreen(); // TTS as primary
+          return Stack(
+            children: [
+              DesktopHomeScreen(key: UniqueKey()), // Main app content
+              const FloatingMusicPlayer(), // Floating music player overlay
+            ],
+          );
         }
 
         return const LoginScreen();
