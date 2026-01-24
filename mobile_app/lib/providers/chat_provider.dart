@@ -315,9 +315,16 @@ class ChatProvider extends ChangeNotifier {
                   final thumbnail = musicData['thumbnail'] as String?;
                   final duration = musicData['duration'] as int?;
                   
-                  if (url != null && onMusicPlay != null) {
-                    onMusicPlay!(url, title, thumbnail, duration);
-                    print('>>> Music play: $title');
+                  if (url != null) {
+                    print('>>> Music play event received for: $title, url: $url');
+                    if (onMusicPlay != null) {
+                      onMusicPlay!(url, title, thumbnail, duration);
+                      print('>>> onMusicPlay callback executed');
+                    } else {
+                      print('>>> WARNING: onMusicPlay callback is NULL');
+                    }
+                  } else {
+                    print('>>> WARNING: Music URL is null');
                   }
                 }
 

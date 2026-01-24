@@ -16,6 +16,7 @@ class MessageInput extends StatefulWidget {
   final Function(String, String?)? onSendWithFile; // message, base64 file
   final bool isLoading;
   final VoidCallback? onStop;
+  final VoidCallback? onMusicTap;
 
   const MessageInput({
     super.key,
@@ -23,6 +24,7 @@ class MessageInput extends StatefulWidget {
     this.onSendWithFile,
     this.isLoading = false,
     this.onStop,
+    this.onMusicTap,
   });
 
   @override
@@ -337,6 +339,12 @@ class _MessageInputState extends State<MessageInput> {
                     onTap: _toggleRecording,
                     color: (_isListening || _recordedAudioPath != null) ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
                   ),
+                  if (widget.onMusicTap != null)
+                    _IconBtn(
+                      icon: Icons.music_note_outlined,
+                      onTap: widget.onMusicTap!,
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                   const Spacer(),
                   widget.isLoading
                       ? _buildStopButton(theme)

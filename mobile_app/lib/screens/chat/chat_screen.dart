@@ -509,6 +509,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                   isLoading: chatProvider.isStreaming,
                   onStop: () => chatProvider.stopStreaming(),
+                  onMusicTap: () {
+                    context.read<MusicPlayerProvider>().playFromUrl(
+                      url: 'https://www.youtube.com/watch?v=Llw9Q6akRo4',
+                      title: 'Lạc Trôi - Sơn Tùng M-TP',
+                      thumbnail: 'https://i.ytimg.com/vi/Llw9Q6akRo4/hqdefault.jpg',
+                      duration: 273,
+                    );
+                  },
                 ),
               ),
             ),

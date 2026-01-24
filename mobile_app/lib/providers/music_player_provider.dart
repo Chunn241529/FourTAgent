@@ -92,6 +92,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     required String title,
     String? thumbnail,
     int? duration,
+    Duration? startTime,
   }) async {
     try {
       await stop();
@@ -106,9 +107,11 @@ class MusicPlayerProvider extends ChangeNotifier {
       notifyListeners();
 
       if (_isDesktop) {
-        await _playDesktop(url);
+        await _playDesktop(url, startTime: startTime);
       } else if (_isMobile) {
         await _playMobile(url);
+        // Mobile seek if needed - wait for load?
+        // Simplifying for now
       }
       
     } catch (e) {
@@ -120,12 +123,18 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
 
   /// Desktop playback using mpv
-  Future<void> _playDesktop(String url) async {
-    debugPrint('Starting mpv (Desktop) with URL...');
+  Future<void> _playDesktop(String url, {Duration? startTime}) async {
+    debugPrint('Starting mpv (Desktop) with URL... Start: $startTime');
     
+    // Use keep-open and idle to prevent premature exit
+    List<String> args = ['--no-video', '--keep-open=yes', '--idle', '--really-quiet', url];
+    if (startTime != null) {
+      args.add('--start=${startTime.inSeconds}');
+    }
+
     _mpvProcess = await Process.start(
       'mpv',
-      ['--no-video', '--really-quiet', url],
+      args,
       mode: ProcessStartMode.normal,
     );
     
@@ -141,7 +150,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     
     _isPlaying = true;
     _isLoading = false;
-    _position = Duration.zero;
+    _position = startTime ?? Duration.zero;
     notifyListeners();
     
     // Simulated position timer
@@ -160,9 +169,14 @@ class MusicPlayerProvider extends ChangeNotifier {
     
     _mpvProcess?.exitCode.then((exitCode) {
       debugPrint('mpv exited with code: $exitCode');
-      _isPlaying = false;
-      _positionTimer?.cancel();
-      notifyListeners();
+      // Only set to false if we didn't manually kill it (e.g. for seeking)
+      // But simple way: just update. Logic elsewhere handles restart.
+      if (_isPlaying) { 
+          // If we are "playing" but process exited, means it finished or crashed.
+          _isPlaying = false;
+          _positionTimer?.cancel();
+          notifyListeners();
+      }
     });
     
     debugPrint('mpv started successfully for: $_title');
@@ -197,6 +211,7 @@ class MusicPlayerProvider extends ChangeNotifier {
           title: _title,
           thumbnail: _thumbnail,
           duration: _totalDuration,
+          startTime: _position, // Resume from current position
         );
       }
     } else if (_isMobile && _audioPlayer != null) {
@@ -212,8 +227,20 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> seek(Duration position) async {
     if (_isMobile && _audioPlayer != null) {
       await _audioPlayer!.seek(position);
-    } else {
-      debugPrint('Seek not supported on desktop (mpv simple mode)');
+    } else if (_isDesktop) {
+      debugPrint('Seeking on desktop (restart mpv at ${position.inSeconds}s)');
+      // Kill current process
+      _mpvProcess?.kill();
+      _positionTimer?.cancel();
+      
+      // Update position immediately to reflect UI
+      _position = position;
+      notifyListeners();
+      
+      // Restart at new position if we were playing or if we want to start playing
+      if (_currentUrl != null) {
+         await _playDesktop(_currentUrl!, startTime: position);
+      }
     }
   }
 
@@ -222,7 +249,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     _positionTimer?.cancel();
     
     if (_isDesktop && _mpvProcess != null) {
-      _mpvProcess!.kill();
+      _mpvProcess!.kill(ProcessSignal.sigkill); // Force kill
       _mpvProcess = null;
     }
     

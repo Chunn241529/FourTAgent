@@ -50,6 +50,9 @@ class MusicService:
                         }
                     )
 
+            logger.info(
+                f"Music search found {len(entries)} results: {json.dumps(entries[:2], ensure_ascii=False)}..."
+            )
             return json.dumps({"results": entries}, ensure_ascii=False)
 
         except Exception as e:

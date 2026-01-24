@@ -24,13 +24,20 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
         if (player.posX == -1) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final size = MediaQuery.of(context).size;
+            debugPrint('FloatingMusicPlayer init: screen size=$size');
             // Default to top-right: specific padding from right
-            final initialX = size.width - 220; // 200 width + 20 padding
+            double initialX = size.width - 220; // 200 width + 20 padding
+            // Safety check
+            if (initialX < 0) initialX = 20; 
+            
+            debugPrint('FloatingMusicPlayer: Setting initial position to $initialX, 100');
             player.updatePosition(initialX, 100);
           });
           // Return hidden while setting position to avoid jump
           return const SizedBox.shrink();
         }
+        
+        debugPrint('FloatingMusicPlayer: building at ${player.posX}, ${player.posY}, visible=${player.isVisible}');
         
         return Positioned(
           left: player.posX,
@@ -335,13 +342,6 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    onPressed: () => player.seek(
-                      Duration(seconds: (player.position.inSeconds - 10).clamp(0, 999999)),
-                    ),
-                    icon: Icon(Icons.replay_10_rounded, color: theme.colorScheme.onSurface),
-                  ),
-                  const SizedBox(width: 8),
                   // Play/Pause button
                   Container(
                     decoration: BoxDecoration(
@@ -379,13 +379,6 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                               size: 32,
                             ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => player.seek(
-                      Duration(seconds: player.position.inSeconds + 10),
-                    ),
-                    icon: Icon(Icons.forward_10_rounded, color: theme.colorScheme.onSurface),
                   ),
                 ],
               ),
