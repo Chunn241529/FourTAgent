@@ -12,6 +12,8 @@ class Message {
   String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
   List<String> completedSearches; // Completed searches to keep visible
+  List<String> deepSearchUpdates; // Deep Search status logs
+  String? plan; // Research plan for Deep Search
 
   Message({
     this.id,
@@ -26,8 +28,11 @@ class Message {
     this.imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? deepSearchUpdates,
+    this.plan,
   }) : activeSearches = activeSearches ?? [],
-       completedSearches = completedSearches ?? [];
+       completedSearches = completedSearches ?? [],
+       deepSearchUpdates = deepSearchUpdates ?? [];
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
@@ -62,6 +67,8 @@ class Message {
     String? imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? deepSearchUpdates,
+    String? plan,
   }) {
     return Message(
       id: id ?? this.id,
@@ -76,6 +83,8 @@ class Message {
       imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
       completedSearches: completedSearches ?? this.completedSearches,
+      deepSearchUpdates: deepSearchUpdates ?? this.deepSearchUpdates,
+      plan: plan ?? this.plan,
     );
   }
 }

@@ -6,6 +6,7 @@ import '../../providers/theme_provider.dart';
 import '../../models/conversation.dart';
 import '../../screens/auth/login_screen.dart';
 import '../settings/settings_dialog.dart';
+import '../../screens/desktop_home_screen.dart';
 
 /// App drawer for navigation
 class AppDrawer extends StatelessWidget {
@@ -60,7 +61,7 @@ class AppDrawer extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'FourT AI',
+                          'Lumina AI',
                           style: theme.textTheme.titleLarge,
                         ),
                         Text(
@@ -181,6 +182,20 @@ class AppDrawer extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  ListTile(
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context, 
+                        MaterialPageRoute(builder: (_) => const DesktopHomeScreen())
+                      );
+                    },
+                    leading: const Icon(Icons.auto_awesome_motion),
+                    title: const Text('AI Studio (TTS)'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   ListTile(
                     onTap: () {
                       Navigator.pop(context);

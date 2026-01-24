@@ -127,11 +127,29 @@ class RAGService:
                 faiss.normalize_L2(emb_array)
 
                 # Kiểm tra index trước khi thêm
+                # Load current metadata
+                current_chunks = RAGService.load_metadata(user_id, conversation_id)
                 initial_count = index.ntotal
+
+                # Check consistency
+                if len(current_chunks) != initial_count:
+                    logger.warning(
+                        f"Index/Metadata mismatch: {initial_count} vectors but {len(current_chunks)} chunks. Resetting."
+                    )
+                    index = faiss.IndexFlatIP(EmbeddingService.DIM)
+                    current_chunks = []
+                    initial_count = 0
+
                 index.add(emb_array)
                 new_count = index.ntotal
 
-                logger.info(f"Added {new_count - initial_count} vectors to FAISS index")
+                # Append new chunks
+                current_chunks.extend(valid_chunks)
+                RAGService.save_metadata(user_id, conversation_id, current_chunks)
+
+                logger.info(
+                    f"Added {new_count - initial_count} vectors to FAISS index. Total: {new_count}"
+                )
 
                 # Lưu index
                 faiss_path = RAGService.get_faiss_path(user_id, conversation_id)
@@ -145,7 +163,9 @@ class RAGService:
                 return ""
 
         except Exception as e:
-            logger.error(f"Error processing file {filename} for RAG: {e}")
+            logger.error(
+                f"Error processing file {filename} for RAG: {e}", exc_info=True
+            )
             return ""
 
     @staticmethod
@@ -249,6 +269,35 @@ class RAGService:
         os.makedirs(index_dir, exist_ok=True)
         return os.path.join(index_dir, f"faiss_{user_id}_{conversation_id}.index")
 
+    @staticmethod
+    def get_metadata_path(user_id: int, conversation_id: int) -> str:
+        """Tạo đường dẫn cho Metadata JSON (lưu text content)"""
+        index_dir = "faiss_indices"
+        os.makedirs(index_dir, exist_ok=True)
+        return os.path.join(index_dir, f"metadata_{user_id}_{conversation_id}.json")
+
+    @staticmethod
+    def load_metadata(user_id: int, conversation_id: int) -> List[str]:
+        """Load text chunks mapping"""
+        path = RAGService.get_metadata_path(user_id, conversation_id)
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading metadata {path}: {e}")
+        return []
+
+    @staticmethod
+    def save_metadata(user_id: int, conversation_id: int, chunks: List[str]):
+        """Save text chunks mapping"""
+        path = RAGService.get_metadata_path(user_id, conversation_id)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(chunks, f, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error saving metadata {path}: {e}")
+
     # Simple in-memory cache for FAISS indices: key=(user_id, conversation_id), value=index
     _index_cache = {}
     _MAX_CACHE_SIZE = 5
@@ -328,6 +377,14 @@ class RAGService:
                 logger.warning("FAISS index is empty after loading attempt")
                 return ""
 
+            # Load metadata
+            chunks = RAGService.load_metadata(user_id, conversation_id)
+            if not chunks or len(chunks) != index.ntotal:
+                logger.warning(
+                    f"Metadata mismatch or empty. Index: {index.ntotal}, Chunks: {len(chunks)}"
+                )
+                return ""
+
             query_emb = EmbeddingService.get_embedding(effective_query, max_length=512)
             if np.all(query_emb == 0):
                 logger.warning("Failed to generate query embedding")
@@ -335,41 +392,42 @@ class RAGService:
 
             logger.info(f"FAISS index has {index.ntotal} vectors")
 
-            # Lấy history messages
-            history = (
-                db.query(ModelChatMessage)
-                .filter(
-                    ModelChatMessage.user_id == user_id,
-                    ModelChatMessage.conversation_id == conversation_id,
-                )
-                .order_by(ModelChatMessage.timestamp.asc())
-                .limit(50)
-                .all()
-            )
-
-            valid_history = [
-                h
-                for h in history
-                if h.embedding and json.loads(h.embedding) is not None
-            ]
-            logger.info(f"Found {len(valid_history)} valid history messages")
-
-            # Normalize query vector
+            # Search in FAISS
             query_emb = query_emb.astype("float32").reshape(1, -1)
             faiss.normalize_L2(query_emb)
 
-            # Tìm kiếm
-            context_from_search = RAGService._hybrid_search(
-                effective_query, query_emb, index, valid_history, top_k=top_k
-            )
+            search_k = min(top_k, index.ntotal)
+            D, I = index.search(query_emb, k=search_k)
 
-            if context_from_search:
+            scores = D[0]
+            indices = I[0]
+
+            context_results = []
+            logger.info(f"Search results: {len(indices)} items")
+
+            for i, idx in enumerate(indices):
+                if idx == -1:
+                    continue
+
+                score = scores[i]
+                if score < 0.2:  # Threshold
+                    continue
+
+                if 0 <= idx < len(chunks):
+                    chunk_text = chunks[idx]
+                    context_results.append(chunk_text)
+                    logger.debug(f"Retrieved chunk {idx} with score {score:.3f}")
+
+            if context_results:
+                final_context = "\n\n".join(context_results)
                 logger.info(
-                    f"Retrieved {len(context_from_search.split('|||'))} context chunks"
+                    f"Retrieved {len(context_results)} relevant chunks from RAG"
                 )
-                return context_from_search
+                return final_context
             else:
-                logger.warning("No relevant context found in RAG search")
+                logger.warning(
+                    "No relevant context found in RAG search (scores too low)"
+                )
                 return ""
 
         except Exception as e:

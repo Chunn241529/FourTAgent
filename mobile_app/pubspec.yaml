@@ -1,5 +1,5 @@
-name: fourt_chat
-description: "FourT AI - Mobile Chat App"
+name: lumina_ai
+description: "Lumina AI - Mobile Chat App"
 publish_to: "none"
 version: 1.0.0+1
 
@@ -15,13 +15,13 @@ dependencies:
   # HTTP requests
   http: ^1.1.0
   # Secure storage for tokens
-  flutter_secure_storage: ^9.0.0
+  flutter_secure_storage: ^10.0.0
   # Simple storage
   shared_preferences: ^2.2.2
   # Markdown rendering
-  flutter_markdown: ^0.6.18
+  flutter_markdown: ^0.7.7+1
   # Custom fonts
-  google_fonts: ^6.1.0
+  google_fonts: ^7.0.2
   # Text animations
   animated_text_kit: ^4.2.2
   # Loading shimmer effects
@@ -31,6 +31,12 @@ dependencies:
   record: ^6.1.2
   permission_handler: ^12.0.1
   path_provider: ^2.1.5
+  # URL launching for links
+  url_launcher: ^6.2.1
+  # Cached network images for markdown
+  cached_network_image: ^3.3.0
+  # Audio playback for TTS
+  audioplayers: ^6.0.0
 
 dev_dependencies:
   flutter_test:

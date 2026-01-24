@@ -49,6 +49,7 @@ DEEP_SEARCH_TRIGGERS = [
     "nghiên cứu",
     "research",
     "deep search",
+    "deepsearch",
     "tìm hiểu sâu",
 ]
 
@@ -225,21 +226,28 @@ class ChatService:
             BẠN BẮT BUỘC PHẢI SỬ DỤNG CÔNG CỤ `web_search` để tìm thông tin chính xác và mới nhất trước khi trả lời.
             
             **KHI GỌI TOOL `web_search`**:
-            - Nếu cần tìm nhiều thông tin khác nhau, hãy gọi `web_search` NHIỀU LẦN (ví dụ: search A, nhận kết quả, rồi search B).
-            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN (ví dụ: "Vietnam flood 2025", "Python install Ubuntu")
-            - KHÔNG dùng câu hỏi dài.
+            - **TUYỆT ĐỐI KHÔNG** nói "Tôi đang tìm kiếm...", "Đợi chút...", "Dùng tool search...". Cứ lẳng lặng mà làm.
+            - Nếu thiếu thông tin, **BẮT BUỘC PHẢI SEARCH** chứ không được trả lời "Tôi không biết".
+            - **Ngôn ngữ tìm kiếm**:
+              - Ưu tiên dùng **TIẾNG ANH** với KEYWORDS NGẮN cho các vấn đề Kỹ thuật (Coding, Linux, AI...), Khoa học, hoặc Quốc tế.
+              - Dùng **TIẾNG VIỆT** cho các vấn đề nội địa Việt Nam (Tin tức, Văn hóa, Du lịch, Pháp luật...).
+            - Search nhiều lần nếu cần thiết.
             
-            KHÔNG được bịa đặt thông tin. Nếu không tìm thấy, hãy nói rõ.
-            TRẢ LỜI NGẮN GỌN, ĐI THẲNG VÀO VẤN ĐỀ. KHÔNG DÀI DÒNG.
+            KHÔNG được bịa đặt thông tin.
+            TRẢ LỜI NGẮN GỌN, ĐI THẲNG VÀO VẤN ĐỀ.
             """
         else:
             # Even when not forced, add general guideline
             prompt += """
             
-            **KHI CẦN TÌM KIẾM THÔNG TIN** (dùng tool `web_search`):
-            - Có thể gọi `web_search` NHIỀU LẦN để thu thập đủ thông tin.
-            - Luôn dùng TIẾNG ANH với KEYWORDS NGẮN GỌN.
-            - TRẢ LỜI ĐÚNG TRỌNG TÂM CÂU HỎI. KHÔNG LAN MAN.
+            **QUY TẮC TÌM KIẾM VÀ TRẢ LỜI:**
+            - KHÔNG thông báo "Đang search...", "Đợi chút...". Hãy search âm thầm.
+            - **QUAN TRỌNG - QUERY SEARCH:** Khi gọi `web_search`, PHẢI dùng **TIẾNG ANH ngắn gọn, chỉ KEYWORDS**.
+              - Ví dụ: Người dùng hỏi "hôm nay có tin gì mới" → Query: "today news"
+              - Ví dụ: "cách cài Python trên Ubuntu" → Query: "install Python Ubuntu"
+              - **KHÔNG** dùng câu dài hay tiếng Việt cho query.
+            - Sau khi search xong, TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
+            - Nếu cần trích dẫn nguồn, nêu tên nguồn ngắn gọn (ví dụ: "Theo VNExpress...").
             """
 
         return prompt
@@ -348,23 +356,9 @@ class ChatService:
 
         # Reasoning keywords (analysis, comparison, explanation)
         reasoning_keywords = [
-            "tại sao",
-            "vì sao",
-            "như thế nào",
             "giải thích",
             "phân tích",
-            "so sánh",
-            "đánh giá",
-            "ý nghĩa",
-            "nguyên nhân",
-            "hệ quả",
             "suy luận",
-            "quan điểm",
-            "nhận xét",
-            "ưu điểm",
-            "nhược điểm",
-            "khác nhau",
-            "giống nhau",
         ]
         needs_reasoning = any(k in input_lower for k in reasoning_keywords)
 
@@ -383,9 +377,9 @@ class ChatService:
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "4T-Reasoning", tools, "high"
+            return "4T-R", tools, True
         elif needs_reasoning:
-            return "4T-Reasoning", tools, level_think
+            return "4T-R", tools, True
         else:
             return "4T", tools, False
 
@@ -703,6 +697,9 @@ class ChatService:
                     messages.append(current_message)
 
                     if tool_calls:
+                        # 1. Prepare tasks and emit "Started" events
+                        tasks = []
+
                         for tool_call in tool_calls:
                             function_name = tool_call["function"]["name"]
                             args_str = tool_call["function"]["arguments"]
@@ -717,7 +714,19 @@ class ChatService:
 
                                     query = args.get("query", "")
                                     # Emit search_started event
-                                    yield f"data: {json.dumps({'tool_calls': [tool_call]}, separators=(',', ':'))}\n\n"
+                                    # Ensure tool_call is serializable
+                                    tool_call_dict = tool_call
+                                    if hasattr(tool_call, "model_dump"):
+                                        tool_call_dict = tool_call.model_dump()
+                                    elif hasattr(tool_call, "dict"):
+                                        tool_call_dict = tool_call.dict()
+                                    elif not isinstance(tool_call, dict):
+                                        try:
+                                            tool_call_dict = dict(tool_call)
+                                        except:
+                                            pass
+
+                                    yield f"data: {json.dumps({'tool_calls': [tool_call_dict]}, separators=(',', ':'))}\n\n"
                                 except Exception as e:
                                     logger.debug(
                                         f"Could not parse web_search args: {e}"
@@ -736,25 +745,61 @@ class ChatService:
                                     )
 
                                     yield f"data: {json.dumps({'deep_search_started': {'topic': topic, 'message': status_msg}}, separators=(',', ':'))}\n\n"
-                                except Exception as e:
-                                    logger.debug(
-                                        f"Could not parse deep_search args: {e}"
+
+                                    # SPECIAL HANDLING: Inject DeepSearch stream directly
+                                    # DeepSearch already does everything (research + synthesis)
+                                    # So we don't need LLM to process the result
+                                    from app.services.deep_search_service import (
+                                        DeepSearchService,
                                     )
 
-                            # Execute tool via service (ASYNC)
-                            execution_result = await tool_service.execute_tool_async(
-                                function_name, args_str
-                            )
+                                    deep_search_service = DeepSearchService()
 
-                            if execution_result["error"]:
+                                    # Yield all SSE events from DeepSearch generator
+                                    for (
+                                        sse_chunk
+                                    ) in deep_search_service.execute_deep_search(
+                                        topic, user_id, conversation_id, db
+                                    ):
+                                        yield sse_chunk
+
+                                    # DeepSearch already saves to DB, so we're done
+                                    # Exit the tool loop and main loop
+                                    return
+
+                                except Exception as e:
+                                    logger.error(f"Deep search error: {e}")
+                                    # Fall through to normal processing if error
+
+                            # Create task for parallel execution (only for non-deep_search tools)
+                            if function_name != "deep_search":
+                                tasks.append(
+                                    tool_service.execute_tool_async(
+                                        function_name, args_str
+                                    )
+                                )
+
+                        # 2. Execute all tasks in parallel
+                        # Limit concurrency to 3 if there are many tasks (as per user request)
+                        # Though we likely won't have > 3 tool calls in one turn usually.
+                        # But slicing tasks[:3] handles "max 3 times" roughly per turn if they spammed it.
+                        # Using gather calls them all.
+                        execution_results = await asyncio.gather(*tasks)
+
+                        # 3. Process results
+                        for i, execution_result in enumerate(execution_results):
+                            function_name = execution_result["tool_name"]
+                            args_str = tool_calls[i]["function"]["arguments"]
+                            result = execution_result["result"]
+                            error = execution_result["error"]
+
+                            if error:
                                 tool_msg = {
                                     "role": "tool",
-                                    "content": f"Error: {execution_result['error']}",
+                                    "content": f"Error: {error}",
                                     "tool_name": function_name,
                                 }
                             else:
-                                result = execution_result["result"]
-
                                 # Handle search specific logic (sending status)
                                 if function_name == "web_search":
                                     try:

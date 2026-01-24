@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,7 +9,7 @@ import 'providers/theme_provider.dart';
 import 'providers/settings_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/chat/conversation_list_screen.dart';
+import 'screens/desktop_home_screen.dart';
 import 'widgets/common/loading_indicator.dart';
 
 void main() {
@@ -38,7 +39,7 @@ class FourTChatApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'FourT AI',
+            title: 'Lumina AI',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
@@ -70,7 +71,7 @@ class AuthWrapper extends StatelessWidget {
 
         // Navigate based on auth state
         if (authProvider.isAuthenticated) {
-          return const ConversationListScreen();
+          return const DesktopHomeScreen(); // TTS as primary
         }
 
         return const LoginScreen();

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
-import '../../widgets/navigation/app_drawer.dart';
+import '../../widgets/settings/settings_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -21,6 +23,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Load conversations when screen is first displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatProvider>().loadConversations();
+    });
   }
 
   @override
@@ -82,22 +88,332 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
     final chatProvider = context.watch<ChatProvider>();
 
+    // Handle case when no conversation is selected (show empty/welcome state)
+    // Don't try to pop - this screen is now embedded in DesktopHomeScreen
+    
     // Scroll to bottom when new messages arrive (only if not user scrolling)
     if (chatProvider.messages.isNotEmpty) {
       _scrollToBottom(isStreaming: chatProvider.isStreaming);
     }
 
+    return Row(
+      children: [
+        // Left sidebar - Conversation list
+        SizedBox(
+          width: 280,
+          child: _buildConversationSidebar(context, theme, chatProvider),
+        ),
+        const VerticalDivider(width: 1, thickness: 1),
+        // Right side - Chat area
+        Expanded(
+          child: _buildChatArea(context, theme, chatProvider),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConversationSidebar(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+    final isDark = theme.brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final hoverColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
+    final selectedColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06);
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(2, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header - subtle with no harsh borders
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFF10B981), // Emerald green
+                        const Color(0xFF059669),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF10B981).withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Lumina AI',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    color: hoverColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: IconButton(
+                    icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+                    iconSize: 20,
+                    onPressed: () {
+                      final themeProvider = context.read<ThemeProvider>();
+                      themeProvider.toggleTheme();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // New chat button - modern gradient style
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF10B981),
+                      const Color(0xFF059669),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF10B981).withOpacity(0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () async {
+                      await chatProvider.createConversation();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.add, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Cuộc trò chuyện mới',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Conversation list - clean and modern
+          Expanded(
+            child: chatProvider.conversations.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: hoverColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.chat_bubble_outline, size: 28, color: theme.disabledColor),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Chưa có cuộc trò chuyện nào',
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.disabledColor),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: chatProvider.conversations.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    itemBuilder: (context, index) {
+                      final conversation = chatProvider.conversations[index];
+                      final isSelected = chatProvider.currentConversation?.id == conversation.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => chatProvider.selectConversation(conversation),
+                            hoverColor: hoverColor,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                color: isSelected ? selectedColor : Colors.transparent,
+                                border: isSelected 
+                                    ? Border.all(color: theme.dividerColor.withOpacity(0.5), width: 1)
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: isSelected 
+                                          ? const Color(0xFF10B981).withOpacity(0.15)
+                                          : hoverColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.chat_bubble_outline,
+                                      size: 16,
+                                      color: isSelected 
+                                          ? const Color(0xFF10B981)
+                                          : theme.iconTheme.color?.withOpacity(0.6),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      conversation.title ?? 'Cuộc trò chuyện',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                        color: isSelected 
+                                            ? theme.textTheme.bodyLarge?.color
+                                            : theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          // Bottom actions - subtle and clean
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: [
+                _buildBottomAction(Icons.settings_outlined, 'Cài đặt', hoverColor, () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => const SettingsDialog(),
+                  );
+                }),
+                _buildBottomAction(
+                  Icons.logout, 
+                  'Đăng xuất', 
+                  hoverColor, 
+                  () async {
+                    final authProvider = context.read<AuthProvider>();
+                    await authProvider.logout();
+                  },
+                  isDestructive: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildBottomAction(IconData icon, String label, Color hoverColor, VoidCallback onTap, {bool isDestructive = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          hoverColor: hoverColor,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon, 
+                  size: 20, 
+                  color: isDestructive ? Colors.red.shade400 : null,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDestructive ? Colors.red.shade400 : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatArea(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          chatProvider.currentConversation?.title ?? 'FourT AI',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+        automaticallyImplyLeading: false,
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 600),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.0, 0.2),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: Text(
+            chatProvider.currentConversation?.title ?? 'Lumina AI',
+            key: ValueKey<String>(chatProvider.currentConversation?.title ?? 'default'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         actions: [
@@ -123,14 +439,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
         ],
       ),
-      drawer: AppDrawer(
-        onConversationTap: (conversation) {
-          chatProvider.selectConversation(conversation);
-        },
-        onNewChat: () async {
-          await chatProvider.createConversation();
-        },
-      ),
       body: Stack(
         children: [
           // 1. Messages Layer (Always at bottom/fill, but hidden if empty to show welcome)
@@ -140,7 +448,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ListView.builder(
                 controller: _scrollController,
                 reverse: false, // Start from top
-                padding: const EdgeInsets.only(top: 16, bottom: 24),
+                padding: const EdgeInsets.only(top: 16, bottom: 24, left: 24, right: 24),
                 itemCount: chatProvider.messages.length,
                 itemBuilder: (context, index) {
                   return MessageBubble(
@@ -176,21 +484,24 @@ class _ChatScreenState extends State<ChatScreen> {
             alignment: (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
                 ? const Alignment(0, 0.4)
                 : Alignment.bottomCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: MessageInput(
-                onSend: (message) {
-                  chatProvider.sendMessage(message);
-                  // Scroll to bottom after user sends
-                  Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
-                },
-                onSendWithFile: (message, file) {
-                  chatProvider.sendMessage(message, file: file);
-                  // Scroll to bottom after user sends
-                  Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
-                },
-                isLoading: chatProvider.isStreaming,
-                onStop: () => chatProvider.stopStreaming(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: MessageInput(
+                  onSend: (message) {
+                    chatProvider.sendMessage(message);
+                    // Scroll to bottom after user sends
+                    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                  },
+                  onSendWithFile: (message, file) {
+                    chatProvider.sendMessage(message, file: file);
+                    // Scroll to bottom after user sends
+                    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                  },
+                  isLoading: chatProvider.isStreaming,
+                  onStop: () => chatProvider.stopStreaming(),
+                ),
               ),
             ),
           ),
@@ -253,7 +564,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 //   theme,
                 // ),
                 _buildSuggestionChip(
-                  'Giải thích khái niệm Micro Services',
+                  'Giải thích ngắn khái niệm Micro Services',
                   Icons.lightbulb_outline,
                   theme,
                 ),

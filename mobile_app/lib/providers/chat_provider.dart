@@ -15,6 +15,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isStreaming = false;
   String? _error;
   StreamSubscription? _streamSubscription;
+  bool _isNamingInProgress = false;  // Lock to prevent parallel naming requests
 
   List<Conversation> get conversations => _conversations;
   List<Message> get messages => _messages;
@@ -30,13 +31,10 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      print('>>> CHAT: Loading conversations...');
       _conversations = await ChatService.getConversations();
-      print('>>> CHAT: Loaded ${_conversations.length} conversations');
       // Sort by created_at descending (newest first)
       _conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } catch (e) {
-      print('>>> CHAT: Error loading conversations: $e');
       _error = e.toString();
     } finally {
       _isLoading = false;
@@ -130,13 +128,6 @@ class ChatProvider extends ChangeNotifier {
     _messages.add(userMessage);
     notifyListeners();
 
-    // Update conversation title if first message
-    if (_currentConversation!.title == null) {
-      _currentConversation!.title = content.length > 50
-          ? '${content.substring(0, 50)}...'
-          : content;
-    }
-
     // Add empty assistant message for streaming
     final assistantMessage = Message(
       userId: userId,
@@ -200,6 +191,9 @@ class ChatProvider extends ChangeNotifier {
                       _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
                       shouldNotify = true;
                       print('>>> Message ID applied: $messageId');
+                      
+                      // Now that message is saved in DB, trigger auto-naming
+                      _maybeGenerateTitle();
                     }
                   }
                 }
@@ -274,9 +268,55 @@ class ChatProvider extends ChangeNotifier {
                     }
                   }
                 }
+            
+                // Handle deep_search_update event
+                if (data['deep_search_update'] != null) {
+                   final update = data['deep_search_update'];
+                   final message = update['message'] as String?;
+                   
+                   if (message != null) {
+                     final lastIndex = _messages.length - 1;
+                     if (lastIndex >= 0) {
+                        final currentUpdates = List<String>.from(_messages[lastIndex].deepSearchUpdates);
+                        // Avoid duplicates if possible, or just append log
+                        if (currentUpdates.isEmpty || currentUpdates.last != message) {
+                           currentUpdates.add(message);
+                           
+                           _messages[lastIndex] = _messages[lastIndex].copyWith(
+                             deepSearchUpdates: currentUpdates,
+                           );
+                           shouldNotify = true;
+                           print('>>> Deep Search Update: $message');
+                        }
+                     }
+                   }
+                }
 
+                // Handle plan event (for PlanIndicator widget)
+                if (data['plan'] != null) {
+                  final plan = data['plan'] as String;
+                  final lastIndex = _messages.length - 1;
+                  if (lastIndex >= 0) {
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(plan: plan);
+                    shouldNotify = true;
+                    print('>>> Plan received: ${plan.length} chars');
+                  }
+                }
 
-                if (data['message'] != null) {
+                // Handle thinking event (top-level, from chat_service)
+                if (data['thinking'] != null) {
+                  final thinkingDelta = data['thinking'] as String;
+                  if (thinkingDelta.isNotEmpty) {
+                    fullThinking += thinkingDelta;
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0) {
+                      _messages[lastIndex] = _messages[lastIndex].copyWith(
+                        thinking: fullThinking,
+                      );
+                      shouldNotify = true;
+                    }
+                  }
+                }                if (data['message'] != null) {
                   final contentDelta = data['message']['content'] as String? ?? '';
                   final thinkingDelta = data['message']['thinking'] as String? ?? '';
                   
@@ -287,10 +327,11 @@ class ChatProvider extends ChangeNotifier {
                     fullThinking += thinkingDelta;
                   }
                   
-                  // Throttling: Update UI every 50ms max
+                  // Throttling: Update UI every 100ms max (increased from 50ms for better performance)
+                  // This reduces UI rebuilds while maintaining smooth visual updates
                   if (contentDelta.isNotEmpty || thinkingDelta.isNotEmpty) {
                     final now = DateTime.now();
-                    if (now.difference(lastUpdate).inMilliseconds > 50) {
+                    if (now.difference(lastUpdate).inMilliseconds > 100) {
                       final lastIndex = _messages.length - 1;
                       if (lastIndex >= 0) {
                          _messages[lastIndex] = _messages[lastIndex].copyWith(
@@ -314,6 +355,7 @@ class ChatProvider extends ChangeNotifier {
             }
           }
 
+          // Debounce notifyListeners to avoid excessive rebuilds
           if (shouldNotify) {
             notifyListeners();
           }
@@ -330,7 +372,7 @@ class ChatProvider extends ChangeNotifier {
           notifyListeners();
           completer.complete();
         },
-        onDone: () {
+        onDone: () async {
           // Final update to ensure complete message is shown
           final lastIndex = _messages.length - 1;
           if (lastIndex >= 0) {
@@ -344,6 +386,9 @@ class ChatProvider extends ChangeNotifier {
                isStreaming: false,
              );
           }
+          
+
+          
           notifyListeners();
           completer.complete();
         },
@@ -366,6 +411,55 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  /// Generate conversation title after first exchange
+  Future<void> _maybeGenerateTitle() async {
+    print('>>> _maybeGenerateTitle called. msgs: ${_messages.length}, title: ${_currentConversation?.title}, isNaming: $_isNamingInProgress');
+    
+    // Skip if already naming or no conversation
+    if (_isNamingInProgress) return;
+    if (_currentConversation == null) return;
+    
+    // Skip if already has a title
+    if (_currentConversation!.title != null && _currentConversation!.title!.isNotEmpty) {
+      print('>>> Skipped: Has title: ${_currentConversation!.title}');
+      return;
+    }
+    
+    // Need at least 1 message (the user query)
+    if (_messages.length < 1) {
+      print('>>> Skipped: Not enough messages');
+      return;
+    }
+    
+    _isNamingInProgress = true;
+    
+    try {
+      final title = await ChatService.generateTitle(_currentConversation!.id);
+      
+      if (title != null && title.isNotEmpty) {
+        // Update current conversation
+        _currentConversation = Conversation(
+          id: _currentConversation!.id,
+          userId: _currentConversation!.userId,
+          createdAt: _currentConversation!.createdAt,
+          title: title,
+        );
+        
+        // Update in conversations list
+        final idx = _conversations.indexWhere((c) => c.id == _currentConversation!.id);
+        if (idx >= 0) {
+          _conversations[idx] = _currentConversation!;
+        }
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      _isNamingInProgress = false;
+    }
+  }
+
   /// Parse JSON safely
   Map<String, dynamic>? _parseJson(String jsonStr) {
     try {
@@ -378,13 +472,25 @@ class ChatProvider extends ChangeNotifier {
   }
 
 
-  /// Stop streaming
+  /// Stop streaming and save partial response
   void stopStreaming() {
     _streamSubscription?.cancel();
     _isStreaming = false;
     final lastIndex = _messages.length - 1;
     if (lastIndex >= 0 && _messages[lastIndex].isStreaming) {
-      _messages[lastIndex] = _messages[lastIndex].copyWith(isStreaming: false);
+      final partialMessage = _messages[lastIndex];
+      _messages[lastIndex] = partialMessage.copyWith(isStreaming: false);
+      
+      // Save partial response to DB asynchronously
+      if (partialMessage.content.isNotEmpty && _currentConversation != null) {
+        ChatService.savePartialMessage(
+          conversationId: _currentConversation!.id,
+          content: partialMessage.content,
+          role: partialMessage.role,
+        ).catchError((e) {
+          print('Failed to save partial message: $e');
+        });
+      }
     }
     notifyListeners();
   }

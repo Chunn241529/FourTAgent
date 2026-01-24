@@ -7,69 +7,29 @@ import ollama
 
 # NOTE: We don't import web_search/web_fetch from ollama anymore
 # Using our own custom implementations (safe_web_search, safe_web_fetch) instead
+from app.services.music_service import music_service
 
 logger = logging.getLogger(__name__)
 
 
-def fallback_web_search(query: str, max_results: int = 10) -> str:
+# Global Caches to optimize search/fetch
+GLOBAL_URL_CACHE = set()
+GLOBAL_CONTENT_STORAGE = {}
+
+
+def fallback_web_search(query: str, max_results: int = 3) -> str:
     """
-    Fallback web search using DuckDuckGo when ollama web_search fails.
-    Automatically translates Vietnamese queries to English for better results.
+    Fast web search using DuckDuckGo.
     Returns JSON string with search results.
     """
     try:
         import ddgs
 
-        logger.info(f"Using DuckDuckGo fallback search for: {query}")
-
-        # Translate to English if query contains Vietnamese
-        # Simple heuristic: check for Vietnamese characters
-        has_vietnamese = any(ord(c) > 127 for c in query)
-
-        if has_vietnamese:
-            try:
-                # Use LLM to create concise English search query
-                translate_response = ollama.chat(
-                    model="4T-S",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": f"Convert this Vietnamese query to a concise English search query. Use keywords and important phrases only. Output ONLY the English query, no explanations:\n\n{query}",
-                        }
-                    ],
-                    options={"temperature": 0.1},
-                )
-                english_query = (
-                    translate_response["message"]["content"].strip().strip('"')
-                )
-                logger.info(f"Optimized query: {english_query}")
-            except Exception as e:
-                logger.warning(f"Query optimization failed: {e}, using original query")
-                english_query = query
-        else:
-            # For English queries, still optimize to make them concise
-            try:
-                optimize_response = ollama.chat(
-                    model="4T-S",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": f"Convert this to a concise search query. Use keywords and important phrases only. Output ONLY the optimized query, no explanations:\n\n{query}",
-                        }
-                    ],
-                    options={"temperature": 0.1},
-                )
-                english_query = (
-                    optimize_response["message"]["content"].strip().strip('"')
-                )
-                logger.info(f"Optimized query: {english_query}")
-            except Exception as e:
-                logger.warning(f"Query optimization failed: {e}, using original query")
-                english_query = query
+        logger.info(f"DuckDuckGo search for: {query}")
 
         results = []
         with ddgs.DDGS() as ddg_client:
-            search_results = ddg_client.text(english_query, max_results=max_results)
+            search_results = ddg_client.text(query, max_results=max_results)
 
             for result in search_results:
                 results.append(
@@ -91,8 +51,14 @@ def fallback_web_fetch(url: str) -> str:
     """
     Fallback web fetch using requests + BeautifulSoup when ollama web_fetch fails.
     Returns cleaned text content from the URL with quality extraction.
+    Uses GLOBAL_URL_CACHE to prevent re-fetching.
     """
     try:
+        # Check cache first
+        if url in GLOBAL_URL_CACHE and url in GLOBAL_CONTENT_STORAGE:
+            logger.info(f"Using cached content for: {url}")
+            return GLOBAL_CONTENT_STORAGE[url]
+
         import requests
         from bs4 import BeautifulSoup
 
@@ -179,9 +145,22 @@ def fallback_web_fetch(url: str) -> str:
         lines = [line.strip() for line in text_content.split("\n") if line.strip()]
         cleaned_text = "\n".join(lines)
 
-        # Limit to reasonable size (increased from 10k to 15k for richer content)
-        if len(cleaned_text) > 15000:
-            cleaned_text = cleaned_text[:15000] + "\n\n...[Content truncated]"
+        # Limit to reasonable size (reduced for faster processing)
+        if len(cleaned_text) > 8000:
+            cleaned_text = cleaned_text[:8000] + "\n\n...[Content truncated]"
+
+        # Cache the result (Simple LRU-like: if big, clear half)
+        if len(GLOBAL_URL_CACHE) > 50:
+            # Prevent memory leak by clearing old cache
+            # Ideally we'd remove oldest, but for simple global set/dict, clearing or partial clear is fine
+            logger.info(
+                "Global URL Cache hit limit (50), clearing cache to free memory."
+            )
+            GLOBAL_URL_CACHE.clear()
+            GLOBAL_CONTENT_STORAGE.clear()
+
+        GLOBAL_URL_CACHE.add(url)
+        GLOBAL_CONTENT_STORAGE[url] = cleaned_text
 
         return cleaned_text
 
@@ -210,6 +189,9 @@ class ToolService:
         self.tools_map = {
             "web_search": safe_web_search,
             "web_fetch": safe_web_fetch,
+            "search_music": music_service.search_music,
+            "play_music": music_service.play_music,
+            "stop_music": music_service.stop_music,
         }
 
     def get_tools(self) -> List[Any]:
@@ -222,13 +204,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "web_search",
-                    "description": "Search the web for information using DuckDuckGo. Returns a list of search results with titles, URLs, and snippets. IMPORTANT: Always use CONCISE ENGLISH KEYWORDS for the query (e.g., 'Python install Ubuntu' instead of 'How to install Python on Ubuntu').",
+                    "description": "Search the web using DuckDuckGo. IMPORTANT: Query MUST be in ENGLISH KEYWORDS only (e.g., 'Python install Ubuntu', 'today news', 'ChatGPT features'). DO NOT use Vietnamese or full sentences.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "The search query in CONCISE ENGLISH KEYWORDS (e.g., 'machine learning tutorial', 'Python error fix')",
+                                "description": "Search query in ENGLISH KEYWORDS ONLY (2-10 words, e.g., 'machine learning tutorial')",
                             }
                         },
                         "required": ["query"],
@@ -249,6 +231,69 @@ class ToolService:
                             }
                         },
                         "required": ["url"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_music",
+                    "description": "Search for music using keywords. Returns a list of tracks with titles and URLs. Use this before playing music if the user hasn't provided a specific URL.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Keywords to search for (e.g., 'classical music', 'Imagine Dragons')",
+                            }
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "play_music",
+                    "description": "Play music from a URL or by searching for a query. If a query is provided, it plays the top result.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url_or_query": {
+                                "type": "string",
+                                "description": "The URL of the song/video to play, OR a search query (e.g. 'Lo-Fi beats').",
+                            }
+                        },
+                        "required": ["url_or_query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "stop_music",
+                    "description": "Stop the currently playing music.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "deep_search",
+                    "description": "Perform comprehensive in-depth research on a topic. Use this for complex questions that require: multiple perspectives, detailed analysis, current information from multiple sources, or thorough explanations. This tool searches broadly, analyzes results, and synthesizes a detailed report. DO NOT use for simple questions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {
+                                "type": "string",
+                                "description": "The topic or question to research in depth (can be Vietnamese or English)",
+                            }
+                        },
+                        "required": ["topic"],
                     },
                 },
             },

@@ -31,6 +31,7 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=func.now())  # SỬA: Dùng func.now()
+    title = Column(String, nullable=True)
     summary = Column(String, nullable=True)  # Hierarchical memory: conversation summary
 
 

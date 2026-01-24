@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    DIM = 768
+    DIM = 2560  # qwen3-embedding:4b output dimension
 
     @staticmethod
     def get_embedding(text: str, max_length: int = 1024) -> np.ndarray:

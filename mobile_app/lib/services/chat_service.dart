@@ -11,6 +11,9 @@ class ChatService {
     final response = await ApiService.get('${ApiConfig.conversations}/');
     
     if (response.statusCode == 200) {
+      // Debug: Log full response
+      print('>>> GET /conversations response: ${response.body}');
+      
       final List<dynamic> data = ApiService.parseResponse(response) as List? ?? [];
       return data.map((json) => Conversation.fromJson(json)).toList();
     }
@@ -37,6 +40,25 @@ class ChatService {
     final response = await ApiService.delete('${ApiConfig.conversations}/');
     if (response.statusCode != 200) {
       throw ApiException('Failed to delete all conversations', response.statusCode);
+    }
+  }
+
+  /// Generate title for a conversation using AI
+  static Future<String?> generateTitle(int conversationId) async {
+    try {
+      final url = '${ApiConfig.conversations}/$conversationId/generate-title';
+      print('>>> Calling POST $url');
+      final response = await ApiService.post(url);
+      
+      print('>>> Generate Title Response: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = ApiService.parseResponse(response);
+        return data['title'] as String?;
+      }
+      return null;
+    } catch (e) {
+      print('Error generating title: $e');
+      return null;
     }
   }
 
@@ -101,6 +123,28 @@ class ChatService {
   /// Delete feedback for a message
   static Future<void> deleteFeedback(int messageId) async {
     await ApiService.delete('${ApiConfig.feedback}/$messageId');
+  }
+
+  /// Save partial message when user stops streaming
+  static Future<void> savePartialMessage({
+    required int conversationId,
+    required String content,
+    required String role,
+  }) async {
+    if (content.isEmpty) return;
+    
+    try {
+      await ApiService.post(
+        '${ApiConfig.messages}/conversations/$conversationId/messages',
+        body: {
+          'content': content,
+          'role': role,
+        },
+      );
+    } catch (e) {
+      print('Error saving partial message: $e');
+      rethrow;
+    }
   }
 }
 

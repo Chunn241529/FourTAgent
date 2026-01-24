@@ -390,6 +390,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
       // Delete all conversations via API
       await ChatService.deleteAllConversations();
       
+      // Clear current conversation so chat screen closes
+      chatProvider.clearCurrentConversation();
+      
       // Reload conversations (should be empty now)
       await chatProvider.loadConversations();
       

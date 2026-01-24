@@ -102,7 +102,7 @@ def send_email(to_email: str, code: str, template_type: str = "verification"):
                     <p style="font-size: 14px;">If you did not request a password reset, please ignore this email or contact our support team.</p>
                     <hr style="border: 1px solid #eee; margin: 20px 0;">
                     <p style="font-size: 12px; color: #777;">
-                        &copy; {datetime.now().year} FourT AI. All rights reserved.<br>
+                        &copy; {datetime.now().year} Lumina AI. All rights reserved.<br>
                         For support, contact us at <a href="mailto:vtrung836@gmail.com.com" style="color: #3498db;">vtrung836@gmail.com.com</a>
                     </p>
                 </div>

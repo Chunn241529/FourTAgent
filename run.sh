@@ -34,7 +34,7 @@ else
 fi
 
 # Kiểm tra sự tồn tại của file app/main.py
-if [ -f "app/main.py" ]; then
+if [ -f "run_server.py" ]; then
     echo "Chạy ứng dụng FastAPI từ app/main.py..."
     python3 -m app.main
 else

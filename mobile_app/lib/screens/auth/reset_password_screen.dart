@@ -62,9 +62,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         title: const Text('Đặt lại mật khẩu'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: _resetSuccess ? _buildSuccessView(theme) : _buildFormView(theme),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: _resetSuccess ? _buildSuccessView(theme) : _buildFormView(theme),
+            ),
+          ),
         ),
       ),
     );

@@ -13,10 +13,15 @@ class Conversation {
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
+    // Server returns UTC time without 'Z' suffix, add it to parse as UTC then convert to local
+    final utcString = json['created_at'].endsWith('Z') ? json['created_at'] : '${json['created_at']}Z';
+    final utcTime = DateTime.parse(utcString);
+    final localTime = utcTime.toLocal();
+    
     return Conversation(
       id: json['id'],
       userId: json['user_id'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: localTime,
       title: json['title'],
     );
   }

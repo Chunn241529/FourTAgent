@@ -11,6 +11,7 @@ from app.routers.conversations import router as conversations_router
 from app.routers.messages import router as messages_router
 from app.routers.rag import router as rag_router
 from app.routers.feedback import router as feedback_router
+from app.routers.tts import router as tts_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,18 +22,60 @@ import subprocess
 import signal
 import atexit
 
-logger = logging.getLogger(__name__)
+import time
+from logging.handlers import RotatingFileHandler
 
-# Cấu hình logging
-logging.basicConfig(level=logging.DEBUG)
+# Tạo thư mục logs và storage
+os.makedirs("logs", exist_ok=True)
+os.makedirs("storage", exist_ok=True)
+
+# === LOGGING CONFIGURATION ===
+# Get root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)  # Root phải accept tất cả
+
+# File Handler (logs/server.log) - ghi TẤT CẢ log
+file_handler = RotatingFileHandler(
+    "logs/server.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+file_handler.setLevel(logging.DEBUG)
+root_logger.addHandler(file_handler)
+
+# Console Handler - chỉ hiện INFO trở lên
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(levelname)s: %(message)s")
+)
+console_handler.setLevel(logging.INFO)
+root_logger.addHandler(console_handler)
+
+# Tắt bớt log ồn ào từ các thư viện bên thứ 3 (cả file và console)
+for noisy_logger in [
+    "uvicorn.access",
+    "httpcore",
+    "httpx",
+    "multipart",
+    "passlib",
+    "faiss",
+    "rquest",
+    "cookie_store",
+    "primp",
+]:
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+# Logger riêng cho ứng dụng
+logger = logging.getLogger("fourt_ai")
 
 # Tạo tất cả bảng trong database
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="FourT AI",
+    title="Lumina AI",
     version="1.0.0",
-    description="FourT AI - Your Personal Task and Chat Assistant",
+    description="Lumina AI - Your Personal Task and Chat Assistant",
     openapi_tags=[
         {"name": "auth", "description": "Authentication and User Management"},
         {"name": "task", "description": "Task Management"},
@@ -41,6 +84,7 @@ app = FastAPI(
         {"name": "messages", "description": "Message Handling"},
         {"name": "rag", "description": "Retrieval-Augmented Generation"},
         {"name": "feedback", "description": "User Feedback for AI Responses"},
+        {"name": "tts", "description": "Text-to-Speech Service"},
     ],
 )
 
@@ -49,6 +93,7 @@ templates = Jinja2Templates(directory="ui/web/pages")
 
 # Phục vụ file tĩnh (script.js, style.css)
 app.mount("/static", StaticFiles(directory="ui/web/static"), name="static")
+app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 # Thêm middleware CORS
 app.add_middleware(
@@ -75,6 +120,33 @@ app.add_middleware(
 
 # Enable GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+
+    # Log request start
+    # logger.debug(f"START REQ: {request.method} {request.url.path}")
+
+    try:
+        response = await call_next(request)
+        process_time = (time.time() - start_time) * 1000
+        formatted_process_time = "{0:.2f}".format(process_time)
+
+        logger.info(
+            f"{request.method} {request.url.path} "
+            f"- {response.status_code} - {formatted_process_time}ms"
+        )
+        return response
+    except Exception as e:
+        process_time = (time.time() - start_time) * 1000
+        logger.error(
+            f"ERROR {request.method} {request.url.path} "
+            f"- {str(e)} - {process_time:.2f}ms",
+            exc_info=True,
+        )
+        raise e
 
 
 # Route để render login.html tại '/'
@@ -105,6 +177,7 @@ app.include_router(conversations_router)
 app.include_router(messages_router)
 app.include_router(rag_router)
 app.include_router(feedback_router)
+app.include_router(tts_router)
 
 
 # Global reference to cloudflared process

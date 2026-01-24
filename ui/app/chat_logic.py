@@ -138,7 +138,7 @@ class ChatLogic:
         if cmd == "/help":
             chat_display.clear()
             help_text = """
-            <h3>📚 HƯỚNG DẪN SỬ DỤNG FourT AI</h3>
+            <h3>📚 HƯỚNG DẪN SỬ DỤNG Lumina AI</h3>
             <ul>
                 <li><b>/new</b>: Bắt đầu cuộc hội thoại mới</li>
                 <li><b>/history</b>: Xem lịch sử hội thoại</li>

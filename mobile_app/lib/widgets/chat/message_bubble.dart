@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
 import 'search_indicator.dart';
-
+import 'deep_search_indicator.dart';
+import 'plan_indicator.dart';
 /// Modern message bubble widget - User on right, AI on left
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -44,29 +46,78 @@ class MessageBubble extends StatelessWidget {
                 if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
                   Builder(
                     builder: (context) {
-                      // Handle both raw base64 and data URL format
-                      String base64Data = message.imageBase64!;
+                      String base64Str = message.imageBase64!;
+                      // Check for data URI info
+                      bool isImage = true;
+                      String mimeType = '';
+                      
+                      if (base64Str.startsWith('data:')) {
+                        final markerIndex = base64Str.indexOf(';');
+                        if (markerIndex > 0) {
+                          mimeType = base64Str.substring(5, markerIndex);
+                          if (!mimeType.startsWith('image/')) {
+                            isImage = false;
+                          }
+                        }
+                      }
+                      
+                      // Extract raw bytes
+                      String base64Data = base64Str;
                       if (base64Data.contains(',')) {
                         base64Data = base64Data.split(',').last;
                       }
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(
-                            base64Decode(base64Data),
-                            width: 200,
-                            height: 200,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+
+                      if (isImage) {
+                         return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(
+                              base64Decode(base64Data),
                               width: 200,
-                              height: 100,
-                              color: theme.colorScheme.surfaceContainerHighest,
-                              child: const Icon(Icons.broken_image, size: 40),
+                              height: 200,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 200,
+                                height: 100,
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                child: const Icon(Icons.broken_image, size: 40),
+                              ),
                             ),
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        // Render File Card for non-image files
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                               color: theme.colorScheme.outline.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                               Icon(
+                                 _getFileIcon(mimeType),
+                                 color: theme.colorScheme.primary,
+                               ),
+                               const SizedBox(width: 8),
+                               Flexible(
+                                 child: Text(
+                                   'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
+                                   style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                                   maxLines: 1,
+                                   overflow: TextOverflow.ellipsis,
+                                 ),
+                               ),
+                            ],
+                          ),
+                        );
+                      }
                     },
                   ),
                 // Display text content
@@ -124,7 +175,7 @@ class MessageBubble extends StatelessWidget {
               children: [
                 // AI name
                 Text(
-                  'FourT AI',
+                  'Lumina AI',
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: theme.colorScheme.onSurface.withOpacity(0.7),
@@ -132,14 +183,34 @@ class MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
 
-                // Thinking indicator
+                // 1. Deep Search Indicator (status updates) - FIRST
+                if (message.deepSearchUpdates.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _buildDeepSearchIndicator(message),
+                  ),
+
+                // 2. Plan Indicator (collapsible) - SECOND
+                if (message.plan != null && message.plan!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: PlanIndicator(
+                      plan: message.plan!,
+                      isStreaming: message.isStreaming,
+                    ),
+                  ),
+
+                // 3. Thinking Indicator (Collapsible) - THIRD (during synthesis)
                 if (message.thinking != null && message.thinking!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _ThinkingIndicator(thinking: message.thinking!),
+                    child: _ThinkingIndicator(
+                      thinking: message.thinking!,
+                      isStreaming: message.isStreaming,
+                    ),
                   ),
 
-                // Content with interleaved searches
+                // 4. Content with interleaved searches
                 _buildInterleavedContent(theme, isDark),
 
                 // Streaming indicator
@@ -163,6 +234,15 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
+  IconData _getFileIcon(String mimeType) {
+    if (mimeType.contains('pdf')) return Icons.picture_as_pdf;
+    if (mimeType.contains('word')) return Icons.description;
+    if (mimeType.contains('sheet') || mimeType.contains('excel')) return Icons.table_chart;
+    if (mimeType.contains('text')) return Icons.text_snippet;
+    if (mimeType.contains('audio')) return Icons.audio_file;
+    return Icons.insert_drive_file;
+  }
+
   Widget _buildInterleavedContent(ThemeData theme, bool isDark) {
     if (message.content.isEmpty) return const SizedBox.shrink();
 
@@ -178,21 +258,38 @@ class MessageBubble extends StatelessWidget {
       if (match.start > lastIndex) {
         final text = content.substring(lastIndex, match.start);
         if (text.trim().isNotEmpty) {
-           children.add(
+          children.add(
              MarkdownBody(
                 data: text,
                 selectable: true,
+                onTapLink: (text, href, title) async {
+                  if (href != null) {
+                    final uri = Uri.tryParse(href);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
                 styleSheet: MarkdownStyleSheet(
                   p: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    color: isDark ? Colors.grey[300] : Colors.grey[850],
                     height: 1.5,
+                  ),
+                  strong: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.grey[900],
+                  ),
+                  a: TextStyle(
+                    color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
+                    decoration: TextDecoration.underline,
                   ),
                   code: theme.textTheme.bodyMedium?.copyWith(
                     fontFamily: 'monospace',
-                    backgroundColor: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    backgroundColor: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFf5f5f5),
+                    color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
                   ),
                   codeblockDecoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    color: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFf5f5f5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -227,19 +324,51 @@ class MessageBubble extends StatelessWidget {
              MarkdownBody(
                 data: text,
                 selectable: true,
+                onTapLink: (text, href, title) async {
+                  if (href != null) {
+                    final uri = Uri.tryParse(href);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
                 styleSheet: MarkdownStyleSheet(
                   p: theme.textTheme.bodyMedium?.copyWith(
                     color: isDark ? Colors.grey[300] : Colors.grey[800],
                     height: 1.5,
                   ),
+                  strong: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.grey[900],
+                  ),
+                  a: TextStyle(
+                    color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
+                    decoration: TextDecoration.underline,
+                  ),
                   code: theme.textTheme.bodyMedium?.copyWith(
                     fontFamily: 'monospace',
-                    backgroundColor: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFf5f5f5),
+                    color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
                   ),
                   codeblockDecoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2d2d2d) : const Color(0xFFf5f5f5),
+                    color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFf5f5f5),
                     borderRadius: BorderRadius.circular(8),
                   ),
+                  blockquote: theme.textTheme.bodyMedium?.copyWith(
+                    color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    fontStyle: FontStyle.italic,
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF0F4F8),
+                    border: Border(
+                      left: BorderSide(
+                        color: isDark ? const Color(0xFF64B5F6) : Colors.blue,
+                        width: 3,
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                 ),
              )
            );
@@ -263,19 +392,47 @@ class MessageBubble extends StatelessWidget {
       selectable: true,
       softLineBreak: true,
       styleSheet: MarkdownStyleSheet(
+        // Body text
         p: theme.textTheme.bodyLarge?.copyWith(
           height: 1.6,
-          color: theme.colorScheme.onSurface,
+          color: isDark ? Colors.grey[300] : Colors.grey[850],
         ),
-        h1: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-        h2: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-        h3: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        // Headers with explicit dark mode colors
+        h1: theme.textTheme.headlineMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : Colors.grey[900],
+        ),
+        h2: theme.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.grey[100] : Colors.grey[900],
+        ),
+        h3: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.grey[200] : Colors.grey[900],
+        ),
+        // Strong/bold text
+        strong: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : Colors.grey[900],
+        ),
+        // Emphasis/italic
+        em: TextStyle(
+          fontStyle: FontStyle.italic,
+          color: isDark ? Colors.grey[300] : Colors.grey[800],
+        ),
+        // Links - distinct but not clashing
+        a: TextStyle(
+          color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
+          decoration: TextDecoration.underline,
+        ),
+        // Inline code
         code: TextStyle(
-          backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE8E8E8),
+          backgroundColor: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFE8E8E8),
           fontFamily: 'monospace',
           fontSize: 13,
           color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
         ),
+        // Code block
         codeblockDecoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
           borderRadius: BorderRadius.circular(8),
@@ -285,17 +442,72 @@ class MessageBubble extends StatelessWidget {
         ),
         codeblockPadding: const EdgeInsets.all(12),
         listIndent: 20,
+        // List bullets
+        listBullet: theme.textTheme.bodyMedium?.copyWith(
+          color: isDark ? Colors.grey[400] : Colors.grey[700],
+        ),
+        // Blockquote
         blockquote: theme.textTheme.bodyLarge?.copyWith(
-          color: theme.colorScheme.onSurface.withOpacity(0.7),
+          color: isDark ? Colors.grey[300] : Colors.grey[800],
           fontStyle: FontStyle.italic,
         ),
         blockquoteDecoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF0F4F8),
           border: Border(
-            left: BorderSide(color: theme.colorScheme.primary, width: 3),
+            left: BorderSide(
+              color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+              width: 3,
+            ),
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        // Horizontal rule
+        horizontalRuleDecoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+              width: 1,
+            ),
           ),
         ),
-        blockquotePadding: const EdgeInsets.only(left: 12),
       ),
+      // Handle link taps
+      onTapLink: (text, href, title) async {
+        if (href != null) {
+          final uri = Uri.tryParse(href);
+          if (uri != null && await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        }
+      },
+      // Handle image rendering
+      imageBuilder: (uri, title, alt) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            uri.toString(),
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.broken_image, color: Colors.grey[500]),
+                    const SizedBox(width: 8),
+                    Flexible(child: Text(alt ?? 'Image failed to load', style: TextStyle(color: Colors.grey[500]))),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -350,6 +562,31 @@ class MessageBubble extends StatelessWidget {
       ],
     );
   }
+
+
+  Widget _buildDeepSearchIndicator(Message message) {
+    if (message.deepSearchUpdates.isEmpty) return const SizedBox.shrink();
+
+    final updates = message.deepSearchUpdates;
+    // If streaming, the last update is active.
+    // If not streaming (done), all updates are completed.
+    // However, usually we might want to collapse completed ones or show them differently?
+    // For now, let's show all as completed except the last one if streaming.
+    
+    final isStreaming = message.isStreaming;
+    final completedSteps = isStreaming && updates.isNotEmpty 
+        ? updates.sublist(0, updates.length - 1)
+        : updates;
+    
+    final activeSteps = isStreaming && updates.isNotEmpty
+        ? [updates.last]
+        : <String>[];
+
+    return DeepSearchIndicator(
+      activeSteps: activeSteps,
+      completedSteps: completedSteps,
+    );
+  }
 }
 
 class _ActionButton extends StatelessWidget {
@@ -386,8 +623,12 @@ class _ActionButton extends StatelessWidget {
 
 class _ThinkingIndicator extends StatefulWidget {
   final String thinking;
+  final bool isStreaming;
 
-  const _ThinkingIndicator({required this.thinking});
+  const _ThinkingIndicator({
+    required this.thinking,
+    required this.isStreaming,
+  });
 
   @override
   State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
@@ -395,6 +636,28 @@ class _ThinkingIndicator extends StatefulWidget {
 
 class _ThinkingIndicatorState extends State<_ThinkingIndicator> {
   bool _isExpanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-expand if actively streaming thinking content
+    if (widget.isStreaming) {
+      _isExpanded = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ThinkingIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-collapse when streaming finishes
+    if (oldWidget.isStreaming && !widget.isStreaming) {
+        // Optional: Delay collapse slightly for better UX?
+        // For now, immediate collapse as requested.
+        setState(() {
+          _isExpanded = false;
+        });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

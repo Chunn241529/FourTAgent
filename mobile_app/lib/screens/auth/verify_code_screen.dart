@@ -71,9 +71,12 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 32),
@@ -147,8 +150,10 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
           ),
         ),
       ),
-    );
-  }
+      ),
+    ),
+  );
+}
 
   void _resendCode() async {
     setState(() {

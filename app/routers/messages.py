@@ -83,6 +83,62 @@ def get_messages(
     return result
 
 
+@router.post("/conversations/{conversation_id}/messages", response_model=ChatMessage)
+def create_message(
+    conversation_id: int,
+    content: str,
+    role: str = "assistant",
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new message in a conversation (used for saving partial responses)"""
+    conversation = (
+        db.query(ModelConversation)
+        .filter(
+            ModelConversation.id == conversation_id,
+            ModelConversation.user_id == user_id,
+        )
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(404, "Conversation not found or not authorized")
+
+    # Create embedding for the message
+    embedding = EmbeddingService.get_embedding(content)
+
+    # Create and save the message
+    message = ModelChatMessage(
+        user_id=user_id,
+        conversation_id=conversation_id,
+        content=content,
+        role=role,
+        embedding=json.dumps(embedding.tolist()) if embedding is not None else None,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    # Update FAISS index
+    try:
+        index, _ = rag_service.load_faiss(user_id, conversation_id)
+        if embedding is not None:
+            index.add(np.array([embedding]))
+            faiss.write_index(
+                index, rag_service.get_faiss_path(user_id, conversation_id)
+            )
+    except Exception as e:
+        print(f"FAISS update error: {e}")
+
+    msg_dict = message.__dict__.copy()
+    if msg_dict.get("embedding") and isinstance(msg_dict["embedding"], str):
+        try:
+            msg_dict["embedding"] = json.loads(msg_dict["embedding"])
+        except json.JSONDecodeError:
+            msg_dict["embedding"] = None
+
+    return ChatMessage(**msg_dict)
+
+
 @router.get("/{id}", response_model=ChatMessage)
 def get_message(
     id: int, user_id: int = Depends(get_current_user), db: Session = Depends(get_db)

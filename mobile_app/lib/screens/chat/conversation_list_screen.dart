@@ -29,7 +29,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FourT AI'),
+        title: const Text('Lumina AI'),
         actions: [
           IconButton(
             onPressed: () async {
@@ -167,6 +167,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                 horizontal: 20,
                 vertical: 12,
               ),
+              isThreeLine: false,
               leading: Container(
                 width: 48,
                 height: 48,
@@ -174,23 +175,24 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                   shape: BoxShape.circle,
                   color: theme.colorScheme.primary.withOpacity(0.1),
                 ),
+                alignment: Alignment.center,
                 child: Icon(
                   Icons.chat_bubble,
                   color: theme.colorScheme.primary,
                 ),
               ),
-              title: Text(
-                conversation.title ?? 'Cuộc trò chuyện mới',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
+              title: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
-                  _formatDate(conversation.createdAt),
-                  style: theme.textTheme.bodySmall,
+                  conversation.title ?? 'Cuộc trò chuyện mới',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium,
                 ),
+              ),
+              subtitle: Text(
+                _formatDate(conversation.createdAt),
+                style: theme.textTheme.bodySmall,
               ),
               trailing: Icon(
                 Icons.chevron_right,
@@ -208,13 +210,15 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final dateDay = DateTime(date.year, date.month, date.day);
+    
+    final time = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
     if (dateDay == today) {
-      return 'Hôm nay, ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return 'Hôm nay, $time';
     } else if (dateDay == yesterday) {
-      return 'Hôm qua, ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return 'Hôm qua, $time';
     } else {
-      return '${date.day}/${date.month}/${date.year}';
+      return '${date.day}/${date.month}/${date.year}, $time';
     }
   }
 }

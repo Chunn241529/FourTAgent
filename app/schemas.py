@@ -69,6 +69,8 @@ class Conversation(BaseModel):
     id: int
     user_id: int
     created_at: datetime
+    title: Optional[str] = None
+    summary: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -114,3 +116,8 @@ class FeedbackResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TTSRequest(BaseModel):
+    text: str
+    voice_id: Optional[str] = None

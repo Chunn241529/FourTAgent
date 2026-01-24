@@ -1,8 +1,9 @@
-// import 'dart:io'; // Removed for Web compatibility
+import 'dart:io'; // Read file from path
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For RawKeyboardListener / KeyboardListener
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -104,13 +105,31 @@ class _MessageInputState extends State<MessageInput> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles();
+    final result = await FilePicker.platform.pickFiles(
+      withData: true, // Request bytes for web compatibility
+    );
+    
     if (result != null) {
-      setState(() {
-        _selectedFileName = result.files.single.name;
-        _selectedImagePath = null;
-        _recordedAudioPath = null;
-      });
+      final file = result.files.single;
+      Uint8List? fileBytes = file.bytes;
+      
+      // On mobile, bytes might be null, read from path
+      if (fileBytes == null && file.path != null && !kIsWeb) {
+        try {
+          fileBytes = await File(file.path!).readAsBytes();
+        } catch (e) {
+          print("Error reading file: $e");
+        }
+      }
+
+      if (fileBytes != null) {
+        setState(() {
+          _selectedFileName = file.name;
+          _selectedFileBytes = fileBytes;
+          _selectedImagePath = null;
+          _recordedAudioPath = null;
+        });
+      }
     }
   }
 
@@ -168,7 +187,13 @@ class _MessageInputState extends State<MessageInput> {
   void _send() async {
     final text = _controller.text.trim();
     
-    if (text.isEmpty && _selectedImageBytes == null && _selectedFileBytes == null && _recordedAudioPath == null) return;
+    // Check if we have content to send
+    final hasContent = text.isNotEmpty || 
+                       _selectedImageBytes != null || 
+                       _selectedFileBytes != null || 
+                       _recordedAudioPath != null;
+                       
+    if (!hasContent) return;
     
     String message = text;
     String? fileBase64;
@@ -182,7 +207,19 @@ class _MessageInputState extends State<MessageInput> {
         message = '[Đã gửi hình ảnh]';
       }
     } else if (_selectedFileBytes != null) {
-      fileBase64 = base64Encode(_selectedFileBytes!);
+      final rawBase64 = base64Encode(_selectedFileBytes!);
+      // Determine MIME type based on extension (simple check)
+      String mimeType = 'application/octet-stream';
+      if (_selectedFileName != null) {
+        final lowerName = _selectedFileName!.toLowerCase();
+        if (lowerName.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (lowerName.endsWith('.doc')) mimeType = 'application/msword';
+        else if (lowerName.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (lowerName.endsWith('.txt')) mimeType = 'text/plain';
+        else if (lowerName.endsWith('.csv')) mimeType = 'text/csv';
+      }
+      
+      fileBase64 = 'data:$mimeType;base64,$rawBase64';
       if (text.isEmpty) {
         message = '[Đã gửi file: $_selectedFileName]';
       }
@@ -245,26 +282,40 @@ class _MessageInputState extends State<MessageInput> {
             // Text input or Waveform
             _isListening 
               ? _buildWaveform(theme)
-              : TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  maxLines: null,
-                  minLines: 3,
-                  textInputAction: TextInputAction.newline,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: theme.textTheme.bodyLarge,
-                  decoration: InputDecoration(
-                    hintText: 'Nhắn tin cho FourT AI...',
-                    hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+              : KeyboardListener(
+                  focusNode: FocusNode(), // We need a focus node for the listener, but we use the TextField's focus node below
+                  onKeyEvent: (KeyEvent event) {
+                    // Check for Enter key without Shift (Shift+Enter for new line)
+                    if (event is KeyDownEvent && 
+                        event.logicalKey == LogicalKeyboardKey.enter &&
+                        !HardwareKeyboard.instance.isShiftPressed) {
+                      // Prevent default newline and send message
+                      if (_hasText && !widget.isLoading) {
+                        _send();
+                      }
+                    }
+                  },
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    maxLines: null,
+                    minLines: 3,
+                    textInputAction: TextInputAction.newline,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: theme.textTheme.bodyLarge,
+                    decoration: InputDecoration(
+                      hintText: 'Nhắn tin cho Lumina AI...',
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     ),
-                    border: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    filled: false,
-                    contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    enabled: !widget.isLoading,
                   ),
-                  enabled: !widget.isLoading,
                 ),
             // Icons row
             Padding(
