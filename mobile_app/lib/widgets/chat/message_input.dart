@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
+import '../common/custom_snackbar.dart';
 
 /// Modern message input - input on top, icons on bottom
 class MessageInput extends StatefulWidget {
@@ -84,13 +85,9 @@ class _MessageInputState extends State<MessageInput> {
       if (bytes.length > _maxImageSizeBytes) {
         // Show error dialog
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Ảnh quá lớn (${(bytes.length / 1024 / 1024).toStringAsFixed(1)}MB). Tối đa 5MB.',
-              ),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
+          CustomSnackBar.showError(
+            context,
+            'Ảnh quá lớn (${(bytes.length / 1024 / 1024).toStringAsFixed(1)}MB). Tối đa 5MB.',
           );
         }
         return;
@@ -162,6 +159,9 @@ class _MessageInputState extends State<MessageInput> {
       } catch (e) {
         // Web might throw or return generic
         print('Permission check error (ignore on web): $e');
+        if (mounted && !kIsWeb) {
+           CustomSnackBar.showError(context, 'Lỗi quyền truy cập microphone');
+        }
       }
 
       if (hasPermission) {

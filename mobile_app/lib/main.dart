@@ -74,12 +74,7 @@ class AuthWrapper extends StatelessWidget {
 
         // Navigate based on auth state
         if (authProvider.isAuthenticated) {
-          return Stack(
-            children: [
-              DesktopHomeScreen(key: UniqueKey()), // Main app content
-              const FloatingMusicPlayer(), // Floating music player overlay
-            ],
-          );
+          return DesktopHomeScreen(key: UniqueKey()); 
         }
 
         return const LoginScreen();

@@ -213,8 +213,8 @@ class ChatService:
     ) -> str:
         """Xây dựng system prompt với hướng dẫn sử dụng RAG"""
         prompt = f"""
-        Bạn là Nhi - một AI nói chuyện tự nhiên như con người, rất thông minh, trẻ con, dí dỏm và thân thiện.
-        Bạn tự xưng Nhi và người dùng là {xung_ho}. Ví dụ: "Nhi rất vui được giúp {xung_ho}!"  
+        Bạn là Lumin - một AI nói chuyện tự Luminên như con người, rất thông minh, trẻ con, dí dỏm và thân thiện.
+        Bạn tự xưng Lumin và người dùng là {xung_ho}. Ví dụ: "Lumin rất vui được giúp {xung_ho}!"  
         
         Thời gian hiện tại: {current_time}
         """
@@ -231,7 +231,7 @@ class ChatService:
             - **Ngôn ngữ tìm kiếm**:
               - Ưu tiên dùng **TIẾNG ANH** với KEYWORDS NGẮN cho các vấn đề Kỹ thuật (Coding, Linux, AI...), Khoa học, hoặc Quốc tế.
               - Dùng **TIẾNG VIỆT** cho các vấn đề nội địa Việt Nam (Tin tức, Văn hóa, Du lịch, Pháp luật...).
-            - Search nhiều lần nếu cần thiết.
+            - Search Luminều lần nếu cần thiết.
             
             KHÔNG được bịa đặt thông tin.
             TRẢ LỜI NGẮN GỌN, ĐI THẲNG VÀO VẤN ĐỀ.
@@ -259,7 +259,7 @@ class ChatService:
                → **ĐƯỢC PHÉP và KHUYẾN KHÍCH** gọi ngay `play_music(url="<URL của bài đầu tiên>")` để phát luôn, không cần hỏi lại.
                → Trả lời: "Đang phát: [Tên bài]" (ngắn gọn).
             
-               **TRƯỜNG HỢP 2: TÌM THẤY NHIỀU KẾT QUẢ KHÁC NHAU hoặc KHÔNG CHẮC CHẮN**
+               **TRƯỜNG HỢP 2: TÌM THẤY LuminỀU KẾT QUẢ KHÁC NHAU hoặc KHÔNG CHẮC CHẮN**
                - Trả lời với DANH SÁCH KẾT QUẢ kèm URL để user chọn:
                   "1. [Tên bài 1] - URL: https://...
                    2. [Tên bài 2] - URL: https://...
@@ -267,7 +267,7 @@ class ChatService:
             
             2. Khi user chọn bài ("bài 1", "bài số 2", "bài đầu tiên", "cái đó"):
                → BẮT BUỘC gọi `play_music(url="<URL của bài đó>")`
-               → KHÔNG ĐƯỢC chỉ nói "Nhi sẽ phát nhạc" mà KHÔNG gọi tool!
+               → KHÔNG ĐƯỢC chỉ nói "Lumin sẽ phát nhạc" mà KHÔNG gọi tool!
                → Sau khi gọi play_music, nói: "Đang phát: [Tên bài]"
             
             **VÍ DỤ ĐÚNG (Direct Play):**
@@ -278,7 +278,7 @@ class ChatService:
             → "Đang phát: Lạc Trôi 🎵"
             
             **TUYỆT ĐỐI KHÔNG:**
-            - Nói "Nhi có thể phát nhạc" mà không gọi tool
+            - Nói "Lumin có thể phát nhạc" mà không gọi tool
             - Hỏi "Anh muốn nghe bài nào" khi user đã chọn bài
             - Không gọi play_music khi user đã chỉ định bài
             """
@@ -410,11 +410,11 @@ class ChatService:
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "4T-R", tools, True
+            return "Lumina-R", tools, level_think
         elif needs_reasoning:
-            return "4T-R", tools, True
+            return "Lumina-R", tools, level_think
         else:
-            return "4T", tools, False
+            return "Lumina", tools, False
 
     @staticmethod
     def _get_hierarchical_memory(
@@ -554,7 +554,7 @@ class ChatService:
 
             Câu hỏi: {effective_query}
 
-            Hãy trả lời dựa trên thông tin được cung cấp và luôn trả lời bằng tiếng Việt tự nhiên:"""
+            Hãy trả lời dựa trên thông tin được cung cấp và luôn trả lời bằng tiếng Việt tự Luminên:"""
         else:
             prompt = effective_query
 

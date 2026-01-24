@@ -7,6 +7,7 @@ import '../../providers/theme_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
 import '../../screens/auth/login_screen.dart';
+import '../common/custom_snackbar.dart';
 
 /// Settings popup dialog with 2-column layout
 class SettingsDialog extends StatefulWidget {
@@ -397,15 +398,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
       await chatProvider.loadConversations();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xóa tất cả cuộc trò chuyện')),
-        );
+        CustomSnackBar.showSuccess(context, 'Đã xóa tất cả cuộc trò chuyện');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: ${e.toString()}')),
-        );
+        CustomSnackBar.showError(context, 'Lỗi: ${e.toString()}');
       }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
@@ -434,9 +431,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
               Navigator.pop(ctx);
               final success = await authProvider.updateProfile(username: controller.text.trim());
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(success ? 'Đã cập nhật tên' : 'Lỗi: ${authProvider.error}')),
-                );
+                if (success) {
+                  CustomSnackBar.showSuccess(context, 'Đã cập nhật tên');
+                } else {
+                  CustomSnackBar.showError(context, 'Lỗi: ${authProvider.error}');
+                }
               }
             },
             child: const Text('Lưu'),
@@ -482,18 +481,18 @@ class _SettingsDialogState extends State<SettingsDialog> {
           TextButton(
             onPressed: () async {
               if (newPw.text != confirmPw.text) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mật khẩu xác nhận không khớp')),
-                );
+                CustomSnackBar.showError(context, 'Mật khẩu xác nhận không khớp');
                 return;
               }
               Navigator.pop(ctx);
               final authProvider = context.read<AuthProvider>();
               final success = await authProvider.changePassword(currentPw.text, newPw.text);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(success ? 'Đã đổi mật khẩu' : 'Lỗi: ${authProvider.error}')),
-                );
+                if (success) {
+                  CustomSnackBar.showSuccess(context, 'Đã đổi mật khẩu');
+                } else {
+                  CustomSnackBar.showError(context, 'Lỗi: ${authProvider.error}');
+                }
               }
             },
             child: const Text('Đổi mật khẩu'),
@@ -784,15 +783,11 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
       await AuthService.removeDevice(deviceId);
       _loadDevices();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xóa thiết bị')),
-        );
+        CustomSnackBar.showSuccess(context, 'Đã xóa thiết bị');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
-        );
+        CustomSnackBar.showError(context, 'Lỗi: $e');
       }
     }
   }

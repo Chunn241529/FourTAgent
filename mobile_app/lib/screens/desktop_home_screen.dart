@@ -19,6 +19,12 @@ class DesktopHomeScreen extends StatefulWidget {
 class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
   int _selectedIndex = 0; // Default to TTS (index 0)
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('DesktopHomeScreen init: _selectedIndex = $_selectedIndex');
+  }
+
   final List<Widget> _screens = const [
     TtsScreen(),       // 0: TTS (Primary - default)
     AiSubtitleScreen(),// 1: Studio

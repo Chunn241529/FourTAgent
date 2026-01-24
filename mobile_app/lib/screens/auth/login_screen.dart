@@ -8,6 +8,7 @@ import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import 'verify_code_screen.dart';
 import '../chat/conversation_list_screen.dart';
+import '../../widgets/common/custom_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -75,9 +76,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       setState(() => _isLoading = false);
 
       if (success) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ConversationListScreen()),
-        );
+        // Just let AuthWrapper handle the update
       } else if (authProvider.error != null) {
         _showError(authProvider.error!);
       }
@@ -102,25 +101,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
+
+
+// ... (imports)
+
   void _showError(String message) {
     // Set inline error message
     setState(() => _errorMessage = message);
     
-    // Also show SnackBar with longer duration
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        duration: const Duration(seconds: 5), // Show for 5 seconds
-        action: SnackBarAction(
-          label: 'Đóng',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
+    // Show beautiful custom snackbar
+    CustomSnackBar.showError(context, message);
   }
 
   @override

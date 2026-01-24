@@ -8,8 +8,9 @@ import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
 import 'search_indicator.dart';
 import 'deep_search_indicator.dart';
+import '../common/custom_snackbar.dart';
 import 'plan_indicator.dart';
-/// Modern message bubble widget - User on right, AI on left
+
 class MessageBubble extends StatelessWidget {
   final Message message;
 
@@ -533,9 +534,7 @@ class MessageBubble extends StatelessWidget {
           onTap: () {
             Clipboard.setData(ClipboardData(text: message.content));
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã sao chép'), duration: Duration(seconds: 1)),
-              );
+              CustomSnackBar.showSuccess(context, 'Đã sao chép');
             }
           },
         ),

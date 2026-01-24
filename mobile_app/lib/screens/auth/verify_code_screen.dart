@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/custom_button.dart';
 import '../chat/conversation_list_screen.dart';
+import '../../widgets/common/custom_snackbar.dart';
 
 class VerifyCodeScreen extends StatefulWidget {
   final int userId;
@@ -169,9 +170,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     setState(() => _isLoading = false);
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã gửi lại mã xác minh')),
-      );
+      CustomSnackBar.showSuccess(context, 'Đã gửi lại mã xác minh');
     } else {
       setState(() => _errorMessage = authProvider.error ?? 'Gửi lại mã thất bại');
     }

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/tts_service.dart';
 import '../widgets/audio/waveform_player.dart';
 import '../widgets/common/custom_tab_selector.dart';
+import '../widgets/common/custom_snackbar.dart';
 
 class TtsScreen extends StatefulWidget {
   const TtsScreen({super.key});
@@ -119,7 +120,7 @@ class _SynthesisTabState extends State<SynthesisTab> {
       }
     } catch (e) {
       if (mounted) {
-         // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading voices: $e")));
+         CustomSnackBar.showError(context, "Error loading voices: $e");
       }
     }
   }
@@ -135,7 +136,7 @@ class _SynthesisTabState extends State<SynthesisTab> {
       });
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Synthesis failed: $e")));
+         CustomSnackBar.showError(context, "Synthesis failed: $e");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -256,7 +257,7 @@ class _VoiceLabTabState extends State<VoiceLabTab> {
     try {
       final newVoice = await TtsService.createVoice(_nameController.text, _selectedFile!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Voice '${newVoice.name}' created!")));
+        CustomSnackBar.showSuccess(context, "Voice '${newVoice.name}' created!");
         setState(() {
             _nameController.clear();
             _selectedFile = null;
@@ -264,7 +265,7 @@ class _VoiceLabTabState extends State<VoiceLabTab> {
       }
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error creating voice: $e")));
+         CustomSnackBar.showError(context, "Error creating voice: $e");
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
