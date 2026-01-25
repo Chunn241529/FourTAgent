@@ -18,6 +18,8 @@ class MessageInput extends StatefulWidget {
   final bool isLoading;
   final VoidCallback? onStop;
   final VoidCallback? onMusicTap;
+  final bool voiceModeEnabled;
+  final ValueChanged<bool>? onVoiceModeChanged;
 
   const MessageInput({
     super.key,
@@ -26,6 +28,8 @@ class MessageInput extends StatefulWidget {
     this.isLoading = false,
     this.onStop,
     this.onMusicTap,
+    this.voiceModeEnabled = false,
+    this.onVoiceModeChanged,
   });
 
   @override
@@ -284,9 +288,8 @@ class _MessageInputState extends State<MessageInput> {
             // Text input or Waveform
             _isListening 
               ? _buildWaveform(theme)
-              : KeyboardListener(
-                  focusNode: FocusNode(), // We need a focus node for the listener, but we use the TextField's focus node below
-                  onKeyEvent: (KeyEvent event) {
+              : Focus(
+                  onKeyEvent: (node, event) {
                     // Check for Enter key without Shift (Shift+Enter for new line)
                     if (event is KeyDownEvent && 
                         event.logicalKey == LogicalKeyboardKey.enter &&
@@ -295,7 +298,10 @@ class _MessageInputState extends State<MessageInput> {
                       if (_hasText && !widget.isLoading) {
                         _send();
                       }
+                      // Return handled to prevent Enter from being added to TextField
+                      return KeyEventResult.handled;
                     }
+                    return KeyEventResult.ignored;
                   },
                   child: TextField(
                     controller: _controller,
@@ -345,6 +351,16 @@ class _MessageInputState extends State<MessageInput> {
                       onTap: widget.onMusicTap!,
                       color: theme.colorScheme.onSurface.withOpacity(0.5),
                     ),
+                  // Voice Mode Toggle
+                  _IconBtn(
+                    icon: widget.voiceModeEnabled 
+                        ? Icons.record_voice_over 
+                        : Icons.voice_over_off_outlined,
+                    onTap: () => widget.onVoiceModeChanged?.call(!widget.voiceModeEnabled),
+                    color: widget.voiceModeEnabled 
+                        ? theme.colorScheme.primary 
+                        : theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
                   const Spacer(),
                   widget.isLoading
                       ? _buildStopButton(theme)

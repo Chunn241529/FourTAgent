@@ -26,6 +26,7 @@ from app.services.embedding_service import EmbeddingService
 from app.services.file_service import FileService
 from app.services.rag_service import RAGService
 from app.services.preference_service import PreferenceService
+from app.services.voice_agent_service import voice_agent
 
 logger = logging.getLogger(__name__)
 tool_service = ToolService()
@@ -55,6 +56,55 @@ DEEP_SEARCH_TRIGGERS = [
 
 
 class ChatService:
+    # Cache for voice fillers: {(text, voice_id): audio_bytes}
+    _filler_cache = {}
+
+    # List of filler phrases to rotate
+    FILLER_PHRASES = [
+        "Okay, để mình xem...",
+        "Được rồi, chờ mình xíu...",
+        "Để mình kiểm tra nhé...",
+        "À, câu này hay đấy...",
+        "Đợi mình một chút...",
+    ]
+
+    @classmethod
+    async def warmup_fillers(cls):
+        """Pre-generate fillers for all voices to avoid latency"""
+        from app.services.tts_service import tts_service
+
+        logger.info("Starting filler warmup...")
+
+        try:
+            voices = tts_service.list_voices()
+            # filler_text = "Hmm, để mình xem nha..." # Removed single filler
+
+            # Loop through all available voices
+            for voice in voices:
+                voice_id = voice["id"]
+
+                # Loop through all filler phrases
+                for filler_text in cls.FILLER_PHRASES:
+                    cache_key = (filler_text, voice_id)
+
+                    # Check if already cached
+                    if cache_key not in cls._filler_cache:
+                        try:
+                            # logger.info(f"Warming up filler '{filler_text}' for voice: {voice_id}")
+                            audio = tts_service.synthesize(
+                                filler_text, voice_id=voice_id
+                            )
+                            if audio:
+                                cls._filler_cache[cache_key] = audio
+                        except Exception as e:
+                            logger.warning(f"Failed to warmup voice {voice_id}: {e}")
+
+            logger.info(
+                f"Filler warmup complete. Cached {len(cls._filler_cache)} items."
+            )
+
+        except Exception as e:
+            logger.error(f"Warmup process failed: {e}")
 
     @staticmethod
     async def chat_with_rag(
@@ -63,6 +113,8 @@ class ChatService:
         conversation_id: Optional[int],
         user_id: int,
         db: Session,
+        voice_enabled: bool = False,
+        voice_id: Optional[str] = None,
     ):
         """Xử lý chat chính với RAG integration - với debug chi tiết"""
 
@@ -124,7 +176,7 @@ class ChatService:
 
         # System prompt
         system_prompt = ChatService._build_system_prompt(
-            xung_ho, current_time, force_search
+            xung_ho, current_time, force_search, voice_enabled
         )
 
         # Xử lý file và context
@@ -143,19 +195,26 @@ class ChatService:
 
         # Get RAG context (Non-blocking)
         loop = asyncio.get_running_loop()
-        rag_context = await loop.run_in_executor(
-            None,
-            lambda: RAGService.get_rag_context(
-                effective_query, user_id, conversation.id, db
-            ),
-        )
+        rag_context = ""
+        preference_examples = ""
 
-        preference_examples = await loop.run_in_executor(
-            None,
-            lambda: PreferenceService.get_similar_preferences(effective_query, user_id),
-        )
-        if preference_examples:
-            logger.info(f"Found preference examples for context injection")
+        # Skip RAG and preferences for Voice Agent to reduce latency
+        if not voice_enabled:
+            rag_context = await loop.run_in_executor(
+                None,
+                lambda: RAGService.get_rag_context(
+                    effective_query, user_id, conversation.id, db
+                ),
+            )
+
+            preference_examples = await loop.run_in_executor(
+                None,
+                lambda: PreferenceService.get_similar_preferences(
+                    effective_query, user_id
+                ),
+            )
+            if preference_examples:
+                logger.info(f"Found preference examples for context injection")
 
         logger.info(
             f"RAG context retrieved: {len(rag_context) if rag_context else 0} characters"
@@ -187,10 +246,9 @@ class ChatService:
         enhanced_system_prompt = system_prompt
         if preference_examples:
             enhanced_system_prompt += f"""
-
-**Ví dụ câu trả lời tốt (người dùng đã thích):**
-{preference_examples}
-"""
+            **Ví dụ câu trả lời tốt (người dùng đã thích):**
+            {preference_examples}
+            """
 
         return await ChatService._generate_stream_response(
             system_prompt=enhanced_system_prompt,
@@ -203,6 +261,8 @@ class ChatService:
             effective_query=effective_query,
             level_think=level_think,
             db=db,
+            voice_enabled=voice_enabled,
+            voice_id=voice_id,
         )
 
     @staticmethod
@@ -210,6 +270,7 @@ class ChatService:
         xung_ho: str,
         current_time: str,
         force_search: bool = False,
+        voice_enabled: bool = False,
     ) -> str:
         """Xây dựng system prompt với hướng dẫn sử dụng RAG"""
         prompt = f"""
@@ -231,21 +292,32 @@ class ChatService:
             - **Ngôn ngữ tìm kiếm**:
               - Ưu tiên dùng **TIẾNG ANH** với KEYWORDS NGẮN cho các vấn đề Kỹ thuật (Coding, Linux, AI...), Khoa học, hoặc Quốc tế.
               - Dùng **TIẾNG VIỆT** cho các vấn đề nội địa Việt Nam (Tin tức, Văn hóa, Du lịch, Pháp luật...).
-            - Search Luminều lần nếu cần thiết.
+            
+            **⚠️ TUYỆT ĐỐI KHÔNG LẶP LẠI SEARCH:**
+            - CHỈ search MỘT LẦN cho mỗi chủ đề/câu hỏi.
+            - KHÔNG search lại với query giống hoặc tương tự (chỉ khác chữ hoa/thường, viết cách khác...).
+            - Sau khi đã có kết quả search, PHẢI sử dụng kết quả đó để trả lời, KHÔNG search thêm.
+            - Nếu cần thông tin khác, search với query HOÀN TOÀN KHÁC.
             
             KHÔNG được bịa đặt thông tin.
-            TRẢ LỜI NGẮN GỌN, ĐI THẲNG VÀO VẤN ĐỀ.
+            TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
             """
         else:
             # Even when not forced, add general guideline
             prompt += """
-            
             **QUY TẮC TÌM KIẾM VÀ TRẢ LỜI:**
             - KHÔNG thông báo "Đang search...", "Đợi chút...". Hãy search âm thầm.
-            - **QUAN TRỌNG - QUERY SEARCH:** Khi gọi `web_search`, PHẢI dùng **TIẾNG ANH ngắn gọn, chỉ KEYWORDS**.
+            - **QUAN TRỌNG - QUERY SEARCH:** Khi gọi `web_search`, PHẢI dùng **TIẾNG ANH hoặc tiếng Việt, chỉ KEYWORDS**.
               - Ví dụ: Người dùng hỏi "hôm nay có tin gì mới" → Query: "today news"
               - Ví dụ: "cách cài Python trên Ubuntu" → Query: "install Python Ubuntu"
-              - **KHÔNG** dùng câu dài hay tiếng Việt cho query.
+              - **KHÔNG** dùng câu dài cho query.
+            
+            **⚠️ TUYỆT ĐỐI KHÔNG LẶP LẠI SEARCH:**
+            - CHỈ search MỘT LẦN cho mỗi chủ đề/câu hỏi.
+            - KHÔNG search lại với query giống hoặc tương tự (chỉ khác chữ hoa/thường, viết cách khác...).
+            - Sau khi đã có kết quả search, PHẢI dùng kết quả đó để trả lời ngay.
+            - Nếu không tìm thấy kết quả phù hợp, trả lời với thông tin có sẵn, KHÔNG search lại.
+            
             - Sau khi search xong, TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
             - Nếu cần trích dẫn nguồn, nêu tên nguồn ngắn gọn (ví dụ: "Theo VNExpress...").
             
@@ -259,7 +331,7 @@ class ChatService:
                → **ĐƯỢC PHÉP và KHUYẾN KHÍCH** gọi ngay `play_music(url="<URL của bài đầu tiên>")` để phát luôn, không cần hỏi lại.
                → Trả lời: "Đang phát: [Tên bài]" (ngắn gọn).
             
-               **TRƯỜNG HỢP 2: TÌM THẤY LuminỀU KẾT QUẢ KHÁC NHAU hoặc KHÔNG CHẮC CHẮN**
+               **TRƯỜNG HỢP 2: TÌM THẤY NHIỀU KẾT QUẢ KHÁC NHAU HOẶC KHÔNG CHẮC CHẮN**
                - Trả lời với DANH SÁCH KẾT QUẢ kèm URL để user chọn:
                   "1. [Tên bài 1] - URL: https://...
                    2. [Tên bài 2] - URL: https://...
@@ -281,6 +353,22 @@ class ChatService:
             - Nói "Lumin có thể phát nhạc" mà không gọi tool
             - Hỏi "Anh muốn nghe bài nào" khi user đã chọn bài
             - Không gọi play_music khi user đã chỉ định bài
+            """
+
+        if voice_enabled:
+            prompt += """
+            **CHẾ ĐỘ GIỌNG NÓI (VOICE MODE) - QUAN TRỌNG:**
+            Bạn đang trả lời qua loa cho người dùng nghe (không phải đọc màn hình).
+            1. **Văn phong**: Tự nhiên, như đang nói chuyện trực tiếp. Dùng từ ngữ dễ nghe, thân mật.
+            2. **KHÔNG DÙNG MARKDOWN**:
+               - KHÔNG dùng dấu **đậm**, *nghiêng*, `code`, # Heading.
+               - KHÔNG dùng danh sách gạch đầu dòng (- item) hay đánh số (1. 2.) nếu không cần thiết. Hãy nói thành câu liền mạch, dùng "Thứ nhất là...", "Tiếp theo...".
+               - KHÔNG chèn Link [text](url). KHÔNG đọc URL.
+            3. **Xử lý kết quả Search**:
+               - Đừng liệt kê từng kết quả tìm kiếm. Hãy TỔNG HỢP nội dung lại thành 1 câu trả lời hoàn chỉnh.
+               - Không cần trích dẫn nguồn cụ thể (URL).
+            4. **Ngắn gọn**: Trả lời tóm tắt, súc tích hơn bình thường.
+            5. **Tự suy đoán lỗi chính tả**: Người dùng đang nói qua micro, nên hệ thống nhận dạng giọng nói có thể nghe sai chính tả (ví dụ: "chiền tranh" thay vì "chiến tranh", "ăn êu" thay vì "anh yêu"). Hãy TỰ ĐỘNG suy đoán từ đúng và trả lời luôn, KHÔNG hỏi lại "Ý bạn là...?" hay "Bạn có muốn nói...?".
             """
 
         return prompt
@@ -395,24 +483,12 @@ class ChatService:
         ]
         needs_reasoning = any(k in input_lower for k in reasoning_keywords)
 
-        # Determine think level based on keywords and length
-        level_think = "low"
-        if needs_reasoning or needs_logic:
-            if (
-                len(effective_query) > 200
-                or "chi tiết" in input_lower
-                or "sâu" in input_lower
-            ):
-                level_think = "high"
-            else:
-                level_think = "medium"
-
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "Lumina-R", tools, level_think
+            return "Lumina-think", tools, True
         elif needs_reasoning:
-            return "Lumina-R", tools, level_think
+            return "Lumina", tools, True
         else:
             return "Lumina", tools, False
 
@@ -554,7 +630,7 @@ class ChatService:
 
             Câu hỏi: {effective_query}
 
-            Hãy trả lời dựa trên thông tin được cung cấp và luôn trả lời bằng tiếng Việt tự Luminên:"""
+            Hãy trả lời dựa trên thông tin được cung cấp và luôn trả lời bằng tiếng Việt"""
         else:
             prompt = effective_query
 
@@ -572,11 +648,58 @@ class ChatService:
         effective_query: str,
         level_think: Union[str, bool],
         db: Session,
+        voice_enabled: bool = False,
+        voice_id: Optional[str] = None,
     ):
         """Generate streaming response với level_think (Async)"""
+        # Override model for voice mode - use faster model
+        if voice_enabled:
+            model_name = (
+                "Lumina-small:latest"  # Faster model for voice, no reasoning needed
+            )
+            level_think = False
+            logger.info(f"Voice mode: overriding model to {model_name}")
 
         async def generate_stream():
             yield f"data: {json.dumps({'conversation_id': conversation_id}, separators=(',', ':'))}\n\n"
+
+            # Emit filler TTS immediately for voice mode
+            # Emit filler TTS immediately for voice mode
+            if voice_enabled:
+                import random
+
+                filler_text = random.choice(ChatService.FILLER_PHRASES)
+                cache_key = (filler_text, voice_id)
+
+                filler_audio = ChatService._filler_cache.get(cache_key)
+
+                if not filler_audio:
+                    try:
+                        from app.services.tts_service import tts_service
+
+                        logger.info(
+                            f"Synthesizing filler for cache (miss): {filler_text}"
+                        )
+                        filler_audio = tts_service.synthesize(
+                            filler_text, voice_id=voice_id
+                        )
+                        if filler_audio:
+                            ChatService._filler_cache[cache_key] = filler_audio
+                    except Exception as e:
+                        logger.warning(f"Failed to generate filler TTS: {e}")
+                else:
+                    logger.info(f"Using cached filler: {filler_text}")
+
+                if filler_audio:
+                    try:
+                        import base64
+
+                        filler_b64 = base64.b64encode(filler_audio).decode("utf-8")
+                        yield f"data: {json.dumps({'voice_audio': {'text': filler_text, 'audio': filler_b64, 'is_filler': True}}, separators=(',', ':'))}\n\n"
+                        logger.info(f"Voice filler emitted: {filler_text}")
+                    except Exception as e:
+                        logger.error(f"Error emitting filler: {e}")
+
             full_response = []
 
             # Get hierarchical memory (summary + semantic + working)
@@ -642,6 +765,9 @@ class ChatService:
                 max_iterations = 5
                 current_iteration = 0
                 has_tool_calls = False
+
+                # Track executed search queries to prevent repetition
+                executed_search_queries = set()
 
                 while current_iteration < max_iterations:
                     current_iteration += 1
@@ -732,10 +858,15 @@ class ChatService:
                     if tool_calls:
                         # 1. Prepare tasks and emit "Started" events
                         tasks = []
+                        skipped_duplicate_count = 0
+                        tool_call_to_task_mapping = (
+                            []
+                        )  # Track which tool_calls have tasks
 
                         for tool_call in tool_calls:
                             function_name = tool_call["function"]["name"]
                             args_str = tool_call["function"]["arguments"]
+                            should_skip = False
 
                             # Show status message BEFORE execution
                             if function_name == "web_search":
@@ -746,20 +877,43 @@ class ChatService:
                                         args = args_str
 
                                     query = args.get("query", "")
-                                    # Emit search_started event
-                                    # Ensure tool_call is serializable
-                                    tool_call_dict = tool_call
-                                    if hasattr(tool_call, "model_dump"):
-                                        tool_call_dict = tool_call.model_dump()
-                                    elif hasattr(tool_call, "dict"):
-                                        tool_call_dict = tool_call.dict()
-                                    elif not isinstance(tool_call, dict):
-                                        try:
-                                            tool_call_dict = dict(tool_call)
-                                        except:
-                                            pass
 
-                                    yield f"data: {json.dumps({'tool_calls': [tool_call_dict]}, separators=(',', ':'))}\n\n"
+                                    # Normalize query for deduplication
+                                    normalized_query = query.lower().strip()
+
+                                    # Check if this query was already executed
+                                    if normalized_query in executed_search_queries:
+                                        logger.warning(
+                                            f"Duplicate search query detected: '{query}'. Skipping to prevent loop."
+                                        )
+                                        # Add a tool message to inform model about the duplicate
+                                        messages.append(
+                                            {
+                                                "role": "tool",
+                                                "content": f"Đã search '{query}' trước đó rồi. Hãy sử dụng kết quả đã có ở trên để trả lời, KHÔNG search nữa.",
+                                                "tool_name": function_name,
+                                            }
+                                        )
+                                        skipped_duplicate_count += 1
+                                        should_skip = True
+                                    else:
+                                        # Track this query
+                                        executed_search_queries.add(normalized_query)
+
+                                        # Emit search_started event
+                                        # Ensure tool_call is serializable
+                                        tool_call_dict = tool_call
+                                        if hasattr(tool_call, "model_dump"):
+                                            tool_call_dict = tool_call.model_dump()
+                                        elif hasattr(tool_call, "dict"):
+                                            tool_call_dict = tool_call.dict()
+                                        elif not isinstance(tool_call, dict):
+                                            try:
+                                                tool_call_dict = dict(tool_call)
+                                            except:
+                                                pass
+
+                                        yield f"data: {json.dumps({'tool_calls': [tool_call_dict]}, separators=(',', ':'))}\n\n"
                                 except Exception as e:
                                     logger.debug(
                                         f"Could not parse web_search args: {e}"
@@ -803,14 +957,30 @@ class ChatService:
                                 except Exception as e:
                                     logger.error(f"Deep search error: {e}")
                                     # Fall through to normal processing if error
+                                should_skip = True  # deep_search is handled separately
 
-                            # Create task for parallel execution (only for non-deep_search tools)
-                            if function_name != "deep_search":
+                            # Create task for parallel execution (only for non-skipped, non-deep_search tools)
+                            if not should_skip and function_name != "deep_search":
                                 tasks.append(
                                     tool_service.execute_tool_async(
                                         function_name, args_str
                                     )
                                 )
+                                tool_call_to_task_mapping.append(tool_call)
+
+                        # If all tool calls were duplicates, break to prevent infinite loop
+                        if (
+                            skipped_duplicate_count > 0
+                            and skipped_duplicate_count == len(tool_calls)
+                        ):
+                            logger.warning(
+                                "All tool calls were duplicates. Breaking to prevent loop."
+                            )
+                            break
+
+                        # If no tasks to execute, continue to next iteration
+                        if not tasks:
+                            continue
 
                         # 2. Execute all tasks in parallel
                         # Limit concurrency to 3 if there are many tasks (as per user request)
@@ -822,7 +992,10 @@ class ChatService:
                         # 3. Process results
                         for i, execution_result in enumerate(execution_results):
                             function_name = execution_result["tool_name"]
-                            args_str = tool_calls[i]["function"]["arguments"]
+                            # Use tool_call_to_task_mapping for correct index (since some tool_calls may be skipped)
+                            args_str = tool_call_to_task_mapping[i]["function"][
+                                "arguments"
+                            ]
                             result = execution_result["result"]
                             error = execution_result["error"]
 
@@ -967,6 +1140,22 @@ class ChatService:
 
                 # Send [DONE] LAST
                 logger.info("[DEBUG] Sending [DONE]")
+
+                # Stream voice audio if enabled (after text is complete)
+                if voice_enabled and final_content and final_content.strip():
+                    try:
+                        logger.info("[VoiceAgent] Starting audio streaming...")
+                        async for audio_event in voice_agent.stream_audio_chunks(
+                            final_content, voice_id or "Đoan"
+                        ):
+                            logger.info(
+                                f"[VoiceAgent] Yielding audio chunk: {audio_event.get('sentence', '')[:30]}..."
+                            )
+                            yield f"data: {json.dumps({'voice_audio': audio_event}, separators=(',', ':'))}\n\n"
+                        logger.info("[VoiceAgent] Audio streaming complete")
+                    except Exception as e:
+                        logger.error(f"[VoiceAgent] Audio streaming error: {e}")
+
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(generate_stream(), media_type="text/event-stream")

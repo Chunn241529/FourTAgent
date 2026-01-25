@@ -316,6 +316,12 @@ class TTSService:
     def _audio_to_bytes(self, audio_array: np.ndarray) -> bytes:
         """Helper to convert numpy audio array to WAV bytes."""
         # Use soundfile to write numpy array to bytes
+        # Use soundfile to write numpy array to bytes
         with io.BytesIO() as bio:
-            sf.write(bio, audio_array, SAMPLE_RATE, format="WAV")
+            # Force PCM_16 for better compatibility
+            sf.write(bio, audio_array, SAMPLE_RATE, format="WAV", subtype="PCM_16")
             return bio.getvalue()
+
+
+# Initialize singleton instance
+tts_service = TTSService()

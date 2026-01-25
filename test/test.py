@@ -28,7 +28,7 @@ def stream_chat(model: str, messages: List[Dict[str, str]]) -> str:
 
 # Sử dụng
 if __name__ == "__main__":
-    MODEL = "4T"  # Đảm bảo model đã pull
+    MODEL = "Lumina:latest"  # Đảm bảo model đã pull
     messages = [{"role": "user", "content": "xin chào"}]
 
     result = stream_chat(MODEL, messages)

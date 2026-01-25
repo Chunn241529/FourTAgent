@@ -7,6 +7,7 @@ import '../../providers/music_player_provider.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
 import '../../widgets/settings/settings_dialog.dart';
+import '../../widgets/voice/voice_agent_overlay.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -27,6 +28,17 @@ class _ChatScreenState extends State<ChatScreen> {
     // Load conversations when screen is first displayed
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().loadConversations();
+      
+      // Set music callback for voice mode
+      final musicPlayer = context.read<MusicPlayerProvider>();
+      context.read<ChatProvider>().setMusicPlayCallback((url, title, thumbnail, duration) {
+        musicPlayer.playFromUrl(
+          url: url,
+          title: title,
+          thumbnail: thumbnail,
+          duration: duration,
+        );
+      });
     });
   }
 
@@ -369,7 +381,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildChatArea(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
-    return Scaffold(
+    return PopScope(
+      canPop: !chatProvider.voiceModeEnabled,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (chatProvider.voiceModeEnabled) {
+          chatProvider.setVoiceMode(false);
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: AnimatedSwitcher(
@@ -418,7 +438,87 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Stack(
         children: [
-          // 1. Messages Layer (Always at bottom/fill, but hidden if empty to show welcome)
+          // Voice Agent Overlay (covers everything when voice mode active)
+          // Voice Agent Overlay (covers everything when voice mode active)
+          if (chatProvider.voiceModeEnabled)
+            Positioned.fill(
+              child: VoiceAgentOverlay(
+                isActive: true,
+                isPlaying: chatProvider.isPlayingVoice,
+                isProcessing: chatProvider.isVoiceProcessing,
+                isRecording: chatProvider.isRecording,
+                currentSentence: chatProvider.currentVoiceSentence,
+                currentVoice: chatProvider.currentVoiceId,
+                onClose: () => chatProvider.setVoiceMode(false),
+                onMicPressed: () => chatProvider.startRecording(),
+                onMicReleased: () => chatProvider.stopRecording(),
+                onVoiceSwitch: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) {
+                      final theme = Theme.of(context);
+                      final isDark = theme.brightness == Brightness.dark;
+                      
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'Chọn giọng đọc',
+                                style: theme.textTheme.titleLarge,
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Flexible(
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: chatProvider.availableVoices.length,
+                                itemBuilder: (context, index) {
+                                  final voice = chatProvider.availableVoices[index];
+                                  final isSelected = voice == chatProvider.currentVoiceId;
+                                  
+                                  return ListTile(
+                                    leading: Icon(
+                                      Icons.record_voice_over,
+                                      color: isSelected ? theme.colorScheme.primary : null,
+                                    ),
+                                    title: Text(
+                                      voice,
+                                      style: TextStyle(
+                                        color: isSelected ? theme.colorScheme.primary : null,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                    trailing: isSelected 
+                                        ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                                        : null,
+                                    onTap: () {
+                                      chatProvider.setVoice(voice);
+                                      Navigator.pop(ctx);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          
+          // Normal chat UI (hidden when voice overlay active)
+          if (!chatProvider.voiceModeEnabled) ...[
           if (chatProvider.currentConversation != null && chatProvider.messages.isNotEmpty)
             Positioned.fill(
               bottom: 120, // Space for input
@@ -466,6 +566,8 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 800),
                 child: MessageInput(
+                  voiceModeEnabled: chatProvider.voiceModeEnabled,
+                  onVoiceModeChanged: (enabled) => chatProvider.setVoiceMode(enabled),
                   onSend: (message) async {
                     // Auto-create conversation if none exists
                     if (chatProvider.currentConversation == null) {
@@ -510,18 +612,20 @@ class _ChatScreenState extends State<ChatScreen> {
                   isLoading: chatProvider.isStreaming,
                   onStop: () => chatProvider.stopStreaming(),
                   onMusicTap: () {
-                    context.read<MusicPlayerProvider>().playFromUrl(
-                      url: 'https://www.youtube.com/watch?v=Llw9Q6akRo4',
-                      title: 'Lạc Trôi - Sơn Tùng M-TP',
-                      thumbnail: 'https://i.ytimg.com/vi/Llw9Q6akRo4/hqdefault.jpg',
-                      duration: 273,
-                    );
+                    final musicPlayer = context.read<MusicPlayerProvider>();
+                    // If there's an existing track, just show the player
+                    // Otherwise do nothing (or could show a message)
+                    if (musicPlayer.hasTrack) {
+                      musicPlayer.show();
+                    }
                   },
                 ),
               ),
             ),
           ),
+          ],  // End of spread operator for normal chat UI
         ],
+      ),
       ),
     );
   }

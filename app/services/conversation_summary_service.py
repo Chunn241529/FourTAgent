@@ -85,7 +85,7 @@ Keep it under 400 words.
 """
 
             response = ollama.chat(
-                model="4T",
+                model="Lumina:latest",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -145,7 +145,7 @@ Keep it concise, under 400 words.
 """
 
             response = ollama.chat(
-                model="4T",
+                model="qwen3:4b-q4_K_M",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},

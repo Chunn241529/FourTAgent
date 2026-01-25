@@ -30,14 +30,14 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
             // Safety check
             if (initialX < 0) initialX = 20; 
             
-            debugPrint('FloatingMusicPlayer: Setting initial position to $initialX, 100');
+            // debugPrint('FloatingMusicPlayer: Setting initial position to $initialX, 100');
             player.updatePosition(initialX, 100);
           });
           // Return hidden while setting position to avoid jump
           return const SizedBox.shrink();
         }
         
-        debugPrint('FloatingMusicPlayer: building at ${player.posX}, ${player.posY}, visible=${player.isVisible}');
+        // debugPrint('FloatingMusicPlayer: building at ${player.posX}, ${player.posY}, visible=${player.isVisible}');
         
         return Positioned(
           left: player.posX,
@@ -249,8 +249,8 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
               const SizedBox(height: 12),
               // Album art
               Container(
-                width: 120,
-                height: 120,
+                width: 100,
+                height: 100,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   gradient: LinearGradient(
@@ -281,7 +281,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                       : _buildLargeMusicIcon(theme),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               // Title
               Text(
                 player.title,
@@ -290,82 +290,70 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                  fontSize: 13,
                   color: theme.colorScheme.onSurface,
                   decoration: TextDecoration.none,
                 ),
               ),
-              const SizedBox(height: 12),
-              // Progress bar
-              SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 4,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                  activeTrackColor: theme.colorScheme.primary,
-                  inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
-                  thumbColor: theme.colorScheme.primary,
-                ),
-                child: Slider(
-                  value: player.position.inSeconds.toDouble(),
-                  max: player.duration.inSeconds.toDouble().clamp(1, double.infinity),
-                  onChanged: (value) => player.seek(Duration(seconds: value.toInt())),
-                ),
-              ),
-              // Time labels
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _formatDuration(player.position),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                    Text(
-                      _formatDuration(player.duration),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 8),
-              // Controls
+              // Progress bar + Play button inline
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Play/Pause button
+                  // Time current
+                  Text(
+                    _formatDuration(player.position),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Slider
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                        activeTrackColor: theme.colorScheme.primary,
+                        inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
+                        thumbColor: theme.colorScheme.primary,
+                      ),
+                      child: Slider(
+                        value: player.position.inSeconds.toDouble().clamp(0, player.duration.inSeconds.toDouble().clamp(1, double.infinity)),
+                        max: player.duration.inSeconds.toDouble().clamp(1, double.infinity),
+                        onChanged: (value) => player.seek(Duration(seconds: value.toInt())),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Time total
+                  Text(
+                    _formatDuration(player.duration),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Small play/pause button
                   Container(
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.secondary,
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      color: theme.colorScheme.primary,
                     ),
                     child: IconButton(
                       onPressed: player.isLoading ? null : () => player.toggle(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       icon: player.isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
+                          ? SizedBox(
+                              width: 14,
+                              height: 14,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
@@ -376,7 +364,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
                               color: Colors.white,
-                              size: 32,
+                              size: 18,
                             ),
                     ),
                   ),

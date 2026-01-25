@@ -10,6 +10,7 @@ import 'search_indicator.dart';
 import 'deep_search_indicator.dart';
 import '../common/custom_snackbar.dart';
 import 'plan_indicator.dart';
+import 'code_block_builder.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -263,6 +264,9 @@ class MessageBubble extends StatelessWidget {
              MarkdownBody(
                 data: text,
                 selectable: true,
+                builders: {
+                  'code': CodeBlockBuilder(isDark: isDark),
+                },
                 onTapLink: (text, href, title) async {
                   if (href != null) {
                     final uri = Uri.tryParse(href);
@@ -325,6 +329,9 @@ class MessageBubble extends StatelessWidget {
              MarkdownBody(
                 data: text,
                 selectable: true,
+                builders: {
+                  'code': CodeBlockBuilder(isDark: isDark),
+                },
                 onTapLink: (text, href, title) async {
                   if (href != null) {
                     final uri = Uri.tryParse(href);
@@ -392,6 +399,9 @@ class MessageBubble extends StatelessWidget {
       data: message.content,
       selectable: true,
       softLineBreak: true,
+      builders: {
+        'code': CodeBlockBuilder(isDark: isDark),
+      },
       styleSheet: MarkdownStyleSheet(
         // Body text
         p: theme.textTheme.bodyLarge?.copyWith(

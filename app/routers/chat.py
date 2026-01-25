@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
@@ -30,6 +30,8 @@ async def queued_chat_stream(
     conversation_id: Optional[int],
     user_id: int,
     db: Session,
+    voice_enabled: bool = False,
+    voice_id: Optional[str] = None,
 ):
     """
     Wrapper that manages queue for chat requests.
@@ -64,6 +66,8 @@ async def queued_chat_stream(
             conversation_id=conversation_id,
             user_id=user_id,
             db=db,
+            voice_enabled=voice_enabled,
+            voice_id=voice_id,
         )
 
         # Stream the response
@@ -80,13 +84,29 @@ async def chat(
     message: str = Body(..., embed=True),
     file: Optional[Union[UploadFile, str]] = Body(None, embed=True),
     conversation_id: Optional[int] = None,
+    voice_enabled: bool = Body(False),  # Accept from JSON Body
+    voice_id: Optional[str] = Body(None),
+    # Also accept from Query for backward compatibility/flexibility
+    q_voice_enabled: bool = Query(False, alias="voice_enabled"),
+    q_voice_id: Optional[str] = Query(None, alias="voice_id"),
     user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Endpoint chính cho chat với RAG và file processing"""
 
+    # Merge parameters (Body takes precedence or OR logic)
+    final_voice_enabled = voice_enabled or q_voice_enabled
+    final_voice_id = voice_id or q_voice_id
+
+    logger.info(
+        f"Chat request: voice_enabled={final_voice_enabled} (Body={voice_enabled}, Query={q_voice_enabled})"
+    )
+
     # Wrap message in ChatMessageIn for service compatibility
-    message_in = ChatMessageIn(message=message)
+    # Ensure to pass the final voice flags
+    message_in = ChatMessageIn(
+        message=message, voice_enabled=final_voice_enabled, voice_id=final_voice_id
+    )
 
     # Use queued stream wrapper for concurrency control
     return StreamingResponse(
@@ -96,6 +116,8 @@ async def chat(
             conversation_id=conversation_id,
             user_id=user_id,
             db=db,
+            voice_enabled=final_voice_enabled,
+            voice_id=final_voice_id,
         ),
         media_type="text/event-stream",
     )

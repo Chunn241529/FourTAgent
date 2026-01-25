@@ -24,20 +24,87 @@ if ! command -v uvicorn >/dev/null 2>&1; then
 fi
 
 # Dọn dẹp cache Python (__pycache__ và file .pyc)
-echo "Đang dọn dẹp cache Python..."
-find . -type d -name "__pycache__" -exec rm -rf {} +
-find . -type f -name "*.pyc" -delete
-if [ $? -eq 0 ]; then
+cleanup_cache() {
+    echo "Đang dọn dẹp cache Python..."
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+    find . -type f -name "*.pyc" -delete 2>/dev/null
     echo "Đã xóa cache Python thành công."
-else
-    echo "Lỗi khi dọn dẹp cache Python."
-fi
+}
 
-# Kiểm tra sự tồn tại của file app/main.py
-if [ -f "run_server.py" ]; then
-    echo "Chạy ứng dụng FastAPI từ app/main.py..."
-    python3 -m app.main
-else
-    echo "Lỗi: Không tìm thấy file app/main.py trong thư mục hiện tại."
+# Hàm chạy server
+run_server() {
+    # Kiểm tra sự tồn tại của file app/main.py
+    if [ -f "run_server.py" ] || [ -f "app/main.py" ]; then
+        echo ""
+        echo "=========================================="
+        echo "  🚀 Đang chạy FastAPI Server..."
+        echo "=========================================="
+        echo "  Phím tắt:"
+        echo "    R - Restart server"
+        echo "    Q - Quit (thoát)"
+        echo "=========================================="
+        echo ""
+        python3 -m app.main &
+        SERVER_PID=$!
+        return 0
+    else
+        echo "Lỗi: Không tìm thấy file app/main.py trong thư mục hiện tại."
+        return 1
+    fi
+}
+
+# Hàm dừng server
+stop_server() {
+    if [ -n "$SERVER_PID" ] && kill -0 $SERVER_PID 2>/dev/null; then
+        echo ""
+        echo "Đang dừng server (PID: $SERVER_PID)..."
+        kill $SERVER_PID 2>/dev/null
+        wait $SERVER_PID 2>/dev/null
+        echo "Server đã dừng."
+    fi
+}
+
+# Trap để cleanup khi script bị kill
+trap 'stop_server; exit 0' SIGINT SIGTERM
+
+# Dọn dẹp cache lần đầu
+cleanup_cache
+
+# Chạy server lần đầu
+if ! run_server; then
     exit 1
 fi
+
+# Vòng lặp chính để lắng nghe phím tắt
+echo ""
+echo "Nhấn R để restart, Q để quit..."
+while true; do
+    # Đọc một ký tự từ input
+    read -rsn1 key
+    
+    case "$key" in
+        r|R)
+            echo ""
+            echo "🔄 Đang restart server..."
+            stop_server
+            cleanup_cache
+            run_server
+            echo ""
+            echo "Nhấn R để restart, Q để quit..."
+            ;;
+        q|Q)
+            echo ""
+            echo "👋 Đang thoát..."
+            stop_server
+            echo "Goodbye!"
+            exit 0
+            ;;
+        *)
+            # Kiểm tra xem server còn chạy không
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+                echo ""
+                echo "⚠️  Server đã dừng bất ngờ. Nhấn R để restart hoặc Q để quit."
+            fi
+            ;;
+    esac
+done

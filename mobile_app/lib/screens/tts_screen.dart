@@ -143,6 +143,48 @@ class _SynthesisTabState extends State<SynthesisTab> {
     }
   }
 
+  Future<void> _downloadAudio() async {
+    if (_audioBytes == null) return;
+    
+    try {
+      // Generate filename with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'tts_audio_$timestamp.mp3';
+      
+      // Get downloads directory
+      String? downloadPath;
+      if (Platform.isLinux || Platform.isMacOS) {
+        downloadPath = '${Platform.environment['HOME']}/Downloads';
+      } else if (Platform.isWindows) {
+        downloadPath = '${Platform.environment['USERPROFILE']}\\Downloads';
+      } else {
+        // For mobile, use file picker to save
+        final result = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Audio',
+          fileName: fileName,
+          type: FileType.audio,
+          bytes: _audioBytes,
+        );
+        if (result != null && mounted) {
+          CustomSnackBar.showSuccess(context, 'Audio saved to: $result');
+        }
+        return;
+      }
+      
+      // Write file for desktop
+      final file = File('$downloadPath/$fileName');
+      await file.writeAsBytes(_audioBytes!);
+      
+      if (mounted) {
+        CustomSnackBar.showSuccess(context, 'Audio saved to: ${file.path}');
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackBar.showError(context, 'Download failed: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -205,7 +247,21 @@ class _SynthesisTabState extends State<SynthesisTab> {
           
           // Audio Player Area (if generated)
           if (_audioBytes != null) ...[
-             const Text("Generated Audio:", style: TextStyle(fontWeight: FontWeight.bold)),
+             Row(
+               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+               children: [
+                 const Text("Generated Audio:", style: TextStyle(fontWeight: FontWeight.bold)),
+                 IconButton(
+                   onPressed: _downloadAudio,
+                   icon: const Icon(Icons.download_rounded),
+                   tooltip: 'Download Audio',
+                   style: IconButton.styleFrom(
+                     backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                     foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                   ),
+                 ),
+               ],
+             ),
              const SizedBox(height: 8),
              WaveformPlayer(
                key: ValueKey(_audioBytes.hashCode), // Rebuild if bytes change

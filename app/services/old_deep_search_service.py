@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class DeepSearchService:
     def __init__(self):
         self.tool_service = ToolService()
-        self.model_name = "4T"  # Default fast model
-        self.reasoning_model = "4T"  # Smart model for planning/synthesis
+        self.model_name = "Lumina:latest"  # Default fast model
+        self.reasoning_model = "Lumina:latest"  # Smart model for planning/synthesis
 
     def execute_deep_search(
         self, topic: str, user_id: int, conversation_id: int, db: Any
@@ -202,7 +202,7 @@ class DeepSearchService:
         Keep it simple and direct. No complex markdown checklists.
         """
         response = ollama.chat(
-            model=self.model_name,  # Use FAST model (4T) instead of Reasoning
+            model=self.model_name,  # Use FAST model (Lumina:latest) instead of Reasoning
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},

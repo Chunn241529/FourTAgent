@@ -13,8 +13,8 @@ class GenerateService {
   static Stream<String> generate({
     required String prompt,
     String? systemPrompt,
-    String model = '4T',
-    double temperature = 0.7,
+    String model = 'translategemma:4b',
+    double temperature = 0.2,
   }) async* {
     final token = await StorageService.getToken();
     if (token == null) {

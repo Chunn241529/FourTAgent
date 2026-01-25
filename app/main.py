@@ -12,6 +12,7 @@ from app.routers.messages import router as messages_router
 from app.routers.rag import router as rag_router
 from app.routers.feedback import router as feedback_router
 from app.routers.tts import router as tts_router
+from app.routers.voice import router as voice_router
 from app.routers.generate import router as generate_router
 from app.utils import verify_jwt
 import uvicorn
@@ -57,6 +58,7 @@ root_logger.addHandler(console_handler)
 for noisy_logger in [
     "uvicorn.access",
     "httpcore",
+    "watchfiles.main",
     "httpx",
     "multipart",
     "passlib",
@@ -179,6 +181,7 @@ app.include_router(messages_router)
 app.include_router(rag_router)
 app.include_router(feedback_router)
 app.include_router(tts_router)
+app.include_router(voice_router)
 app.include_router(generate_router)
 
 
@@ -229,5 +232,32 @@ def main():
         stop_cloudflared()
 
 
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Run tasks on server startup"""
+    from app.services.chat_service import ChatService
+    import asyncio
+
+    logger.info("Triggering background tasks...")
+    # Run filler warmup in background
+    asyncio.create_task(ChatService.warmup_fillers())
+
+
 if __name__ == "__main__":
-    main()
+    # Start Cloudflare Tunnel
+    start_cloudflared()
+
+    # Register cleanup
+    atexit.register(stop_cloudflared)
+
+    try:
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True,
+            reload_dirs=["app"],  # Only watch app folder, not logs
+        )
+    finally:
+        stop_cloudflared()

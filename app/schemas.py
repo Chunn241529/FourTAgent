@@ -82,6 +82,8 @@ class ConversationUpdate(BaseModel):
 
 class ChatMessageIn(BaseModel):
     message: str
+    voice_enabled: Optional[bool] = False
+    voice_id: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

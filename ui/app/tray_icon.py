@@ -17,7 +17,7 @@ class TrayIconManager:
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setBrush(QColor("white"))
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "4T")
+        painter.drawText(pixmap.rect(), Qt.AlignCenter, "Lumina:latest")
         painter.end()
         return QIcon(pixmap)
 

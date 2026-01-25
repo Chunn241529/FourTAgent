@@ -16,7 +16,7 @@ router = APIRouter(prefix="/generate", tags=["generate"])
 class GenerateRequest(BaseModel):
     prompt: str
     system_prompt: Optional[str] = None
-    model: Optional[str] = "4T"
+    model: Optional[str] = "Lumina:latest"
     temperature: Optional[float] = 0.7
 
 

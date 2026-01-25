@@ -76,20 +76,36 @@ class ChatService {
   }
 
   /// Send message and stream response
-  static Stream<String> sendMessage(int conversationId, String message, {String? file}) async* {
+  static Stream<String> sendMessage(
+    int conversationId, 
+    String message, {
+    String? file,
+    bool voiceEnabled = false,
+    String? voiceId,
+  }) async* {
     // userId is handled by backend via token
     
     final body = <String, dynamic>{
       'message': message,
+      'voice_enabled': voiceEnabled,
     };
+    if (voiceId != null) {
+      body['voice_id'] = voiceId;
+    }
     if (file != null) {
       body['file'] = file;
     }
     
-    yield* ApiService.postStream(
-      '${ApiConfig.chat}?conversation_id=$conversationId',
-      body,
-    );
+    // Build URL with query params
+    var url = '${ApiConfig.chat}?conversation_id=$conversationId';
+    if (voiceEnabled) {
+      url += '&voice_enabled=true';
+      if (voiceId != null) {
+        url += '&voice_id=$voiceId';
+      }
+    }
+    
+    yield* ApiService.postStream(url, body);
   }
 
   /// Submit feedback (like/dislike) for a message

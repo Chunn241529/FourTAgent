@@ -149,7 +149,7 @@ def generate_title(
     user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a title for the conversation using 4T-S model"""
+    """Generate a title for the conversation using Lumina:latest-S model"""
     import ollama
 
     # Verify conversation ownership
@@ -188,10 +188,10 @@ def generate_title(
     )
 
     try:
-        # Use 4T-S for fast title generation
-        print("DEBUG: Calling Ollama 4T...")
+        # Use Lumina:latest-S for fast title generation
+        print("DEBUG: Calling Ollama 4T-Evaluate...")
         response = ollama.chat(
-            model="4T-Evaluate:latest",
+            model="Lumina-small:latest",
             messages=[
                 {
                     "role": "user",

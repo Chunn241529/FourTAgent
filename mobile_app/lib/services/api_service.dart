@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'storage_service.dart';
@@ -73,8 +74,13 @@ class ApiService {
     
     final response = await _client.send(request);
     
-    await for (final chunk in response.stream.transform(utf8.decoder)) {
-      yield chunk;
+    // Use LineSplitter to properly handle SSE lines that may be split across HTTP chunks
+    await for (final line in response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      if (line.isNotEmpty) {
+        yield line;
+      }
     }
   }
 
@@ -91,6 +97,29 @@ class ApiService {
       );
     }
     throw ApiException('Request failed', response.statusCode);
+  }
+
+  /// Upload audio file for transcription
+  static Future<Map<String, dynamic>> transcribeAudio(File file) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/voice/transcribe');
+    
+    var request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    
+    print('>>> Uploading audio for transcription: ${file.path}');
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Failed to transcribe audio: ${response.body}');
+    }
   }
 }
 

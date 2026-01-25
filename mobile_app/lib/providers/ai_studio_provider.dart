@@ -39,7 +39,7 @@ class AiStudioProvider extends ChangeNotifier {
 
     try {
       const systemPrompt = """You are a professional subtitle translator.
-Your task is to translate the following subtitle text to Vietnamese.
+Your task is to translate the following subtitle text to Vietnamese (vi-VN).
 
 STRICT OUTPUT RULES:
 1. Output ONLY the translated text.

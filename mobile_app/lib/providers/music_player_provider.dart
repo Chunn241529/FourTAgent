@@ -122,9 +122,16 @@ class MusicPlayerProvider extends ChangeNotifier {
     }
   }
 
+  // Track mpv process generation to avoid race condition on exit callback
+  int _mpvGeneration = 0;
+
   /// Desktop playback using mpv
   Future<void> _playDesktop(String url, {Duration? startTime}) async {
     debugPrint('Starting mpv (Desktop) with URL... Start: $startTime');
+    
+    // Increment generation to invalidate old exit callbacks
+    _mpvGeneration++;
+    final currentGen = _mpvGeneration;
     
     // Use keep-open and idle to prevent premature exit
     List<String> args = ['--no-video', '--keep-open=yes', '--idle', '--really-quiet', url];
@@ -168,18 +175,16 @@ class MusicPlayerProvider extends ChangeNotifier {
     });
     
     _mpvProcess?.exitCode.then((exitCode) {
-      debugPrint('mpv exited with code: $exitCode');
-      // Only set to false if we didn't manually kill it (e.g. for seeking)
-      // But simple way: just update. Logic elsewhere handles restart.
-      if (_isPlaying) { 
-          // If we are "playing" but process exited, means it finished or crashed.
+      debugPrint('mpv exited with code: $exitCode (gen=$currentGen, current=$_mpvGeneration)');
+      // Only update state if this is still the current process (not an old killed one)
+      if (currentGen == _mpvGeneration && _isPlaying) { 
           _isPlaying = false;
           _positionTimer?.cancel();
           notifyListeners();
       }
     });
     
-    debugPrint('mpv started successfully for: $_title');
+    debugPrint('mpv started successfully for: $_title (gen=$currentGen)');
   }
 
   /// Mobile playback using audioplayers
@@ -223,24 +228,33 @@ class MusicPlayerProvider extends ChangeNotifier {
     }
   }
 
+  // Seek debounce timer (for desktop)
+  Timer? _seekDebounceTimer;
+  Duration? _pendingSeekPosition;
+
   /// Seek to position
   Future<void> seek(Duration position) async {
     if (_isMobile && _audioPlayer != null) {
       await _audioPlayer!.seek(position);
     } else if (_isDesktop) {
-      debugPrint('Seeking on desktop (restart mpv at ${position.inSeconds}s)');
-      // Kill current process
-      _mpvProcess?.kill();
-      _positionTimer?.cancel();
-      
-      // Update position immediately to reflect UI
-      _position = position;
+      // Debounce seek for desktop to avoid rapid mpv restarts
+      _pendingSeekPosition = position;
+      _position = position; // Update UI immediately
       notifyListeners();
       
-      // Restart at new position if we were playing or if we want to start playing
-      if (_currentUrl != null) {
-         await _playDesktop(_currentUrl!, startTime: position);
-      }
+      _seekDebounceTimer?.cancel();
+      _seekDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
+        if (_pendingSeekPosition != null && _currentUrl != null) {
+          debugPrint('Seeking on desktop (restart mpv at ${_pendingSeekPosition!.inSeconds}s)');
+          // Kill current process
+          _mpvProcess?.kill();
+          _positionTimer?.cancel();
+          
+          // Restart at new position
+          await _playDesktop(_currentUrl!, startTime: _pendingSeekPosition);
+          _pendingSeekPosition = null;
+        }
+      });
     }
   }
 
@@ -262,12 +276,30 @@ class MusicPlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// Hide the player
+  /// Hide the player (just hide UI, keep track info for restore)
   void hide() {
+    _isVisible = false;
+    // Don't call stop() to preserve track info
+    notifyListeners();
+  }
+
+  /// Hide and stop the player completely
+  void hideAndStop() {
     _isVisible = false;
     stop();
     notifyListeners();
   }
+
+  /// Show the player (restore visibility without changing track)
+  void show() {
+    if (_currentUrl != null && _title.isNotEmpty) {
+      _isVisible = true;
+      notifyListeners();
+    }
+  }
+
+  /// Check if there's a track loaded
+  bool get hasTrack => _currentUrl != null && _title.isNotEmpty;
 
   /// Update floating position
   void updatePosition(double x, double y) {
@@ -285,6 +317,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   @override
   void dispose() {
     _positionTimer?.cancel();
+    _seekDebounceTimer?.cancel();
     _mpvProcess?.kill();
     _positionSub?.cancel();
     _durationSub?.cancel();
