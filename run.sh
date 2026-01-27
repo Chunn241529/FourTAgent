@@ -29,6 +29,30 @@ cleanup_cache() {
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
     find . -type f -name "*.pyc" -delete 2>/dev/null
     echo "Đã xóa cache Python thành công."
+    echo "Đã xóa cache Python thành công."
+}
+
+# Hàm chạy tunnel
+run_tunnel() {
+    if pgrep -f "cloudflared tunnel run fourt-api" > /dev/null; then
+        echo "✅ Tunnel Cloudflare đang chạy."
+    else
+        echo "🚀 Đang khởi động Cloudflare Tunnel..."
+        nohup cloudflared tunnel run fourt-api > logs/tunnel.log 2>&1 &
+        TUNNEL_PID=$!
+        # Chờ xíu để nó start
+        sleep 2
+        echo "✅ Tunnel đã khởi động (PID: $TUNNEL_PID). Log: logs/tunnel.log"
+    fi
+}
+
+stop_tunnel() {
+    if [ -n "$TUNNEL_PID" ]; then
+        echo "Đang dừng Tunnel (PID: $TUNNEL_PID)..."
+        kill $TUNNEL_PID 2>/dev/null
+    fi
+    # Kill all leftovers just in case
+    pkill -f "cloudflared tunnel run fourt-api" 2>/dev/null
 }
 
 # Hàm chạy server
@@ -65,10 +89,14 @@ stop_server() {
 }
 
 # Trap để cleanup khi script bị kill
-trap 'stop_server; exit 0' SIGINT SIGTERM
+# Trap để cleanup khi script bị kill
+trap 'stop_server; stop_tunnel; exit 0' SIGINT SIGTERM
 
 # Dọn dẹp cache lần đầu
 cleanup_cache
+
+# Chạy tunnel
+run_tunnel
 
 # Chạy server lần đầu
 if ! run_server; then
@@ -95,7 +123,9 @@ while true; do
         q|Q)
             echo ""
             echo "👋 Đang thoát..."
+            echo "👋 Đang thoát..."
             stop_server
+            stop_tunnel
             echo "Goodbye!"
             exit 0
             ;;

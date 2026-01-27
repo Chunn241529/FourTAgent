@@ -185,51 +185,11 @@ app.include_router(voice_router)
 app.include_router(generate_router)
 
 
-# Global reference to cloudflared process
-cloudflared_process = None
-
-
-def start_cloudflared():
-    """Start Cloudflare Tunnel as a subprocess"""
-    global cloudflared_process
-    try:
-        cloudflared_process = subprocess.Popen(
-            ["cloudflared", "tunnel", "run", "fourt-api"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        logger.info(f"Started Cloudflare Tunnel (PID: {cloudflared_process.pid})")
-        logger.info("API available at: https://api.fourt.io.vn")
-    except FileNotFoundError:
-        logger.warning("cloudflared not found. Tunnel not started.")
-    except Exception as e:
-        logger.error(f"Failed to start cloudflared: {e}")
-
-
-def stop_cloudflared():
-    """Stop Cloudflare Tunnel subprocess"""
-    global cloudflared_process
-    if cloudflared_process:
-        logger.info("Stopping Cloudflare Tunnel...")
-        cloudflared_process.terminate()
-        try:
-            cloudflared_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            cloudflared_process.kill()
-        logger.info("Cloudflare Tunnel stopped.")
-
-
 def main():
-    # Start Cloudflare Tunnel
-    start_cloudflared()
-
-    # Register cleanup
-    atexit.register(stop_cloudflared)
-
     try:
         uvicorn.run(app, host="0.0.0.0", port=8000)
-    finally:
-        stop_cloudflared()
+    except Exception as e:
+        logger.error(f"Server error: {e}")
 
 
 # Startup event
@@ -245,19 +205,13 @@ async def startup_event():
 
 
 if __name__ == "__main__":
-    # Start Cloudflare Tunnel
-    start_cloudflared()
-
-    # Register cleanup
-    atexit.register(stop_cloudflared)
-
     try:
         uvicorn.run(
             "app.main:app",
             host="0.0.0.0",
             port=8000,
-            reload=True,
+            reload=False,
             reload_dirs=["app"],  # Only watch app folder, not logs
         )
-    finally:
-        stop_cloudflared()
+    except Exception as e:
+        logger.error(f"Server crashed: {e}")

@@ -162,5 +162,26 @@ class ChatService {
       rethrow;
     }
   }
+
+  /// Submit tool result and resume streaming
+  static Stream<String> submitToolResult(
+    int conversationId,
+    String toolName,
+    String result, {
+    String? toolCallId,
+    bool voiceEnabled = false,
+    String? voiceId,
+  }) async* {
+    final body = {
+      'tool_name': toolName,
+      'result': result,
+      'tool_call_id': toolCallId,
+      'conversation_id': conversationId,
+      'voice_enabled': voiceEnabled,
+      'voice_id': voiceId,
+    };
+    
+    yield* ApiService.postStream('${ApiConfig.chat}/tool_result', body);
+  }
 }
 

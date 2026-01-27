@@ -12,8 +12,12 @@ class Message {
   String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
   List<String> completedSearches; // Completed searches to keep visible
+  List<String> completedFileActions; // Completed file actions (READ:path, CREATE:path)
   List<String> deepSearchUpdates; // Deep Search status logs
   String? plan; // Research plan for Deep Search
+  final String? toolName;
+  final String? toolCallId;
+  final dynamic toolCalls;
 
   Message({
     this.id,
@@ -28,10 +32,15 @@ class Message {
     this.imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     this.plan,
+    this.toolName,
+    this.toolCallId,
+    this.toolCalls,
   }) : activeSearches = activeSearches ?? [],
        completedSearches = completedSearches ?? [],
+       completedFileActions = completedFileActions ?? [],
        deepSearchUpdates = deepSearchUpdates ?? [];
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -43,6 +52,9 @@ class Message {
       role: json['role'],
       timestamp: DateTime.parse(json['timestamp']),
       feedback: json['feedback'],
+      toolName: json['tool_name'],
+      toolCallId: json['tool_call_id'],
+      toolCalls: json['tool_calls'],
     );
   }
 
@@ -55,6 +67,9 @@ class Message {
       'role': role,
       'timestamp': timestamp.toIso8601String(),
       'feedback': feedback,
+      'tool_name': toolName,
+      'tool_call_id': toolCallId,
+      'tool_calls': toolCalls,
     };
   }
 
@@ -67,8 +82,12 @@ class Message {
     String? imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     String? plan,
+    String? toolName,
+    String? toolCallId,
+    dynamic toolCalls,
   }) {
     return Message(
       id: id ?? this.id,
@@ -83,8 +102,12 @@ class Message {
       imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
       completedSearches: completedSearches ?? this.completedSearches,
+      completedFileActions: completedFileActions ?? this.completedFileActions,
       deepSearchUpdates: deepSearchUpdates ?? this.deepSearchUpdates,
       plan: plan ?? this.plan,
+      toolName: toolName ?? this.toolName,
+      toolCallId: toolCallId ?? this.toolCallId,
+      toolCalls: toolCalls ?? this.toolCalls,
     );
   }
 }

@@ -11,6 +11,8 @@ import 'deep_search_indicator.dart';
 import '../common/custom_snackbar.dart';
 import 'plan_indicator.dart';
 import 'code_block_builder.dart';
+import 'file_action_indicator.dart';
+import 'simple_tool_indicator.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -185,14 +187,14 @@ class MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
 
-                // 1. Deep Search Indicator (status updates) - FIRST
+                // 1. Deep Search Indicator (status updates)
                 if (message.deepSearchUpdates.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _buildDeepSearchIndicator(message),
                   ),
 
-                // 2. Plan Indicator (collapsible) - SECOND
+                // 2. Plan Indicator (collapsible)
                 if (message.plan != null && message.plan!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -202,18 +204,16 @@ class MessageBubble extends StatelessWidget {
                     ),
                   ),
 
-                // 3. Thinking Indicator (Collapsible) - THIRD (during synthesis)
+                // 3. Interleaved Thinking and Tool Indicators
+                // Replaces old Thinking Indicator
                 if (message.thinking != null && message.thinking!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _ThinkingIndicator(
-                      thinking: message.thinking!,
-                      isStreaming: message.isStreaming,
-                    ),
+                    child: _buildReasoningChain(context, theme, message),
                   ),
 
-                // 4. Content with interleaved searches
-                _buildInterleavedContent(theme, isDark),
+                // 2. Content with interleaved indicators (using imageBuilder)
+                _buildMarkdownContent(theme, isDark),
 
                 // Streaming indicator
                 if (message.isStreaming)
@@ -245,149 +245,7 @@ class MessageBubble extends StatelessWidget {
     return Icons.insert_drive_file;
   }
 
-  Widget _buildInterleavedContent(ThemeData theme, bool isDark) {
-    if (message.content.isEmpty) return const SizedBox.shrink();
-
-    // Regex to find search markers: [[SEARCH:query]]
-    final regex = RegExp(r'\[\[SEARCH:(.*?)\]\]');
-    final children = <Widget>[];
-    int lastIndex = 0;
-    
-    final content = message.content;
-
-    for (final match in regex.allMatches(content)) {
-      // Add text before match
-      if (match.start > lastIndex) {
-        final text = content.substring(lastIndex, match.start);
-        if (text.trim().isNotEmpty) {
-          children.add(
-             MarkdownBody(
-                data: text,
-                selectable: true,
-                builders: {
-                  'code': CodeBlockBuilder(isDark: isDark),
-                },
-                onTapLink: (text, href, title) async {
-                  if (href != null) {
-                    final uri = Uri.tryParse(href);
-                    if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  }
-                },
-                styleSheet: MarkdownStyleSheet(
-                  p: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark ? Colors.grey[300] : Colors.grey[850],
-                    height: 1.5,
-                  ),
-                  strong: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.grey[900],
-                  ),
-                  a: TextStyle(
-                    color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
-                    decoration: TextDecoration.underline,
-                  ),
-                  code: theme.textTheme.bodyMedium?.copyWith(
-                    fontFamily: 'monospace',
-                    backgroundColor: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFf5f5f5),
-                    color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
-                  ),
-                  codeblockDecoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFf5f5f5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-             )
-           );
-        }
-      }
-      
-      // Add search widget
-      final query = match.group(1);
-      if (query != null) {
-          final isCompleted = message.completedSearches.contains(query);
-          // If not in completed, assumes active
-          
-          children.add(Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: SearchIndicator(
-                  activeSearches: isCompleted ? [] : [query],
-                  completedSearches: isCompleted ? [query] : [],
-              ),
-          ));
-      }
-      
-      lastIndex = match.end;
-    }
-    
-    // Add remaining text
-    if (lastIndex < content.length) {
-       final text = content.substring(lastIndex);
-       if (text.trim().isNotEmpty) {
-          children.add(
-             MarkdownBody(
-                data: text,
-                selectable: true,
-                builders: {
-                  'code': CodeBlockBuilder(isDark: isDark),
-                },
-                onTapLink: (text, href, title) async {
-                  if (href != null) {
-                    final uri = Uri.tryParse(href);
-                    if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  }
-                },
-                styleSheet: MarkdownStyleSheet(
-                  p: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark ? Colors.grey[300] : Colors.grey[800],
-                    height: 1.5,
-                  ),
-                  strong: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.grey[900],
-                  ),
-                  a: TextStyle(
-                    color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
-                    decoration: TextDecoration.underline,
-                  ),
-                  code: theme.textTheme.bodyMedium?.copyWith(
-                    fontFamily: 'monospace',
-                    backgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFf5f5f5),
-                    color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
-                  ),
-                  codeblockDecoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFf5f5f5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  blockquote: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark ? Colors.grey[300] : Colors.grey[800],
-                    fontStyle: FontStyle.italic,
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF0F4F8),
-                    border: Border(
-                      left: BorderSide(
-                        color: isDark ? const Color(0xFF64B5F6) : Colors.blue,
-                        width: 3,
-                      ),
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                ),
-             )
-           );
-       }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    );
-  }
+  // Removed _buildInterleavedContent as it's replaced by single MarkdownBody with imageBuilder
 
   // Deprecated _buildMarkdownContent removed/replaced
   // Widget _buildMarkdownContent(ThemeData theme, bool isDark) { ... } preserved if needed but replacing call site.
@@ -436,13 +294,7 @@ class MessageBubble extends StatelessWidget {
           color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
           decoration: TextDecoration.underline,
         ),
-        // Inline code
-        code: TextStyle(
-          backgroundColor: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFE8E8E8),
-          fontFamily: 'monospace',
-          fontSize: 13,
-          color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF1A1A1A),
-        ),
+
         // Code block
         codeblockDecoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
@@ -492,8 +344,53 @@ class MessageBubble extends StatelessWidget {
           }
         }
       },
-      // Handle image rendering
+      // Handle image rendering (used for custom indicators)
       imageBuilder: (uri, title, alt) {
+        final uriStr = uri.toString();
+        
+        // Handle custom SEARCH indicator
+        if (uriStr.startsWith('search:')) {
+          final query = Uri.decodeComponent(uriStr.substring(7));
+          final isCompleted = message.completedSearches.contains(query);
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: SearchIndicator(
+                activeSearches: isCompleted ? [] : [query],
+                completedSearches: isCompleted ? [query] : [],
+              ),
+            ),
+          );
+        }
+        
+        // Handle custom FILE_ACTION indicator
+        if (uriStr.startsWith('file:')) {
+          final parts = Uri.decodeComponent(uriStr.substring(5)).split(':');
+          if (parts.length >= 2) {
+            // Fix: remove potential leading slashes from action (e.g. ///CREATE from file:///CREATE)
+            var action = parts[0];
+            while (action.startsWith('/')) {
+              action = action.substring(1);
+            }
+            
+            
+            final target = parts.sublist(1).join(':'); // Path might contain colons
+            final actionTag = '${action}:${target}';
+            final isActionCompleted = message.completedFileActions.contains(actionTag);
+            
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: FileActionIndicator(
+                action: action,
+                target: target,
+                isCompleted: !message.isStreaming || isActionCompleted, 
+              ),
+            );
+          }
+        }
+
+        // Standard image rendering
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Image.network(
@@ -596,6 +493,62 @@ class MessageBubble extends StatelessWidget {
       completedSteps: completedSteps,
     );
   }
+  Widget _buildReasoningChain(BuildContext context, ThemeData theme, Message message) {
+    if (message.thinking == null) return const SizedBox.shrink();
+
+    final List<Widget> children = [];
+    final splitPattern = RegExp(r'\n\n<<<TOOL:(.*?):(.*?)>>>\n\n');
+    
+    final thinkingContent = message.thinking!;
+    final matches = splitPattern.allMatches(thinkingContent);
+    
+    int lastIndex = 0;
+    
+    for (final match in matches) {
+      if (match.start > lastIndex) {
+        final segmentText = thinkingContent.substring(lastIndex, match.start).trim();
+        if (segmentText.isNotEmpty) {
+           children.add(_ThinkingSegment(content: segmentText, isLast: false));
+        }
+      }
+      
+      final action = match.group(1) ?? 'UNKNOWN';
+      final target = match.group(2) ?? '';
+      
+      bool isCompleted = false;
+      if (action == 'SEARCH') {
+         if (message.completedSearches.contains(target)) isCompleted = true;
+      } else if (['READ', 'CREATE', 'SEARCH_FILE'].contains(action)) {
+         final tag = '$action:$target';
+         if (message.completedFileActions.contains(tag)) isCompleted = true;
+      }
+      
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+          child: SimpleToolIndicator(
+            action: action,
+            target: target,
+            isCompleted: isCompleted,
+          ),
+        )
+      );
+      
+      lastIndex = match.end;
+    }
+    
+    if (lastIndex < thinkingContent.length) {
+      final segmentText = thinkingContent.substring(lastIndex).trim();
+      if (segmentText.isNotEmpty) {
+         children.add(_ThinkingSegment(content: segmentText, isLast: true));
+      }
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
 }
 
 class _ActionButton extends StatelessWidget {
@@ -629,101 +582,6 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-
-class _ThinkingIndicator extends StatefulWidget {
-  final String thinking;
-  final bool isStreaming;
-
-  const _ThinkingIndicator({
-    required this.thinking,
-    required this.isStreaming,
-  });
-
-  @override
-  State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
-}
-
-class _ThinkingIndicatorState extends State<_ThinkingIndicator> {
-  bool _isExpanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Auto-expand if actively streaming thinking content
-    if (widget.isStreaming) {
-      _isExpanded = true;
-    }
-  }
-
-  @override
-  void didUpdateWidget(_ThinkingIndicator oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Auto-collapse when streaming finishes
-    if (oldWidget.isStreaming && !widget.isStreaming) {
-        // Optional: Delay collapse slightly for better UX?
-        // For now, immediate collapse as requested.
-        setState(() {
-          _isExpanded = false;
-        });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _isExpanded = !_isExpanded),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                  size: 16,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Thinking Process',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_isExpanded)
-          Container(
-            padding: const EdgeInsets.only(left: 12, top: 4, bottom: 8),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: theme.colorScheme.onSurface.withOpacity(0.2),
-                  width: 2,
-                ),
-              ),
-            ),
-            child: Text(
-              widget.thinking,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-                height: 1.4,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
 
 class _TypingIndicator extends StatefulWidget {
   final int dotCount;
@@ -788,3 +646,95 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
     );
   }
 }
+
+class _ThinkingSegment extends StatefulWidget {
+  final String content;
+  final bool isLast;
+  
+  const _ThinkingSegment({
+    required this.content,
+    required this.isLast,
+  });
+
+  @override
+  State<_ThinkingSegment> createState() => _ThinkingSegmentState();
+}
+
+class _ThinkingSegmentState extends State<_ThinkingSegment> {
+  bool _isExpanded = true; 
+
+  @override
+  void initState() {
+    super.initState();
+    // If this is the last segment and it's not empty, keep it expanded.
+    // Otherwise, collapse it by default.
+    if (!widget.isLast || widget.content.trim().isEmpty) {
+      _isExpanded = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.content.trim().isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                  size: 14,
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Thinking Process',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    fontStyle: FontStyle.italic,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isExpanded)
+          Container(
+            margin: const EdgeInsets.only(left: 8, bottom: 4),
+            padding: const EdgeInsets.only(left: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: theme.colorScheme.onSurface.withOpacity(0.1),
+                  width: 1.5,
+                ),
+              ),
+            ),
+            child: MarkdownBody(
+              data: widget.content,
+              styleSheet: MarkdownStyleSheet(
+                p: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  height: 1.3,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+

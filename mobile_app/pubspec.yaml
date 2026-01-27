@@ -37,6 +37,8 @@ dependencies:
   cached_network_image: ^3.3.0
   # Audio playback for TTS
   audioplayers: ^6.0.0
+  path: ^1.8.3
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

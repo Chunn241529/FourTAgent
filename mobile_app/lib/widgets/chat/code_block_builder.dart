@@ -4,7 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../common/custom_snackbar.dart';
 
-/// Custom code block builder with copy button and language label
+/// Unified code builder (handles both block `pre > code` and inline `code`)
 class CodeBlockBuilder extends MarkdownElementBuilder {
   final bool isDark;
 
@@ -12,22 +12,73 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    // Extract language from code fence (e.g., ```python)
+    if (element.tag != 'code') return null;
+
+    // Determine if this is a code block or inline code
+    // Heuristics:
+    // 1. Has 'language-' class -> Block
+    // 2. Contains newlines -> Block
+    // 3. (Ambiguous case) Single line, no language -> Treat as Inline
+    
+    bool isBlock = false;
     String? language;
     String code = element.textContent;
 
-    // Check if element has info string (language)
+    // Check language class
     if (element.attributes.containsKey('class')) {
       final className = element.attributes['class'] ?? '';
       if (className.startsWith('language-')) {
-        language = className.substring(9); // Remove 'language-' prefix
+        isBlock = true;
+        language = className.substring(9);
       }
     }
 
-    return _CodeBlockWidget(
-      code: code,
-      language: language,
-      isDark: isDark,
+    // Check newlines
+    if (code.contains('\n')) {
+      isBlock = true;
+    }
+
+    if (isBlock) {
+      return _CodeBlockWidget(
+        code: code,
+        language: language,
+        isDark: isDark,
+      );
+    } else {
+      return _InlineCodeWidget(
+        code: code,
+        isDark: isDark,
+      );
+    }
+  }
+}
+
+class _InlineCodeWidget extends StatelessWidget {
+  final String code;
+  final bool isDark;
+
+  const _InlineCodeWidget({required this.code, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFF0F2F5),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isDark ? const Color(0xFF3D3D3D) : const Color(0xFFD0D7DE),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        code,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF24292F),
+        ),
+      ),
     );
   }
 }
@@ -227,3 +278,5 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget> {
     }
   }
 }
+
+

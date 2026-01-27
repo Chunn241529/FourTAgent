@@ -40,13 +40,27 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
     });
+
+    // Add listener for pending tool calls
+    context.read<ChatProvider>().addListener(_handleProviderUpdate);
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    context.read<ChatProvider>().removeListener(_handleProviderUpdate);
     super.dispose();
+  }
+
+  void _handleProviderUpdate() {
+    if (!mounted) return;
+    final chatProvider = context.read<ChatProvider>();
+    
+    // Handle pending client tool calls
+    if (chatProvider.pendingClientTool != null) {
+      _showToolPermissionDialog(context, chatProvider);
+    }
   }
 
   void _onScroll() {
@@ -764,6 +778,88 @@ class _ChatScreenState extends State<ChatScreen> {
               'Xóa',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isToolDialogShowing = false;
+
+  void _showToolPermissionDialog(BuildContext context, ChatProvider chatProvider) {
+    if (_isToolDialogShowing) return;
+    _isToolDialogShowing = true;
+
+    final tool = chatProvider.pendingClientTool!;
+    final name = tool['name'] as String;
+    final args = tool['args'] as Map<String, dynamic>;
+    
+    String actionDesc = '';
+    IconData icon = Icons.security;
+
+    if (name == 'client_read_file') {
+      actionDesc = 'đọc tệp tin: ${args['path']}';
+      icon = Icons.file_open_outlined;
+    } else if (name == 'client_search_file') {
+      actionDesc = 'tìm kiếm tệp tin với từ khóa "${args['query']}"';
+      icon = Icons.search;
+    } else if (name == 'client_create_file') {
+      actionDesc = 'tạo tệp tin mới tại: ${args['path']}';
+      icon = Icons.create_new_folder_outlined;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: Colors.blue),
+            const SizedBox(width: 10),
+            const Text('Yêu cầu quyền hạn'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('AI đang yêu cầu thực hiện hành động sau trên thiết bị của bạn:'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                actionDesc,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Bạn có cho phép thực hiện hành động này không?',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _isToolDialogShowing = false;
+              Navigator.pop(context);
+              chatProvider.submitToolResult(name, 'Error: Quyền bị từ chối bởi người dùng.', tool['tool_call_id']);
+              chatProvider.clearPendingTool();
+            },
+            child: const Text('Từ chối'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _isToolDialogShowing = false;
+              Navigator.pop(context);
+              chatProvider.executePendingTool();
+            },
+            child: const Text('Cho phép'),
           ),
         ],
       ),

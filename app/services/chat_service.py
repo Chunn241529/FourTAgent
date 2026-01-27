@@ -312,14 +312,11 @@ class ChatService:
               - Ví dụ: "cách cài Python trên Ubuntu" → Query: "install Python Ubuntu"
               - **KHÔNG** dùng câu dài cho query.
             
-            **⚠️ TUYỆT ĐỐI KHÔNG LẶP LẠI SEARCH:**
-            - CHỈ search MỘT LẦN cho mỗi chủ đề/câu hỏi.
-            - KHÔNG search lại với query giống hoặc tương tự (chỉ khác chữ hoa/thường, viết cách khác...).
-            - Sau khi đã có kết quả search, PHẢI dùng kết quả đó để trả lời ngay.
-            - Nếu không tìm thấy kết quả phù hợp, trả lời với thông tin có sẵn, KHÔNG search lại.
-            
+            **HƯỚNG DẪN TÌM KIẾM:**
+            - **Ưu tiên search 1 lần chính xác** thay vì search nhiều lần vụn vặt.
+            - Nếu kết quả tìm kiếm KHÔNG ĐỦ hoặc KHÔNG LIÊN QUAN, hãy search lại với từ khóa KHÁC (cụ thể hơn, tiếng Anh/Việt đảo lại).
+            - **TRÁNH LẶP LẠI** cùng một từ khóa search nếu đã tìm rồi mà không ra kết quả (vì kết quả sẽ y hệt). Hãy thay đổi từ khóa.
             - Sau khi search xong, TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
-            - Nếu cần trích dẫn nguồn, nêu tên nguồn ngắn gọn (ví dụ: "Theo VNExpress...").
             
             **QUY TẮC PHÁT NHẠC (BẮT BUỘC TUÂN THỦ):**
             
@@ -421,7 +418,7 @@ class ChatService:
     ) -> tuple:
         """Chọn model phù hợp dựa trên input evaluation"""
         if file and FileService.is_image_file(file):
-            return "4T-New", None, False
+            return "qwen3-vl:8b", None, False
 
         # Evaluate using keywords instead of LLM
         input_lower = effective_query.lower()
@@ -480,13 +477,21 @@ class ChatService:
             "giải thích",
             "phân tích",
             "suy luận",
+            "tạo file",
+            "file",
+            "hồ sơ",
+            "tài liệu",
+            "dataset",
+            "dữ liệu",
+            "nghiên cứu",
+            "tìm kiếm",
         ]
         needs_reasoning = any(k in input_lower for k in reasoning_keywords)
 
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "Lumina-think", tools, True
+            return "Lumina", tools, True
         elif needs_reasoning:
             return "Lumina", tools, True
         else:
@@ -637,6 +642,43 @@ class ChatService:
         return prompt
 
     @staticmethod
+    def generate_title_suggestion(
+        context: str, model_name: str = "Lumina-small"
+    ) -> Optional[str]:
+        """Generate a title for the conversation context"""
+        try:
+            print(f"DEBUG: Generating title with model {model_name}")
+
+            system_prompt = (
+                "You are an expert at summarizing conversations. "
+                "Your task is to create a short, concise title (maximum 6 words) "
+                "that captures the main topic of the conversation. "
+                "Output ONLY the title text. Do not use quotes or prefixes."
+            )
+
+            user_prompt = f"Here is the conversation:\n\n{context}\n\nTitle:"
+
+            response = ollama.chat(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                options={"num_predict": 50, "temperature": 0.3},
+                stream=False,
+                think=False,
+            )
+
+            title = response["message"]["content"].strip().strip('"')
+            if not title:
+                return None
+
+            return title
+        except Exception as e:
+            logger.error(f"Title generation failed: {e}")
+            return None
+
+    @staticmethod
     async def _generate_stream_response(
         system_prompt: str,
         full_prompt: str,
@@ -735,7 +777,21 @@ class ChatService:
 
             # Add Working Memory (Flow)
             for msg in working_memory:
-                messages.append({"role": msg.role, "content": msg.content})
+                msg_dict = {"role": msg.role, "content": msg.content}
+                if msg.role == "assistant" and msg.tool_calls:
+                    try:
+                        msg_dict["tool_calls"] = (
+                            json.loads(msg.tool_calls)
+                            if isinstance(msg.tool_calls, str)
+                            else msg.tool_calls
+                        )
+                    except:
+                        pass
+                elif msg.role == "tool":
+                    msg_dict["tool_call_id"] = msg.tool_call_id
+                    msg_dict["name"] = msg.tool_name
+
+                messages.append(msg_dict)
 
             logger.info(f"Using {len(working_memory)} messages from working memory")
 
@@ -762,7 +818,7 @@ class ChatService:
                     "repeat_penalty": 1.2,
                 }
 
-                max_iterations = 5
+                max_iterations = 10
                 current_iteration = 0
                 has_tool_calls = False
 
@@ -853,7 +909,17 @@ class ChatService:
                             )
                             yield f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
 
+                    if tool_calls:
+                        current_message["tool_calls"] = tool_calls
+
                     messages.append(current_message)
+                    # Save intermediate assistant message step to DB
+                    await loop.run_in_executor(
+                        None,
+                        lambda: ChatService._save_message_to_db(
+                            db, user_id, conversation_id, current_message
+                        ),
+                    )
 
                     if tool_calls:
                         # 1. Prepare tasks and emit "Started" events
@@ -884,13 +950,13 @@ class ChatService:
                                     # Check if this query was already executed
                                     if normalized_query in executed_search_queries:
                                         logger.warning(
-                                            f"Duplicate search query detected: '{query}'. Skipping to prevent loop."
+                                            f"Duplicate search query detected: '{query}'. Warning model."
                                         )
                                         # Add a tool message to inform model about the duplicate
                                         messages.append(
                                             {
                                                 "role": "tool",
-                                                "content": f"Đã search '{query}' trước đó rồi. Hãy sử dụng kết quả đã có ở trên để trả lời, KHÔNG search nữa.",
+                                                "content": f"Query '{query}' đã được tìm kiếm trước đó. Hãy thử từ khóa KHÁC hoặc sử dụng thông tin đã có.",
                                                 "tool_name": function_name,
                                             }
                                         )
@@ -942,8 +1008,8 @@ class ChatService:
 
                                     deep_search_service = DeepSearchService()
 
-                                    # Yield all SSE events from DeepSearch generator
-                                    for (
+                                    # Yield all SSE events from DeepSearch generator (now async)
+                                    async for (
                                         sse_chunk
                                     ) in deep_search_service.execute_deep_search(
                                         topic, user_id, conversation_id, db
@@ -956,8 +1022,28 @@ class ChatService:
 
                                 except Exception as e:
                                     logger.error(f"Deep search error: {e}")
-                                    # Fall through to normal processing if error
+                                    yield f"data: {json.dumps({'error': f'Deep Search failed: {str(e)}'}, separators=(',', ':'))}\n\n"
+                                    # Fall through to normal processing or return [DONE]
                                 should_skip = True  # deep_search is handled separately
+
+                            elif function_name.startswith("client_"):
+                                # Handle client-run tools by yielding and breaking
+                                # The client will execute and then re-call the API with the result
+                                try:
+                                    if isinstance(args_str, str):
+                                        args = json.loads(args_str)
+                                    else:
+                                        args = args_str
+
+                                    # Emit client_tool_call event
+                                    yield f"data: {json.dumps({'client_tool_call': {'name': function_name, 'args': args, 'tool_call_id': tool_call.get('id')}}, separators=(',', ':'))}\n\n"
+
+                                    # We MUST stop the stream here because we need the client's input to continue
+                                    # The client is responsible for resuming the conversation.
+                                    return
+                                except Exception as e:
+                                    logger.error(f"Error preparing client tool: {e}")
+                                    # Fall through if error
 
                             # Create task for parallel execution (only for non-skipped, non-deep_search tools)
                             if not should_skip and function_name != "deep_search":
@@ -993,19 +1079,23 @@ class ChatService:
                         for i, execution_result in enumerate(execution_results):
                             function_name = execution_result["tool_name"]
                             # Use tool_call_to_task_mapping for correct index (since some tool_calls may be skipped)
-                            args_str = tool_call_to_task_mapping[i]["function"][
-                                "arguments"
-                            ]
+                            tool_call = tool_call_to_task_mapping[i]
+                            args_str = tool_call["function"]["arguments"]
                             result = execution_result["result"]
                             error = execution_result["error"]
 
-                            if error:
-                                tool_msg = {
-                                    "role": "tool",
-                                    "content": f"Error: {error}",
-                                    "tool_name": function_name,
-                                }
-                            else:
+                            tool_msg = {
+                                "role": "tool",
+                                "content": (
+                                    str(result)[:8000]
+                                    if not error
+                                    else f"Error: {error}"
+                                ),
+                                "tool_name": function_name,
+                                "tool_call_id": tool_call.get("id"),
+                            }
+
+                            if not error:
                                 # Handle search specific logic (sending status)
                                 if function_name == "web_search":
                                     try:
@@ -1062,22 +1152,54 @@ class ChatService:
                                                 f"[MUSIC] Emitting music_play event for: {result_data.get('title', 'Unknown')}"
                                             )
                                             yield f"data: {json.dumps({'music_play': result_data}, separators=(',', ':'))}\n\n"
-                                        else:
-                                            logger.warning(
-                                                f"[MUSIC] No action in result_data: {result_data}"
-                                            )
                                     except Exception as e:
                                         logger.error(
                                             f"Could not parse play_music result: {e}"
                                         )
 
-                                tool_msg = {
-                                    "role": "tool",
-                                    "content": str(result)[:8000],
-                                    "tool_name": function_name,
-                                }
+                                elif function_name in [
+                                    "read_file",
+                                    "create_file",
+                                    "search_file",
+                                ]:
+                                    try:
+                                        if isinstance(args_str, str):
+                                            args = json.loads(args_str)
+                                        else:
+                                            args = args_str
+
+                                        # Determine target (path or query)
+                                        path = args.get("path")
+                                        query = args.get("query")
+                                        target = path if path else query
+
+                                        if target:
+                                            # Format: ACTION:Target
+                                            # Must match Flutter's expected format (READ:path, CREATE:path, SEARCH_FILE:query)
+                                            action = ""
+                                            if function_name == "read_file":
+                                                action = "READ"
+                                            elif function_name == "create_file":
+                                                action = "CREATE"
+                                            elif function_name == "search_file":
+                                                action = "SEARCH_FILE"
+
+                                            completion_tag = f"{action}:{target}"
+
+                                            yield f"data: {json.dumps({'file_tool_complete': {'tag': completion_tag}}, separators=(',', ':'))}\n\n"
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error emitting file tool complete event: {e}"
+                                        )
 
                             messages.append(tool_msg)
+                            # Save tool result to DB
+                            await loop.run_in_executor(
+                                None,
+                                lambda: ChatService._save_message_to_db(
+                                    db, user_id, conversation_id, tool_msg
+                                ),
+                            )
 
                         continue
                     else:
@@ -1087,59 +1209,30 @@ class ChatService:
                 logger.error(f"Lỗi trong streaming: {e}")
                 yield f"data: {json.dumps({'error': str(e)}, separators=(',', ':'))}\n\n"
             finally:
-                # Save assistant message BEFORE sending [DONE]
+                # Save final text if any was missed (unlikely but safe)
                 final_content = "".join(full_response)
-                logger.info(f"[DEBUG] full_response length: {len(final_content)}")
 
-                if final_content and final_content.strip():
-                    try:
-                        logger.info("[DEBUG] Attempting to save assistant message...")
-                        # Create new DB session for save
-                        save_db = SessionLocal()
-                        try:
-                            ass_emb = EmbeddingService.get_embedding(final_content)
-                            ass_msg = ModelChatMessage(
-                                user_id=user_id,
-                                conversation_id=conversation_id,
-                                content=final_content,
-                                role="assistant",
-                                embedding=json.dumps(ass_emb.tolist()),
-                            )
-                            save_db.add(ass_msg)
-                            save_db.commit()  # Commit to save
-
-                            # Update FAISS index
-                            RAGService.update_faiss_index(
-                                user_id,
-                                conversation_id,
-                                save_db,
-                            )
-
-                            logger.info(
-                                f"[DEBUG] Assistant message saved to DB with id={ass_msg.id}"
-                            )
-
-                            # Send message_id to client for feedback feature BEFORE [DONE]
-                            msg_saved_data = json.dumps(
-                                {"message_saved": {"id": ass_msg.id}},
-                                separators=(",", ":"),
-                            )
-                            logger.info(f"[DEBUG] Yielding: {msg_saved_data}")
-                            yield f"data: {msg_saved_data}\n\n"
-                        finally:
-                            save_db.close()
-                    except Exception as e:
-                        logger.error(f"[DEBUG] Error saving assistant message: {e}")
-                        import traceback
-
-                        traceback.print_exc()
-                else:
+                # Perform RAG indexing for the conversation
+                try:
+                    RAGService.update_faiss_index(user_id, conversation_id, db)
+                except Exception as e:
                     logger.warning(
-                        f"[DEBUG] Empty response (len={len(final_content)}), skipping save"
+                        f"Failed to update FAISS index at end of stream: {e}"
                     )
 
-                # Send [DONE] LAST
-                logger.info("[DEBUG] Sending [DONE]")
+                # Get the last assistant message ID to send to client
+                last_ass_msg = (
+                    db.query(ModelChatMessage)
+                    .filter(
+                        ModelChatMessage.conversation_id == conversation_id,
+                        ModelChatMessage.role == "assistant",
+                    )
+                    .order_by(ModelChatMessage.id.desc())
+                    .first()
+                )
+
+                if last_ass_msg:
+                    yield f"data: {json.dumps({'message_saved': {'id': last_ass_msg.id}}, separators=(',', ':'))}\n\n"
 
                 # Stream voice audio if enabled (after text is complete)
                 if voice_enabled and final_content and final_content.strip():
@@ -1148,9 +1241,6 @@ class ChatService:
                         async for audio_event in voice_agent.stream_audio_chunks(
                             final_content, voice_id or "Đoan"
                         ):
-                            logger.info(
-                                f"[VoiceAgent] Yielding audio chunk: {audio_event.get('sentence', '')[:30]}..."
-                            )
                             yield f"data: {json.dumps({'voice_audio': audio_event}, separators=(',', ':'))}\n\n"
                         logger.info("[VoiceAgent] Audio streaming complete")
                     except Exception as e:
@@ -1159,3 +1249,118 @@ class ChatService:
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+    @staticmethod
+    async def handle_client_tool_result(
+        user_id: int,
+        conversation_id: int,
+        tool_name: str,
+        result: str,
+        tool_call_id: Optional[str],
+        db: Session,
+        voice_enabled: bool = False,
+        voice_id: Optional[str] = None,
+    ):
+        """
+        Special handler for continuing a stream after a client-side tool execution.
+        """
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 1. Save tool result to DB
+        tool_msg = {
+            "role": "tool",
+            "content": result,
+            "tool_name": tool_name,
+            "tool_call_id": tool_call_id,
+        }
+        ChatService._save_message_to_db(db, user_id, conversation_id, tool_msg)
+
+        # 2. Re-setup context
+        last_user_msg = (
+            db.query(ModelChatMessage)
+            .filter(
+                ModelChatMessage.conversation_id == conversation_id,
+                ModelChatMessage.role == "user",
+            )
+            .order_by(ModelChatMessage.id.desc())
+            .first()
+        )
+        effective_query = (
+            last_user_msg.content if last_user_msg else "Continuing tool processing"
+        )
+        gender = user.gender
+        xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
+        current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
+
+        model_name, tools, level_think = ChatService._select_model(
+            effective_query, None, conversation_id, db
+        )
+        system_prompt = ChatService._build_system_prompt(
+            xung_ho, current_time, False, voice_enabled
+        )
+
+        # 3. Resume streaming
+        return await ChatService._generate_stream_response(
+            system_prompt=system_prompt,
+            full_prompt=effective_query,
+            model_name=model_name,
+            tools=tools,
+            file=None,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            effective_query=effective_query,
+            level_think=level_think,
+            db=db,
+            voice_enabled=voice_enabled,
+            voice_id=voice_id,
+        )
+
+    @staticmethod
+    def _save_message_to_db(
+        db: Session,
+        user_id: int,
+        conversation_id: int,
+        msg: Dict[str, Any],
+        embedding: Optional[List[float]] = None,
+    ):
+        """Helper to save a message to DB"""
+        try:
+            from app.services.embedding_service import EmbeddingService
+
+            content = msg.get("content", "")
+            role = msg.get("role", "assistant")
+            tool_name = msg.get("tool_name") or msg.get("name")
+            tool_call_id = msg.get("tool_call_id")
+            tool_calls = msg.get("tool_calls")
+
+            emb_json = None
+            if embedding:
+                emb_json = json.dumps(embedding)
+            elif role in ["user", "assistant"] and content and len(content) > 10:
+                try:
+                    from app.services.embedding_service import EmbeddingService
+
+                    emb = EmbeddingService.get_embedding(content)
+                    emb_json = json.dumps(emb.tolist())
+                except:
+                    pass
+
+            db_msg = ModelChatMessage(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                content=str(content),
+                role=role,
+                embedding=emb_json,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                tool_calls=json.dumps(tool_calls) if tool_calls else None,
+            )
+            db.add(db_msg)
+            db.commit()
+            return db_msg
+        except Exception as e:
+            logger.error(f"Error saving message to DB: {e}")
+            db.rollback()
+            return None

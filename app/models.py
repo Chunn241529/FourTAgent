@@ -42,8 +42,11 @@ class ChatMessage(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     content = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=func.now())  # SỬA: Dùng func.now()
+    timestamp = Column(DateTime, default=func.now())
     embedding = Column(JSON)
+    tool_name = Column(String, nullable=True)
+    tool_call_id = Column(String, nullable=True)
+    tool_calls = Column(JSON, nullable=True)  # Store assistant's tool calls
 
 
 class MessageFeedback(Base):

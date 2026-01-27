@@ -169,16 +169,28 @@ def generate_title(
     if conversation.title:
         return {"title": conversation.title}
 
+    # DEBUG: Check total messages first
+    total_msg_count = (
+        db.query(ModelChatMessage)
+        .filter(ModelChatMessage.conversation_id == conversation_id)
+        .count()
+    )
+    print(
+        f"DEBUG: conversation_id={conversation_id}, total_messages_in_db={total_msg_count}"
+    )
+
     # Get first message (user's initial prompt)
     messages = (
         db.query(ModelChatMessage)
         .filter(ModelChatMessage.conversation_id == conversation_id)
         .order_by(ModelChatMessage.timestamp.asc())
-        .limit(1)
+        .limit(5)
         .all()
     )
+    print(f"DEBUG: fetched {len(messages)} messages for context")
 
     if not messages:
+        print(f"DEBUG: No messages found for conversation {conversation_id}")
         return {"title": None, "reason": "No messages"}
 
     # Build context from messages
@@ -188,31 +200,23 @@ def generate_title(
     )
 
     try:
-        # Use Lumina:latest-S for fast title generation
-        print("DEBUG: Calling Ollama 4T-Evaluate...")
-        response = ollama.chat(
-            model="Lumina-small:latest",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""Tạo tiêu đề ngắn gọn (tối đa 6 từ) cho cuộc hội thoại này. Chỉ trả về tiêu đề, không giải thích, không ký tự đặc biệt.
-                    Rules: 
-                    - Cuộc hội thoại không nên có đại từ nhân xưng.
-                    - Không sử dụng các từ như "tôi", "bạn", "chúng tôi", "chúng ta", "họ", "nó", "của tôi", "của bạn", "của chúng tôi", "của chúng ta", "của họ", "của nó", "của tôi", "của bạn", "của chúng tôi", "của chúng ta", "của họ", "của nó". 
-              
-                    Cuộc hội thoại:
-                    {context}
+        # Use ChatService helper
+        try:
+            from app.services.chat_service import ChatService
 
-                    Tiêu đề:""",
-                }
-            ],
-            options={"num_predict": 30},
-        )
+            title = ChatService.generate_title_suggestion(
+                context, model_name="Lumina-small"
+            )
+        except ImportError:
+            # Fallback if circular import (though using inline import avoids it usually)
+            print("DEBUG: Import ChatService failed inside generate_title")
+            title = None
 
-        title = response["message"]["content"].strip().strip('"')
-        print(f"DEBUG: Generated title: '{title}'")
-        # Clean up title (remove quotes, etc)
-        # title = title.strip("\"'").strip() # This line was replaced by the previous one
+        print(f"DEBUG: Generated title raw: '{title}'")
+
+        if not title:
+            print("DEBUG: WARNING - Generated title is empty!")
+            return {"title": None, "reason": "Empty generated title"}
 
         # Limit length
         if len(title) > 50:

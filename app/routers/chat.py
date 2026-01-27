@@ -21,7 +21,7 @@ from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["chat"])
 
 
 async def queued_chat_stream(
@@ -121,6 +121,82 @@ async def chat(
         ),
         media_type="text/event-stream",
     )
+
+
+@router.post("/tool_result", response_class=StreamingResponse)
+async def tool_result(
+    tool_name: str = Body(..., embed=True),
+    result: str = Body(..., embed=True),
+    tool_call_id: Optional[str] = Body(None, embed=True),
+    conversation_id: int = Body(..., embed=True),
+    voice_enabled: bool = Body(False),
+    voice_id: Optional[str] = Body(None),
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Endpoint to receive results from client-side tool execution.
+    Resumes the chat stream with the provided result.
+    """
+    logger.info(
+        f"Received tool result for {tool_name} in conversation {conversation_id}"
+    )
+
+    # Wrap in queued stream
+    return StreamingResponse(
+        queued_tool_result_stream(
+            tool_name=tool_name,
+            result=result,
+            tool_call_id=tool_call_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            db=db,
+            voice_enabled=voice_enabled,
+            voice_id=voice_id,
+        ),
+        media_type="text/event-stream",
+    )
+
+
+async def queued_tool_result_stream(
+    tool_name: str,
+    result: str,
+    tool_call_id: Optional[str],
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+    voice_enabled: bool = False,
+    voice_id: Optional[str] = None,
+):
+    """Queue wrapper for tool result processing"""
+    try:
+        acquired = await asyncio.wait_for(
+            queue_service._semaphore.acquire(), timeout=queue_service.queue_timeout
+        )
+    except asyncio.TimeoutError:
+        yield f"data: {json.dumps({'error': 'Server đang bận, vui lòng thử lại sau.'}, separators=(',', ':'))}\n\n"
+        yield f"data: [DONE]\n\n"
+        return
+
+    try:
+        # Call the chat service specialized for tool results
+        response = await ChatService.handle_client_tool_result(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+            result=result,
+            tool_call_id=tool_call_id,
+            db=db,
+            voice_enabled=voice_enabled,
+            voice_id=voice_id,
+        )
+
+        # Stream the response
+        async for chunk in response.body_iterator:
+            yield chunk
+
+    finally:
+        queue_service._semaphore.release()
 
 
 @router.get("/queue-stats")

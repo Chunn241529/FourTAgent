@@ -32,6 +32,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _MenuItem(icon: Icons.settings_outlined, label: 'Tổng quát'),
     _MenuItem(icon: Icons.storage_outlined, label: 'Quản lý dữ liệu'),
     _MenuItem(icon: Icons.notifications_outlined, label: 'Thông báo'),
+    _MenuItem(icon: Icons.security_outlined, label: 'Quyền hạn'),
     _MenuItem(icon: Icons.person_outline, label: 'Tài khoản'),
   ];
 
@@ -150,6 +151,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
       case 2:
         return _buildNotificationsSection(theme, isDark);
       case 3:
+        return _buildPermissionsSection(theme, isDark);
+      case 4:
         return _buildAccountSection(theme, isDark);
       default:
         return const SizedBox();
@@ -248,6 +251,29 @@ class _SettingsDialogState extends State<SettingsDialog> {
           subtitle: 'Rung khi có thông báo',
           value: settings.vibration,
           onChanged: settings.setVibration,
+        ),
+      ],
+    );
+  }
+
+  // ===== PERMISSIONS SECTION =====
+  Widget _buildPermissionsSection(ThemeData theme, bool isDark) {
+    final settings = context.watch<SettingsProvider>();
+    
+    return Column(
+      children: [
+        _SettingsSwitch(
+          title: 'Truy cập tệp tin',
+          subtitle: 'Cho phép AI tìm kiếm và đọc file cục bộ',
+          value: settings.permissionFileAccess,
+          onChanged: settings.setPermissionFileAccess,
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Lưu ý: Ngay cả khi đã bật, AI vẫn sẽ hỏi ý kiến bạn trước khi thực hiện hành động đọc tệp lần đầu tiên.',
+            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+          ),
         ),
       ],
     );
@@ -825,6 +851,9 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
                 final isCurrent = id == currentId || device['is_current'] == true;
                 final name = device['device_name'] ?? device['device_info']?['hostname'] ?? 'Thiết bị';
                 
+                final idStr = id.toString();
+                final displayId = idStr.length > 8 ? '${idStr.substring(0, 8)}...' : idStr;
+
                 return ListTile(
                   leading: Icon(
                     isCurrent ? Icons.phone_android : Icons.devices_other,
@@ -834,7 +863,7 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
                     name,
                     style: isCurrent ? const TextStyle(fontWeight: FontWeight.bold) : null,
                   ),
-                  subtitle: Text('ID: ${id.toString().substring(0, 8)}...'),
+                  subtitle: Text('ID: $displayId'),
                   trailing: isCurrent 
                       ? const Text('Hiện tại', style: TextStyle(fontSize: 12)) 
                       : IconButton(

@@ -7,7 +7,11 @@ import ollama
 
 # NOTE: We don't import web_search/web_fetch from ollama anymore
 # Using our own custom implementations (safe_web_search, safe_web_fetch) instead
+# Using our own custom implementations (safe_web_search, safe_web_fetch) instead
 from app.services.music_service import music_service
+import os
+import glob
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +187,119 @@ def safe_web_fetch(url: str) -> str:
     return fallback_web_fetch(url)
 
 
+def read_file_server(path: str) -> str:
+    """
+    Read content of a local file.
+    """
+    try:
+        # Normalize path
+        user_home = os.path.expanduser("~")
+        if path.startswith("~/"):
+            path = path.replace("~/", f"{user_home}/")
+
+        # Security check: prevent directory traversal issues if needed,
+        # but for local tool we assume trusted user.
+
+        if not os.path.exists(path):
+            return f"Error: File not found at {path}"
+
+        if not os.path.isfile(path):
+            return f"Error: Path {path} is not a file"
+
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        return content
+    except Exception as e:
+        logger.error(f"Error reading file {path}: {e}")
+        return f"Error reading file: {str(e)}"
+
+
+def search_file_server(query: str, directory: str = None) -> str:
+    """
+    Search for files matching query (glob pattern or name substring).
+    """
+    try:
+        user_home = os.path.expanduser("~")
+        search_roots = [
+            os.path.join(user_home, "Documents"),
+            os.path.join(user_home, "Downloads"),
+            os.path.join(user_home, "Desktop"),
+        ]
+
+        if directory:
+            if directory.startswith("~/"):
+                directory = directory.replace("~/", f"{user_home}/")
+            search_roots = [directory]
+
+        results = []
+
+        # Simple glob if query contains wildcard
+        pattern = query if "*" in query else f"*{query}*"
+
+        for root in search_roots:
+            if not os.path.exists(root):
+                continue
+
+            # Use os.walk for recursive search
+            for dirpath, dirnames, filenames in os.walk(root):
+                # Check filenames
+                for filename in filenames:
+                    if (
+                        query.lower() in filename.lower()
+                    ):  # Simple substring match case-insensitive
+                        results.append(os.path.join(dirpath, filename))
+                    elif Path(filename).match(query):  # Glob match
+                        results.append(os.path.join(dirpath, filename))
+
+                if len(results) > 20:  # Limit results
+                    break
+
+            if len(results) > 20:
+                break
+
+        if not results:
+            return "No files found matching the query."
+
+        return json.dumps(
+            {"files": results[:20]}, ensure_ascii=False
+        )  # Return proper JSON list
+
+    except Exception as e:
+        logger.error(f"Error searching file {query}: {e}")
+        return f"Error searching files: {str(e)}"
+
+
+def create_file_server(path: str, content: str) -> str:
+    """
+    Create a file with content.
+    """
+    try:
+        user_home = os.path.expanduser("~")
+
+        # Determine path
+        target_path = path
+        if "/" not in path:
+            # Default to Downloads if no path specified
+            target_path = os.path.join(user_home, "Downloads", path)
+        elif path.startswith("~/"):
+            target_path = path.replace("~/", f"{user_home}/")
+
+        # Ensure dir exists
+        directory = os.path.dirname(target_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return f"Success: File created at {target_path}"
+
+    except Exception as e:
+        logger.error(f"Error creating file {path}: {e}")
+        return f"Error creating file: {str(e)}"
+
+
 class ToolService:
     def __init__(self, max_workers: int = 4):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -192,6 +309,9 @@ class ToolService:
             "search_music": music_service.search_music,
             "play_music": music_service.play_music,
             "stop_music": music_service.stop_music,
+            "read_file": read_file_server,
+            "search_file": search_file_server,
+            "create_file": create_file_server,
         }
 
     def get_tools(self) -> List[Any]:
@@ -277,6 +397,61 @@ class ToolService:
                         "type": "object",
                         "properties": {},
                         "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read the content of a local file. REQUIRED after 'search_file' if you need to see the file's actual content to summarize or explain it. Returns the full text content.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "The full path to the file (obtained from search results or user input)",
+                            }
+                        },
+                        "required": ["path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_file",
+                    "description": "Search for files by name/pattern on the Server (Linux). Returns a list of matching file paths.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Filename or pattern (e.g., 'budget.xlsx', 'report', '*.py')",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_file",
+                    "description": "Create a file on the server. Defaults to 'Downloads' folder if only a filename is given. If specific path is needed, provide full path.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Filename (e.g. 'hello.txt' -> Downloads/hello.txt) or Full Path.",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The text content to write.",
+                            },
+                        },
+                        "required": ["path", "content"],
                     },
                 },
             },

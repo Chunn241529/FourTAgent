@@ -36,6 +36,10 @@ class SettingsProvider extends ChangeNotifier {
   bool _improveModel = true;
   bool get improveModel => _improveModel;
 
+  // Permissions
+  bool _permissionFileAccess = false;
+  bool get permissionFileAccess => _permissionFileAccess;
+
   SettingsProvider() {
     _loadSettings();
   }
@@ -54,7 +58,15 @@ class SettingsProvider extends ChangeNotifier {
     _soundNotifications = prefs.getBool('soundNotifications') ?? true;
     _vibration = prefs.getBool('vibration') ?? true;
     _improveModel = prefs.getBool('improveModel') ?? true;
+    _permissionFileAccess = prefs.getBool('permissionFileAccess') ?? false;
     
+    notifyListeners();
+  }
+
+  Future<void> setPermissionFileAccess(bool enabled) async {
+    _permissionFileAccess = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('permissionFileAccess', enabled);
     notifyListeners();
   }
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Widget to show active and completed deep search steps
+/// Premium widget to show Deep Search progress timeline
 class DeepSearchIndicator extends StatefulWidget {
   final List<String> activeSteps;
   final List<String> completedSteps;
@@ -18,18 +18,14 @@ class DeepSearchIndicator extends StatefulWidget {
 class _DeepSearchIndicatorState extends State<DeepSearchIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _shimmerAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
-    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
   }
 
   @override
@@ -40,113 +36,82 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final hasSteps = widget.activeSteps.isNotEmpty || widget.completedSteps.isNotEmpty;
-    if (!hasSteps) return const SizedBox.shrink();
+    // Current statuses from DeepSearchService:
+    // planning, searching, reflecting, synthesizing
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final updates = [...widget.completedSteps, ...widget.activeSteps];
+    if (updates.isEmpty) return const SizedBox.shrink();
 
-    // Compact Mode: Only show the "latest/active" status.
-    // If there are active steps, show the last active one.
-    // If no active steps but completed ones, show "Search Complete" or the last completed one?
-    // Actually, usually we show the current activity.
+    final lastStatus = updates.last.toLowerCase();
     
-    String? currentStatus;
-    bool isActive = false;
-    
-    if (widget.activeSteps.isNotEmpty) {
-      currentStatus = widget.activeSteps.last;
-      isActive = true;
-    } else if (widget.completedSteps.isNotEmpty) {
-      // Don't show anything if all done? Or show a checkmark?
-      // User said "loại bỏ những widget thừa thải". If it's done, maybe we hide it 
-      // because the content is generating?
-      // But let's keep a small "Research Complete" or just hide it.
-      // Let's assume we want to know what's happening.
-       return const SizedBox.shrink();
+    int currentStage = 0;
+    if (lastStatus.contains('planning') || lastStatus.contains('chiến lược')) {
+      currentStage = 0;
+    } else if (lastStatus.contains('searching') || lastStatus.contains('tìm kiếm') || lastStatus.contains('researching')) {
+      currentStage = 1;
+    } else if (lastStatus.contains('reflecting') || lastStatus.contains('analyzing') || lastStatus.contains('kiểm chứng') || lastStatus.contains('chi tiết')) {
+      currentStage = 2;
+    } else if (lastStatus.contains('synthesizing') || lastStatus.contains('tổng hợp')) {
+      currentStage = 3;
+    } else if (lastStatus.contains('done')) {
+      currentStage = 4;
     }
-    
-    if (currentStatus == null) return const SizedBox.shrink();
 
-    return AnimatedBuilder(
-      animation: _shimmerAnimation,
-      builder: (context, child) => _buildStepItem(
-        theme: theme,
-        isDark: isDark,
-        text: currentStatus!,
-        isActive: isActive,
-        shimmerValue: _shimmerAnimation.value,
-      ),
-    );
-  }
+    // If fully done, we might want to hide or show "Research Complete"
+    if (currentStage == 4 && widget.activeSteps.isEmpty) {
+       return _buildCompletedHeader(context);
+    }
 
-  Widget _buildStepItem({
-    required ThemeData theme,
-    required bool isDark,
-    required String text,
-    required bool isActive,
-    double shimmerValue = 0,
-  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: isActive
-            ? LinearGradient(
-                begin: Alignment(shimmerValue - 1, 0),
-                end: Alignment(shimmerValue, 0),
-                colors: [
-                  isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
-                  isDark ? const Color(0xFF3A3A3A) : const Color(0xFFE8E8E8),
-                  isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
-                ],
-                stops: const [0.0, 0.5, 1.0],
-              )
-            : null,
-        color: isActive ? null : (isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5)),
-        borderRadius: BorderRadius.circular(8),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isActive
-              ? theme.colorScheme.secondary.withOpacity(0.4) // Use secondary color for Deep Search
-              : theme.colorScheme.onSurface.withOpacity(0.15),
-          width: 1,
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (isActive) ...[
-            SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.secondary),
+          Row(
+            children: [
+              Icon(
+                Icons.biotech_outlined,
+                size: 20,
+                color: Theme.of(context).colorScheme.secondary,
               ),
-            ),
-          ] else ...[
-            Icon(
-              Icons.check_circle,
-              size: 14,
-              color: Colors.green.shade600,
-            ),
-          ],
-          const SizedBox(width: 6),
-          Icon(
-            Icons.psychology, // Brain icon for Deep Search
-            size: 13,
-            color: theme.colorScheme.secondary.withOpacity(0.8),
+              const SizedBox(width: 8),
+              Text(
+                'Deep Research',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const Spacer(),
+              if (widget.activeSteps.isNotEmpty)
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).colorScheme.secondary.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              _truncateText(text),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.75),
-                fontSize: 12,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          const SizedBox(height: 20),
+          _buildTimeline(context, currentStage),
+          const SizedBox(height: 12),
+          Text(
+            updates.last,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -154,9 +119,121 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator>
     );
   }
 
-  String _truncateText(String text) {
-    // Remove "status" prefixes if present for cleaner UI
-    // e.g. "Starting Deep Search for: ..." -> "Starting Deep Search..."
-    return text.length > 60 ? '${text.substring(0, 60)}...' : text;
+  Widget _buildCompletedHeader(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle, size: 14, color: Colors.green),
+          const SizedBox(width: 6),
+          Text(
+            'Nghiên cứu hoàn tất',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.green.shade700,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeline(BuildContext context, int currentStage) {
+    return Row(
+      children: [
+        _buildNode(context, 0, Icons.lightbulb_outline, 'Chiến lược', currentStage),
+        _buildConnector(context, 0, currentStage),
+        _buildNode(context, 1, Icons.travel_explore, 'Tìm kiếm', currentStage),
+        _buildConnector(context, 1, currentStage),
+        _buildNode(context, 2, Icons.fact_check_outlined, 'Kiểm chứng', currentStage),
+        _buildConnector(context, 2, currentStage),
+        _buildNode(context, 3, Icons.auto_stories_outlined, 'Tổng hợp', currentStage),
+      ],
+    );
+  }
+
+  Widget _buildNode(BuildContext context, int stage, IconData icon, String label, int currentStage) {
+    bool isCompleted = currentStage > stage;
+    bool isActive = currentStage == stage;
+    final theme = Theme.of(context);
+
+    return Expanded(
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isCompleted
+                  ? theme.colorScheme.secondary
+                  : isActive
+                      ? theme.colorScheme.secondaryContainer
+                      : theme.colorScheme.surface,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isActive || isCompleted
+                    ? theme.colorScheme.secondary
+                    : theme.colorScheme.outline.withOpacity(0.2),
+                width: 2,
+              ),
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: theme.colorScheme.secondary.withOpacity(0.3),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      )
+                    ]
+                  : null,
+            ),
+            child: Icon(
+              isCompleted ? Icons.check : icon,
+              size: 18,
+              color: isCompleted
+                  ? theme.colorScheme.onSecondary
+                  : isActive
+                      ? theme.colorScheme.secondary
+                      : theme.colorScheme.onSurface.withOpacity(0.3),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 10,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              color: isActive || isCompleted
+                  ? theme.colorScheme.onSurface
+                  : theme.colorScheme.onSurface.withOpacity(0.4),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnector(BuildContext context, int stage, int currentStage) {
+    bool isCompleted = currentStage > stage;
+    bool isActive = currentStage == stage;
+    final theme = Theme.of(context);
+
+    return Container(
+      width: 20,
+      height: 2,
+      margin: const EdgeInsets.only(bottom: 16), // Align with nodes
+      color: isCompleted
+          ? theme.colorScheme.secondary
+          : theme.colorScheme.outline.withOpacity(0.2),
+    );
   }
 }

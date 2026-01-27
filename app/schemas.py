@@ -95,6 +95,9 @@ class ChatMessage(BaseModel):
     timestamp: datetime
     embedding: Optional[Union[list, dict]]
     feedback: Optional[str] = None  # "like", "dislike", or None
+    tool_name: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    tool_calls: Optional[Union[list, dict, str]] = None  # Can be list, dict or json str
 
     class Config:
         from_attributes = True

@@ -1,0 +1,217 @@
+  Future<void> _processStream(
+    Stream<String> stream, 
+    Completer<void> completer,
+    {void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay}
+  ) async {
+    String fullResponse = '';
+    
+    // If the last message is assistant and already has content, start with that
+    // (Crucial for Resuming tool result streams)
+    if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+       fullResponse = _messages.last.content;
+    }
+    
+    String fullThinking = (_messages.isNotEmpty && _messages.last.role == 'assistant') 
+        ? (_messages.last.thinking ?? '') 
+        : '';
+        
+    DateTime lastUpdate = DateTime.now();
+
+    _streamSubscription = stream.listen(
+      (chunk) {
+        final line = chunk.trim();
+        if (line.isEmpty) return;
+        
+        bool shouldNotify = false;
+        String? jsonStr;
+        if (line.startsWith('data: ')) {
+           jsonStr = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+           jsonStr = line.substring(5).trim();
+        }
+
+        if (jsonStr != null) {
+          if (jsonStr == '[DONE]') {
+            print('>>> Stream [DONE] received');
+            return;
+          }
+
+          try {
+            final data = _parseJson(jsonStr);
+            if (data == null) return;
+
+            // Handle message_saved
+            if (data['message_saved'] != null) {
+              final messageId = data['message_saved']['id'] as int?;
+              if (messageId != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
+                  _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
+                  shouldNotify = true;
+                }
+              }
+            }
+
+            // Handle client_tool_call
+            if (data['client_tool_call'] != null) {
+              final toolCall = data['client_tool_call'];
+              _pendingClientTool = toolCall;
+              _isStreaming = false;
+              _streamSubscription?.cancel();
+              _streamSubscription = null;
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(isStreaming: false);
+              }
+              notifyListeners();
+              if (!completer.isCompleted) completer.complete();
+              return;
+            }
+
+            // Handle tool_calls
+            if (data['tool_calls'] != null) {
+              final toolCalls = data['tool_calls'] as List;
+              for (final tc in toolCalls) {
+                if (tc['function']!= null && tc['function']['name'] == 'web_search') {
+                  final args = tc['function']['arguments'];
+                  String? query;
+                  if (args is Map) query = args['query'] as String?;
+                  else if (args is String) {
+                    try { final parsed = _parseJson(args); query = parsed?['query'] as String?; } catch (_) {}
+                  }
+                  if (query != null) {
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0) {
+                      final currentSearches = List<String>.from(_messages[lastIndex].activeSearches);
+                      if (!currentSearches.contains(query) && !_messages[lastIndex].completedSearches.contains(query)) {
+                        currentSearches.add(query);
+                        if (fullThinking.isNotEmpty) fullThinking += '\n\n> 🔍 Đang tìm kiếm: $query...\n\n';
+                        else fullResponse += '\n\n[[SEARCH:$query]]\n\n';
+                        _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentSearches, content: fullResponse, thinking: fullThinking);
+                        shouldNotify = true;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Handle search_complete
+            if (data['search_complete'] != null) {
+              final query = data['search_complete']['query'] as String?;
+              if (query != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
+                  final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                  if (currentActive.contains(query)) {
+                    currentActive.remove(query);
+                    if (!currentCompleted.contains(query)) currentCompleted.add(query);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive, completedSearches: currentCompleted);
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
+            
+            // Handle deep_search_update
+            if (data['deep_search_update'] != null) {
+               final message = data['deep_search_update']['message'] as String?;
+               if (message != null) {
+                 final lastIndex = _messages.length - 1;
+                 if (lastIndex >= 0) {
+                    final currentUpdates = List<String>.from(_messages[lastIndex].deepSearchUpdates);
+                    if (currentUpdates.isEmpty || currentUpdates.last != message) {
+                       currentUpdates.add(message);
+                       _messages[lastIndex] = _messages[lastIndex].copyWith(deepSearchUpdates: currentUpdates);
+                       shouldNotify = true;
+                    }
+                 }
+               }
+            }
+
+            // Handle plan
+            if (data['plan'] != null) {
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(plan: data['plan'] as String);
+                shouldNotify = true;
+              }
+            }
+
+            // Handle music_play
+            if (data['music_play'] != null) {
+              final musicData = data['music_play'];
+              if (musicData['url'] != null && onMusicPlay != null) {
+                onMusicPlay(musicData['url'], musicData['title'] ?? 'Music', musicData['thumbnail'], musicData['duration']);
+              }
+            }
+
+            // Handle thinking
+            if (data['thinking'] != null) {
+              fullThinking += data['thinking'] as String;
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                shouldNotify = true;
+              }
+            }
+
+            // Handle message content
+            if (data['message'] != null) {
+              final contentDelta = data['message']['content'] as String? ?? '';
+              final thinkingDelta = data['message']['thinking'] as String? ?? '';
+              if (contentDelta.isNotEmpty) fullResponse += contentDelta;
+              if (thinkingDelta.isNotEmpty) fullThinking += thinkingDelta;
+              
+              final now = DateTime.now();
+              if (now.difference(lastUpdate).inMilliseconds > 100) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                   _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse, thinking: fullThinking.isNotEmpty ? fullThinking : null);
+                   lastUpdate = now;
+                   shouldNotify = true;
+                }
+              }
+            }
+            
+            if (data['error'] != null) {
+              fullResponse += '\n\nError: ${data['error']}';
+              shouldNotify = true;
+            }
+
+            // Handle voice_audio
+            if (data.containsKey('voice_audio')) {
+              final voiceData = data['voice_audio'] as Map<String, dynamic>;
+              _voiceAudioChunks.add(voiceData);
+              shouldNotify = true;
+              final audioBase64 = voiceData['audio'] as String?;
+              if (audioBase64 != null) {
+                _queueAudioChunk(audioBase64, voiceData['sentence'] as String?);
+              }
+            }
+          } catch (e) { print('JSON parse error: $e'); }
+        }
+        if (shouldNotify) notifyListeners();
+      },
+      onError: (e) {
+        _error = e.toString();
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+          _messages[lastIndex] = _messages[lastIndex].copyWith(content: 'Error: ${e.toString()}', isStreaming: false);
+        }
+        notifyListeners();
+        if (!completer.isCompleted) completer.complete();
+      },
+      onDone: () async {
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse.isEmpty ? '...' : fullResponse, isStreaming: false);
+        }
+        notifyListeners();
+        _maybeGenerateTitle();
+        if (!completer.isCompleted) completer.complete();
+      },
+      cancelOnError: true,
+    );
+  }

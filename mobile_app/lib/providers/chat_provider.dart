@@ -14,6 +14,7 @@ import '../models/message.dart';
 import '../services/chat_service.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
+import '../services/file_tool_service.dart';
 
 /// Chat state provider
 class ChatProvider extends ChangeNotifier {
@@ -61,6 +62,16 @@ class ChatProvider extends ChangeNotifier {
   bool get isMicEnabled => _isMicEnabled; // UI visual state (can be same as recording)
   bool get isRecording => _isRecording;
   List<String> get availableVoices => _availableVoices;
+  
+  // Client tool call state
+  Map<String, dynamic>? _pendingClientTool;
+  Map<String, dynamic>? get pendingClientTool => _pendingClientTool;
+
+  /// Clear pending tool
+  void clearPendingTool() {
+    _pendingClientTool = null;
+    notifyListeners();
+  }
 
   /// Set the music play callback for voice mode
   void setMusicPlayCallback(void Function(String url, String title, String? thumbnail, int? duration)? callback) {
@@ -343,7 +354,14 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _messages = await ChatService.getMessages(conversation.id);
+      final allMessages = await ChatService.getMessages(conversation.id);
+      
+      // Filter out tool execution results and system messages from UI
+      _messages = allMessages.where((m) => m.role != 'tool' && m.role != 'system').toList();
+      
+      // Enrich messages with tool call markers for UI
+      _enrichMessagesWithToolMarkers();
+
       // Derive title from first user message if not set
       if (conversation.title == null && _messages.isNotEmpty) {
         final firstUserMsg = _messages.firstWhere(
@@ -359,6 +377,84 @@ class ChatProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Enrich messages with tool markers from toolCalls data (for history loading)
+  void _enrichMessagesWithToolMarkers() {
+    for (int i = 0; i < _messages.length; i++) {
+        final msg = _messages[i];
+        if (msg.role == 'assistant' && msg.toolCalls != null) {
+           String thinking = msg.thinking ?? '';
+           List<String> activeSearches = [];
+           List<String> completedSearches = [];
+           List<String> completedFileActions = [];
+           
+           // We need to append markers to 'thinking' if they are missing
+           // But how do we know if they are missing?
+           // The persisted 'thinking' might be raw text.
+           // We'll append them at the end if not present?
+           // Or better, we can reconstruct valid UI state.
+           
+           try {
+             List<dynamic> calls = [];
+             if (msg.toolCalls is String) {
+                calls = jsonDecode(msg.toolCalls);
+             } else if (msg.toolCalls is List) {
+                calls = msg.toolCalls;
+             }
+             
+             for (final call in calls) {
+                if (call['function'] != null) {
+                   final name = call['function']['name'];
+                   final argsStr = call['function']['arguments'];
+                   Map<String, dynamic> args = {};
+                   if (argsStr is String) {
+                      try { args = jsonDecode(argsStr); } catch (_) {}
+                   } else if (argsStr is Map) {
+                      args = argsStr as Map<String, dynamic>;
+                   }
+                   
+                   String marker = '';
+                   
+                   if (name == 'web_search') {
+                      final query = args['query'] as String?;
+                      if (query != null) {
+                         marker = '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
+                         completedSearches.add(query);
+                      }
+                   } else if (['read_file', 'create_file', 'search_file'].contains(name)) {
+                      String action = '';
+                      if (name == 'read_file') action = 'READ';
+                      if (name == 'create_file') action = 'CREATE';
+                      if (name == 'search_file') action = 'SEARCH_FILE';
+                      
+                      final path = args['path'] as String?;
+                      final query = args['query'] as String?;
+                      final target = path ?? query;
+                      
+                      if (target != null) {
+                         marker = '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
+                         completedFileActions.add('$action:$target');
+                      }
+                   }
+                   
+                   // Only append if not already in text (simple heuristic)
+                   if (marker.isNotEmpty && !thinking.contains(marker.trim())) {
+                      thinking += marker;
+                   }
+                }
+             }
+             
+             _messages[i] = msg.copyWith(
+                thinking: thinking,
+                completedSearches: completedSearches,
+                completedFileActions: completedFileActions,
+             );
+           } catch (e) {
+             print('Error enriching message tool markers: $e');
+           }
+        }
     }
   }
 
@@ -445,290 +541,290 @@ class ChatProvider extends ChangeNotifier {
       );
 
       final completer = Completer<void>();
+      _processStream(stream, completer, onMusicPlay: onMusicPlay);
+      await completer.future;
 
+    } catch (e) {
+      _error = e.toString();
+      final lastIndex = _messages.length - 1;
+      _messages[lastIndex] = _messages[lastIndex].copyWith(
+        content: 'Error: ${e.toString()}',
+        isStreaming: false,
+      );
+    } finally {
+      _isStreaming = false;
+      _streamSubscription = null;
+      notifyListeners();
+    }
+  }
+
+  /// Unified stream processor
+  Future<void> _processStream(
+    Stream<String> stream, 
+    Completer<void> completer,
+    {void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay}
+  ) async {
+    String fullResponse = '';
+    
+    // If the last message is assistant and already has content, start with that
+    // (Crucial for Resuming tool result streams)
+    if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+       fullResponse = _messages.last.content;
+    }
+    
+    String fullThinking = (_messages.isNotEmpty && _messages.last.role == 'assistant') 
+        ? (_messages.last.thinking ?? '') 
+        : '';
+        
+    DateTime lastUpdate = DateTime.now();
+
+    try {
       _streamSubscription = stream.listen(
-        (chunk) {
-          // Each chunk is now a complete SSE line (thanks to LineSplitter in api_service)
-          final line = chunk.trim();
-          if (line.isEmpty) return;
-          
-          bool shouldNotify = false;
+      (chunk) {
+        final line = chunk.trim();
+        if (line.isEmpty) return;
+        
+        bool shouldNotify = false;
+        String? jsonStr;
+        if (line.startsWith('data: ')) {
+           jsonStr = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+           jsonStr = line.substring(5).trim();
+        }
 
-          String? jsonStr;
-          if (line.startsWith('data: ')) {
-             jsonStr = line.substring(6).trim();
-          } else if (line.startsWith('data:')) {
-             jsonStr = line.substring(5).trim();
+        if (jsonStr != null) {
+          if (jsonStr == '[DONE]') {
+            print('>>> Stream [DONE] received');
+            return;
           }
 
-            if (jsonStr != null) {
-              if (jsonStr == '[DONE]') {
-                print('>>> Stream [DONE] received');
-                return;
-              }
+          try {
+            final data = _parseJson(jsonStr);
+            if (data == null) return;
 
-              // Debug: log every data chunk
-              print('>>> Chunk: $jsonStr');
-
-              try {
-                final data = _parseJson(jsonStr);
-                if (data == null) return;
-
-                // Handle message_saved event to get the message ID
-                if (data['message_saved'] != null) {
-                  final messageId = data['message_saved']['id'] as int?;
-                  print('>>> message_saved found! ID: $messageId');
-                  if (messageId != null) {
-                    final lastIndex = _messages.length - 1;
-                    if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
-                      _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
-                      shouldNotify = true;
-                      print('>>> Message ID applied: $messageId');
-                      
-                      // Now that message is saved in DB, trigger auto-naming
-                      _maybeGenerateTitle();
-                    }
-                  }
+            // Handle message_saved
+            if (data['message_saved'] != null) {
+              final messageId = data['message_saved']['id'] as int?;
+              if (messageId != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
+                  _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
+                  shouldNotify = true;
                 }
+              }
+            }
 
-                // Handle tool_calls event - add search to active searches
-                if (data['tool_calls'] != null) {
-                  final toolCalls = data['tool_calls'] as List;
-                  for (final tc in toolCalls) {
-                    if (tc['function'] != null && tc['function']['name'] == 'web_search') {
-                      final args = tc['function']['arguments'];
-                      String? query;
-                      if (args is Map) {
-                        query = args['query'] as String?;
-                      } else if (args is String) {
-                        try {
-                          final parsed = _parseJson(args);
-                          query = parsed?['query'] as String?;
-                        } catch (_) {}
-                      }
+            // Handle client_tool_call
+            if (data['client_tool_call'] != null) {
+              final toolCall = data['client_tool_call'];
+              _pendingClientTool = toolCall;
+              _isStreaming = false;
+              _streamSubscription?.cancel();
+              _streamSubscription = null;
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(isStreaming: false);
+              }
+              notifyListeners();
+              if (!completer.isCompleted) completer.complete();
+              return;
+            }
+
+            // Handle tool_calls
+            if (data['tool_calls'] != null) {
+              final toolCalls = data['tool_calls'] as List;
+              for (final tc in toolCalls) {
+                if (tc['function'] != null) {
+                  final name = tc['function']['name'];
+                  final args = tc['function']['arguments'];
+                  String? pathOrQuery;
+                  
+                  // Safer generic args parsing
+                  Map<String, dynamic>? parsedArgs;
+                  if (args is Map) parsedArgs = args as Map<String, dynamic>;
+                  else if (args is String) {
+                    try { parsedArgs = _parseJson(args); } catch (_) {}
+                  }
+
+                  // Handle web_search
+                  if (name == 'web_search') {
+                      final query = parsedArgs?['query'] as String?;
                       if (query != null) {
                         final lastIndex = _messages.length - 1;
                         if (lastIndex >= 0) {
                           final currentSearches = List<String>.from(_messages[lastIndex].activeSearches);
-                          final currentCompleted = _messages[lastIndex].completedSearches;
-                          
-                          // Deduplicate: Don't add if already active OR already completed
-                          if (!currentSearches.contains(query) && !currentCompleted.contains(query)) {
-                            currentSearches.add(query!);
+                          if (!currentSearches.contains(query) && !_messages[lastIndex].completedSearches.contains(query)) {
+                            currentSearches.add(query);
+                            // Inject marker into THINKING, not content
+                            fullThinking += '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
                             
-                            // Append marker to content for interleaved display
-                            // We add double newlines to ensure it breaks from previous text
-                            final marker = '\n\n[[SEARCH:$query]]\n\n';
-                            fullResponse += marker; // CRITICAL: Update source of truth accumulator
-                            
-                            _messages[lastIndex] = _messages[lastIndex].copyWith(
-                              activeSearches: currentSearches,
-                              content: fullResponse, 
-                            );
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentSearches, thinking: fullThinking);
                             shouldNotify = true;
-                            print('>>> Search started: $query');
                           }
                         }
                       }
-                    }
-                  }
-                }
-
-                // Handle search_complete event - move to completed searches (keep visible)
-                if (data['search_complete'] != null) {
-                  final query = data['search_complete']['query'] as String?;
-                  if (query != null) {
-                    final lastIndex = _messages.length - 1;
-                    if (lastIndex >= 0) {
-                      final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
-                      final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                  } 
+                  // Handle File Tools (Server Side)
+                  else if (name == 'read_file' || name == 'create_file' || name == 'search_file') {
+                      final path = parsedArgs?['path'] as String?;
+                      final query = parsedArgs?['query'] as String?; // for search_file
+                      final target = path ?? query;
                       
-                      // Move from active to completed
-                      if (currentActive.contains(query)) {
-                        currentActive.remove(query);
-                        // Only add to completed if not already there
-                        if (!currentCompleted.contains(query)) {
-                          currentCompleted.add(query!);
-                        }
-                        
-                        _messages[lastIndex] = _messages[lastIndex].copyWith(
-                          activeSearches: currentActive,
-                          completedSearches: currentCompleted,
-                        );
-                        shouldNotify = true;
-                        print('>>> Search complete: $query');
+                      if (target != null) {
+                         String action = '';
+                         if (name == 'read_file') action = 'READ';
+                         if (name == 'create_file') action = 'CREATE';
+                         if (name == 'search_file') action = 'SEARCH_FILE';
+                         
+                         // Inject marker into THINKING
+                         fullThinking += '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
+                         
+                         final lastIndex = _messages.length - 1;
+                         if (lastIndex >= 0) {
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                            shouldNotify = true;
+                         }
                       }
-                    }
                   }
                 }
-            
-                // Handle deep_search_update event
-                if (data['deep_search_update'] != null) {
-                   final update = data['deep_search_update'];
-                   final message = update['message'] as String?;
-                   
-                   if (message != null) {
-                     final lastIndex = _messages.length - 1;
-                     if (lastIndex >= 0) {
-                        final currentUpdates = List<String>.from(_messages[lastIndex].deepSearchUpdates);
-                        // Avoid duplicates if possible, or just append log
-                        if (currentUpdates.isEmpty || currentUpdates.last != message) {
-                           currentUpdates.add(message);
-                           
-                           _messages[lastIndex] = _messages[lastIndex].copyWith(
-                             deepSearchUpdates: currentUpdates,
-                           );
-                           shouldNotify = true;
-                           print('>>> Deep Search Update: $message');
-                        }
-                     }
-                   }
-                }
-
-                // Handle plan event (for PlanIndicator widget)
-                if (data['plan'] != null) {
-                  final plan = data['plan'] as String;
-                  final lastIndex = _messages.length - 1;
-                  if (lastIndex >= 0) {
-                    _messages[lastIndex] = _messages[lastIndex].copyWith(plan: plan);
-                    shouldNotify = true;
-                    print('>>> Plan received: ${plan.length} chars');
-                  }
-                }
-
-                // Handle music_play event - trigger music player
-                if (data['music_play'] != null) {
-                  final musicData = data['music_play'];
-                  final url = musicData['url'] as String?;
-                  final title = musicData['title'] as String? ?? 'Music';
-                  final thumbnail = musicData['thumbnail'] as String?;
-                  final duration = musicData['duration'] as int?;
-                  
-                  if (url != null) {
-                    print('>>> Music play event received for: $title, url: $url');
-                    if (onMusicPlay != null) {
-                      onMusicPlay!(url, title, thumbnail, duration);
-                      print('>>> onMusicPlay callback executed');
-                    } else {
-                      print('>>> WARNING: onMusicPlay callback is NULL');
-                    }
-                  } else {
-                    print('>>> WARNING: Music URL is null');
-                  }
-                }
-
-                // Handle thinking event (top-level, from chat_service)
-                if (data['thinking'] != null) {
-                  final thinkingDelta = data['thinking'] as String;
-                  if (thinkingDelta.isNotEmpty) {
-                    fullThinking += thinkingDelta;
-                    final lastIndex = _messages.length - 1;
-                    if (lastIndex >= 0) {
-                      _messages[lastIndex] = _messages[lastIndex].copyWith(
-                        thinking: fullThinking,
-                      );
-                      shouldNotify = true;
-                    }
-                  }
-                }                if (data['message'] != null) {
-                  final contentDelta = data['message']['content'] as String? ?? '';
-                  final thinkingDelta = data['message']['thinking'] as String? ?? '';
-                  
-                  if (contentDelta.isNotEmpty) {
-                    fullResponse += contentDelta;
-                  }
-                  if (thinkingDelta.isNotEmpty) {
-                    fullThinking += thinkingDelta;
-                  }
-                  
-                  // Throttling: Update UI every 100ms max (increased from 50ms for better performance)
-                  // This reduces UI rebuilds while maintaining smooth visual updates
-                  if (contentDelta.isNotEmpty || thinkingDelta.isNotEmpty) {
-                    final now = DateTime.now();
-                    if (now.difference(lastUpdate).inMilliseconds > 100) {
-                      final lastIndex = _messages.length - 1;
-                      if (lastIndex >= 0) {
-                         _messages[lastIndex] = _messages[lastIndex].copyWith(
-                           content: fullResponse,
-                           thinking: fullThinking.isNotEmpty ? fullThinking : null,
-                         );
-                         lastUpdate = now;
-                         shouldNotify = true;
-                      }
-                    }
-                  }
-                }
-                
-                if (data['error'] != null) {
-                  fullResponse += '\n\nError: ${data['error']}';
-                  shouldNotify = true;
-                }
-
-                // Handle voice_audio event for voice response mode
-                if (data.containsKey('voice_audio')) {
-                  print('>>> voice_audio KEY FOUND in data!');
-                  try {
-                    final voiceData = data['voice_audio'] as Map<String, dynamic>;
-                    _voiceAudioChunks.add(voiceData);
-                    shouldNotify = true;
-                    
-                    // Auto-play the audio chunk
-                    final audioBase64 = voiceData['audio'] as String?;
-                    if (audioBase64 != null) {
-                      print('>>> Voice audio chunk received (${audioBase64.length} chars), queueing...');
-                      final sentence = voiceData['sentence'] as String?;
-                      _queueAudioChunk(audioBase64, sentence);  // Queue for sequential playback
-                    } else {
-                      print('>>> voice_audio has no audio field!');
-                    }
-                  } catch (e) {
-                    print('>>> voice_audio cast error: $e');
-                  }
-                }
-              } catch (e) {
-              print('JSON parse error: $e');
+              }
             }
-          }
 
-          // Debounce notifyListeners to avoid excessive rebuilds
-          if (shouldNotify) {
-            notifyListeners();
-          }
-        },
-        onError: (e) {
-          _error = e.toString();
-          final lastIndex = _messages.length - 1;
-          if (lastIndex >= 0) {
-            _messages[lastIndex] = _messages[lastIndex].copyWith(
-              content: 'Error: ${e.toString()}',
-              isStreaming: false,
-            );
-          }
-          notifyListeners();
-          completer.complete();
-        },
-        onDone: () async {
-          // Final update to ensure complete message is shown
-          final lastIndex = _messages.length - 1;
-          if (lastIndex >= 0) {
-             // If fullResponse is still empty, maybe show a fallback
-             if (fullResponse.isEmpty) {
-                fullResponse = '...'; // Placeholder if totally empty
-             }
-             
-             _messages[lastIndex] = _messages[lastIndex].copyWith(
-               content: fullResponse, 
-               isStreaming: false,
-             );
-          }
-          
+            // Handle search_complete
+            if (data['search_complete'] != null) {
+              final query = data['search_complete']['query'] as String?;
+              if (query != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
+                  final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                  if (currentActive.contains(query)) {
+                    currentActive.remove(query);
+                    if (!currentCompleted.contains(query)) currentCompleted.add(query);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive, completedSearches: currentCompleted);
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
 
-          
-          notifyListeners();
-          completer.complete();
-        },
-        cancelOnError: true,
-      );
+            
+            // Handle file_tool_complete
+            if (data['file_tool_complete'] != null) {
+              final tag = data['file_tool_complete']['tag'] as String?;
+              if (tag != null) {
+                 final lastIndex = _messages.length - 1;
+                 if (lastIndex >= 0) {
+                    final currentCompleted = List<String>.from(_messages[lastIndex].completedFileActions);
+                    if (!currentCompleted.contains(tag)) {
+                       currentCompleted.add(tag);
+                       _messages[lastIndex] = _messages[lastIndex].copyWith(completedFileActions: currentCompleted);
+                       shouldNotify = true;
+                    }
+                 }
+              }
+            }
+            
+            // Handle deep_search_update
+            if (data['deep_search_update'] != null) {
+               final message = data['deep_search_update']['message'] as String?;
+               if (message != null) {
+                 final lastIndex = _messages.length - 1;
+                 if (lastIndex >= 0) {
+                    final currentUpdates = List<String>.from(_messages[lastIndex].deepSearchUpdates);
+                    if (currentUpdates.isEmpty || currentUpdates.last != message) {
+                       currentUpdates.add(message);
+                       _messages[lastIndex] = _messages[lastIndex].copyWith(deepSearchUpdates: currentUpdates);
+                       shouldNotify = true;
+                    }
+                 }
+               }
+            }
+
+            // Handle plan
+            if (data['plan'] != null) {
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(plan: data['plan'] as String);
+                shouldNotify = true;
+              }
+            }
+
+            // Handle music_play
+            if (data['music_play'] != null) {
+              final musicData = data['music_play'];
+              if (musicData['url'] != null && onMusicPlay != null) {
+                onMusicPlay(musicData['url'], musicData['title'] ?? 'Music', musicData['thumbnail'], musicData['duration']);
+              }
+            }
+
+            // Handle thinking
+            if (data['thinking'] != null) {
+              fullThinking += data['thinking'] as String;
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                shouldNotify = true;
+              }
+            }
+
+            // Handle message content
+            if (data['message'] != null) {
+              final contentDelta = data['message']['content'] as String? ?? '';
+              final thinkingDelta = data['message']['thinking'] as String? ?? '';
+              if (contentDelta.isNotEmpty) fullResponse += contentDelta;
+              if (thinkingDelta.isNotEmpty) fullThinking += thinkingDelta;
+              
+              final now = DateTime.now();
+              if (now.difference(lastUpdate).inMilliseconds > 100) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                   _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse, thinking: fullThinking.isNotEmpty ? fullThinking : null);
+                   lastUpdate = now;
+                   shouldNotify = true;
+                }
+              }
+            }
+            
+            if (data['error'] != null) {
+              fullResponse += '\n\nError: ${data['error']}';
+              shouldNotify = true;
+            }
+
+            // Handle voice_audio
+            if (data.containsKey('voice_audio')) {
+              final voiceData = data['voice_audio'] as Map<String, dynamic>;
+              _voiceAudioChunks.add(voiceData);
+              shouldNotify = true;
+              final audioBase64 = voiceData['audio'] as String?;
+              if (audioBase64 != null) {
+                _queueAudioChunk(audioBase64, voiceData['sentence'] as String?);
+              }
+            }
+          } catch (e) { print('JSON parse error: $e'); }
+        }
+        if (shouldNotify) notifyListeners();
+      },
+      onError: (e) {
+        _error = e.toString();
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+          _messages[lastIndex] = _messages[lastIndex].copyWith(content: 'Error: ${e.toString()}', isStreaming: false);
+        }
+        notifyListeners();
+        if (!completer.isCompleted) completer.complete();
+      },
+      onDone: () async {
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse.isEmpty ? '...' : fullResponse, isStreaming: false);
+        }
+        notifyListeners();
+        _maybeGenerateTitle();
+        if (!completer.isCompleted) completer.complete();
+      },
+      cancelOnError: true,
+    );
 
       await completer.future;
 
@@ -748,7 +844,7 @@ class ChatProvider extends ChangeNotifier {
 
   /// Generate conversation title after first exchange
   Future<void> _maybeGenerateTitle() async {
-    print('>>> _maybeGenerateTitle called. msgs: ${_messages.length}, title: ${_currentConversation?.title}, isNaming: $_isNamingInProgress');
+    // print('>>> _maybeGenerateTitle called. msgs: ${_messages.length}, title: ${_currentConversation?.title}, isNaming: $_isNamingInProgress');
     
     // Skip if already naming or no conversation
     if (_isNamingInProgress) return;
@@ -756,13 +852,13 @@ class ChatProvider extends ChangeNotifier {
     
     // Skip if already has a title
     if (_currentConversation!.title != null && _currentConversation!.title!.isNotEmpty) {
-      print('>>> Skipped: Has title: ${_currentConversation!.title}');
+      // print('>>> Skipped: Has title: ${_currentConversation!.title}');
       return;
     }
     
     // Need at least 1 message (the user query)
     if (_messages.length < 1) {
-      print('>>> Skipped: Not enough messages');
+      // print('>>> Skipped: Not enough messages');
       return;
     }
     
@@ -794,6 +890,8 @@ class ChatProvider extends ChangeNotifier {
       _isNamingInProgress = false;
     }
   }
+
+
 
   /// Parse JSON safely
   Map<String, dynamic>? _parseJson(String jsonStr) {
@@ -863,5 +961,94 @@ class ChatProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-}
 
+  /// Execute the currently pending client tool
+  Future<void> executePendingTool() async {
+    if (_pendingClientTool == null) return;
+    
+    final tool = _pendingClientTool!;
+    final name = tool['name'] as String;
+    final args = tool['args'] as Map<String, dynamic>;
+    final toolCallId = tool['tool_call_id'] as String?;
+    
+    print('>>> Executing client tool: $name');
+    
+    String result = '';
+    try {
+      if (name == 'client_read_file') {
+        // Add a marker to show we are reading
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           String currentContent = _messages[lastIndex].content;
+           _messages[lastIndex] = _messages[lastIndex].copyWith(
+             content: '$currentContent\n\n![FILE_ACTION](file:read:${Uri.encodeComponent(args['path'] ?? '')})\n\n',
+           );
+           notifyListeners();
+        }
+        result = await FileToolService.readFile(args['path']);
+      } else if (name == 'client_search_file') {
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           String currentContent = _messages[lastIndex].content;
+           _messages[lastIndex] = _messages[lastIndex].copyWith(
+             content: '$currentContent\n\n![FILE_ACTION](file:search:${Uri.encodeComponent(args['query'] ?? '')})\n\n',
+           );
+           notifyListeners();
+        }
+        final rawResults = await FileToolService.searchFiles(
+          args['query'], 
+          directory: args['directory']
+        );
+        result = jsonEncode({'results': rawResults});
+      } else if (name == 'client_create_file') {
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           String currentContent = _messages[lastIndex].content;
+           _messages[lastIndex] = _messages[lastIndex].copyWith(
+             content: '$currentContent\n\n![FILE_ACTION](file:create:${Uri.encodeComponent(args['path'] ?? '')})\n\n',
+           );
+           notifyListeners();
+        }
+        result = await FileToolService.createFile(args['path'], args['content']);
+      } else {
+        result = 'Error: Unknown client tool $name';
+      }
+    } catch (e) {
+      result = 'Error executing tool: $e';
+    }
+    
+    // Clear pending and submit
+    _pendingClientTool = null;
+    notifyListeners();
+    
+    await submitToolResult(name, result, toolCallId);
+  }
+
+  /// Submit tool result back to server to resume streaming
+  Future<void> submitToolResult(String name, String result, String? toolCallId) async {
+    if (_currentConversation == null) return;
+    
+    _isStreaming = true;
+    notifyListeners();
+    
+    try {
+      final stream = ChatService.submitToolResult(
+        _currentConversation!.id,
+        name,
+        result,
+        toolCallId: toolCallId,
+        voiceEnabled: _voiceModeEnabled,
+        voiceId: _currentVoiceId,
+      );
+      
+      final completer = Completer<void>();
+      _processStream(stream, completer);
+      await completer.future;
+
+    } catch (e) {
+      _error = 'Error submitting tool result: $e';
+      _isStreaming = false;
+      notifyListeners();
+    }
+  }
+}
