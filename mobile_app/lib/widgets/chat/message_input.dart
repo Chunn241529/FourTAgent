@@ -261,7 +261,7 @@ class _MessageInputState extends State<MessageInput> {
         bottom: MediaQuery.of(context).viewPadding.bottom + 12,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF40414F) : Colors.white,
+        color: isDark ? const Color(0xFF525252) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? const Color(0xFF565869) : const Color(0xFFD1D5DB),
@@ -340,17 +340,17 @@ class _MessageInputState extends State<MessageInput> {
                     onTap: _pickImage,
                     color: _selectedImagePath != null ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
                   ),
-                  _IconBtn(
-                    icon: _isListening ? Icons.mic : Icons.mic_none_outlined,
-                    onTap: _toggleRecording,
-                    color: (_isListening || _recordedAudioPath != null) ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                  if (widget.onMusicTap != null)
-                    _IconBtn(
-                      icon: Icons.music_note_outlined,
-                      onTap: widget.onMusicTap!,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
-                    ),
+                  // _IconBtn(
+                  //   icon: _isListening ? Icons.mic : Icons.mic_none_outlined,
+                  //   onTap: _toggleRecording,
+                  //   color: (_isListening || _recordedAudioPath != null) ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
+                  // ),
+                  // if (widget.onMusicTap != null)
+                  //   _IconBtn(
+                  //     icon: Icons.music_note_outlined,
+                  //     onTap: widget.onMusicTap!,
+                  //     color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  //   ),
                   // Voice Mode Toggle
                   _IconBtn(
                     icon: widget.voiceModeEnabled 

@@ -61,11 +61,11 @@ class ChatService:
 
     # List of filler phrases to rotate
     FILLER_PHRASES = [
-        "Okay, để mình xem...",
-        "Được rồi, chờ mình xíu...",
-        "Để mình kiểm tra nhé...",
+        "Okay, ừm...",
+        "Được rồi, ừm...",
+        "Để em kiểm tra nhé...",
         "À, câu này hay đấy...",
-        "Đợi mình một chút...",
+        "Đợi em một chút...",
     ]
 
     @classmethod
@@ -77,7 +77,6 @@ class ChatService:
 
         try:
             voices = tts_service.list_voices()
-            # filler_text = "Hmm, để mình xem nha..." # Removed single filler
 
             # Loop through all available voices
             for voice in voices:

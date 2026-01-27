@@ -18,5 +18,10 @@
     "message_id": 6,
     "query": "search model TTS vieneu gihub và cho tôi code python mẫu",
     "response": "Lumin rất vui được giúp anh!  \nDưới đây là kết quả tìm kiếm về **VieNeu‑TTS** (mô hình TTS tiếng Việt) trên GitHub cùng một mẫu code Python để anh thử ngay.\n\n---\n\n## 1. Kết quả tìm kiếm\n\n| Nguồn | URL | Mô tả ngắn |\n|-------|-----|------------|\n| **GitHub** | <https://github.com/pnnbao97/VieNeu-TTS> | Repository chính của VieNeu‑TTS, bao gồm mã nguồn, mô hình và hướng dẫn cài đặt. |\n| **Hugging Face** | <https://huggingface.co/pnnbao-ump/VieNeu-TTS-q4-gguf> | Phiên bản GGUF (được tối ưu cho on‑device) của mô hình. |\n| **PyPI** | <https://pypi.org/project/vieneu/> | Thư viện `vieneu` để tải và chạy mô hình nhanh chóng. |\n\n---\n\n## 2. Cài đặt nhanh\n\n```bash\n# 1. Cài đặt thư viện vieneu (có thể dùng pip)\npip install vieneu\n\n# 2. Cài đặt thêm torch (nếu chưa có)\npip install torch\n```\n\n> **Tip:** Nếu anh muốn chạy mô hình trên CPU, hãy cài `torch==<phiên bản phù hợp>`; nếu có GPU, cài `torch==<phiên bản>+cu118` (hoặc cu121 tùy phiên bản CUDA).\n\n---\n\n## 3. Mẫu code Python\n\n```python\n# Import "
+  },
+  {
+    "message_id": 4,
+    "query": "Giải thích ngắn về microservice",
+    "response": "Microservices là kiến trúc phần mềm chia ứng dụng thành nhiều dịch vụ nhỏ, độc lập, mỗi dịch vụ xử lý một chức năng cụ thể và giao tiếp qua API. Ưu điểm chính là dễ mở rộng, bảo trì, và tích hợp linh hoạt, nhưng đòi hỏi quản lý hệ thống phức tạp hơn so với kiến trúc đơn nhất. 😊"
   }
 ]

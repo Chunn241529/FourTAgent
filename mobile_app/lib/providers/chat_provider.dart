@@ -34,7 +34,7 @@ class ChatProvider extends ChangeNotifier {
   
   // Voice settings
   final List<String> _availableVoices = ['Doan', 'Binh', 'Tuyen', 'Vinh', 'Ly', 'Ngoc'];
-  String _currentVoiceId = 'Doan';
+  String _currentVoiceId = 'Ngoc';
   bool _isMicEnabled = false; // Now tracks UI toggle, but _isRecording tracks actual state
   
   // Recorder

@@ -34,204 +34,214 @@ class MessageBubble extends StatelessWidget {
 
   /// User message - right aligned, no background, simple style
   Widget _buildUserMessage(BuildContext context, ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(width: 48), // Spacing from left
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Display image if present
-                if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
-                  Builder(
-                    builder: (context) {
-                      String base64Str = message.imageBase64!;
-                      // Check for data URI info
-                      bool isImage = true;
-                      String mimeType = '';
-                      
-                      if (base64Str.startsWith('data:')) {
-                        final markerIndex = base64Str.indexOf(';');
-                        if (markerIndex > 0) {
-                          mimeType = base64Str.substring(5, markerIndex);
-                          if (!mimeType.startsWith('image/')) {
-                            isImage = false;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(width: 48), // Spacing from left
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Display image if present
+                    if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          String base64Str = message.imageBase64!;
+                          // Check for data URI info
+                          bool isImage = true;
+                          String mimeType = '';
+                          
+                          if (base64Str.startsWith('data:')) {
+                            final markerIndex = base64Str.indexOf(';');
+                            if (markerIndex > 0) {
+                              mimeType = base64Str.substring(5, markerIndex);
+                              if (!mimeType.startsWith('image/')) {
+                                isImage = false;
+                              }
+                            }
                           }
-                        }
-                      }
-                      
-                      // Extract raw bytes
-                      String base64Data = base64Str;
-                      if (base64Data.contains(',')) {
-                        base64Data = base64Data.split(',').last;
-                      }
+                          
+                          // Extract raw bytes
+                          String base64Data = base64Str;
+                          if (base64Data.contains(',')) {
+                            base64Data = base64Data.split(',').last;
+                          }
 
-                      if (isImage) {
-                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(
-                              base64Decode(base64Data),
-                              width: 200,
-                              height: 200,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 200,
-                                height: 100,
-                                color: theme.colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.broken_image, size: 40),
+                          if (isImage) {
+                             return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(
+                                  base64Decode(base64Data),
+                                  width: 200,
+                                  height: 200,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 200,
+                                    height: 100,
+                                    color: theme.colorScheme.surfaceContainerHighest,
+                                    child: const Icon(Icons.broken_image, size: 40),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      } else {
-                        // Render File Card for non-image files
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                               color: theme.colorScheme.outline.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                               Icon(
-                                 _getFileIcon(mimeType),
-                                 color: theme.colorScheme.primary,
-                               ),
-                               const SizedBox(width: 8),
-                               Flexible(
-                                 child: Text(
-                                   'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
-                                   style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                                   maxLines: 1,
-                                   overflow: TextOverflow.ellipsis,
-                                 ),
-                               ),
-                            ],
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                // Display text content
-                if (message.content.isNotEmpty && !message.content.startsWith('[Đã gửi'))
-                  SelectableText(
-                    message.content,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      height: 1.5,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-              ],
-            ),
+                            );
+                          } else {
+                            // Render File Card for non-image files
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                   color: theme.colorScheme.outline.withOpacity(0.2),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                   Icon(
+                                     _getFileIcon(mimeType),
+                                     color: theme.colorScheme.primary,
+                                   ),
+                                   const SizedBox(width: 8),
+                                   Flexible(
+                                     child: Text(
+                                       'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
+                                       style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                                       maxLines: 1,
+                                       overflow: TextOverflow.ellipsis,
+                                     ),
+                                   ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    // Display text content
+                    if (message.content.isNotEmpty && !message.content.startsWith('[Đã gửi'))
+                      SelectableText(
+                        message.content,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          height: 1.5,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   /// AI message - left aligned with avatar
   Widget _buildAIMessage(BuildContext context, ThemeData theme, bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // AI Avatar
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.secondary,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Message content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // AI name
-                Text(
-                  'Lumina AI',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // AI Avatar
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.colorScheme.primary,
+                      theme.colorScheme.secondary,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                const SizedBox(height: 6),
-
-                // 1. Deep Search Indicator (status updates)
-                if (message.deepSearchUpdates.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _buildDeepSearchIndicator(message),
-                  ),
-
-                // 2. Plan Indicator (collapsible)
-                if (message.plan != null && message.plan!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: PlanIndicator(
-                      plan: message.plan!,
-                      isStreaming: message.isStreaming,
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Message content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // AI name
+                    Text(
+                      'Lumina AI',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 6),
 
-                // 3. Interleaved Thinking and Tool Indicators
-                // Replaces old Thinking Indicator
-                if (message.thinking != null && message.thinking!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _buildReasoningChain(context, theme, message),
-                  ),
+                    // 1. Deep Search Indicator (status updates)
+                    if (message.deepSearchUpdates.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildDeepSearchIndicator(message),
+                      ),
 
-                // 2. Content with interleaved indicators (using imageBuilder)
-                _buildMarkdownContent(theme, isDark),
+                    // 2. Plan Indicator (collapsible)
+                    if (message.plan != null && message.plan!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: PlanIndicator(
+                          plan: message.plan!,
+                          isStreaming: message.isStreaming,
+                        ),
+                      ),
 
-                // Streaming indicator
-                if (message.isStreaming)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _buildStreamingIndicator(theme),
-                  ),
-                // Actions
-                if (!message.isStreaming && message.content.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: _buildActions(context, theme),
-                  ),
-              ],
-            ),
+                    // 3. Interleaved Thinking and Tool Indicators
+                    // Replaces old Thinking Indicator
+                    if (message.thinking != null && message.thinking!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildReasoningChain(context, theme, message),
+                      ),
+
+                    // 2. Content with interleaved indicators (using imageBuilder)
+                    _buildMarkdownContent(theme, isDark),
+
+                    // Streaming indicator
+                    if (message.isStreaming)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: _buildStreamingIndicator(theme),
+                      ),
+                    // Actions
+                    if (!message.isStreaming && message.content.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: _buildActions(context, theme),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 48), // Spacing from right
+            ],
           ),
-          const SizedBox(width: 48), // Spacing from right
-        ],
+        ),
       ),
     );
   }
