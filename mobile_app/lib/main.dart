@@ -26,8 +26,44 @@ void main() {
   runApp(const FourTChatApp());
 }
 
-class FourTChatApp extends StatelessWidget {
+class FourTChatApp extends StatefulWidget {
   const FourTChatApp({super.key});
+
+  @override
+  State<FourTChatApp> createState() => _FourTChatAppState();
+}
+
+class _FourTChatAppState extends State<FourTChatApp> with WidgetsBindingObserver {
+  // Create provider instance here to keep a reference
+  final _musicPlayerProvider = MusicPlayerProvider();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _musicPlayerProvider.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      // App is closing/terminating
+      debugPrint('App detached: Stopping music...');
+      try {
+        // Stop music directly using our reference
+        // Pass clearQueue: true to ensure everything is reset
+        _musicPlayerProvider.stop(clearQueue: true); 
+      } catch (e) {
+        debugPrint('Error stopping music on detach: $e');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +73,12 @@ class FourTChatApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => MusicPlayerProvider()),
+        // Use the existing instance via value/create. 
+        // Since we manage its lifecycle in this State, we use ChangeNotifierProvider.value if possible, 
+        // or create that returns it. But simply passing it to create: (_) => _musicPlayerProvider is fine 
+        // provided we don't dispose it twice accidentally (MultiProvider usually disposes).
+        // Better: Use ChangeNotifierProvider.value
+        ChangeNotifierProvider.value(value: _musicPlayerProvider),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -65,6 +106,7 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, authProvider, _) {
         // Show loading only during initial auth check (app startup)
         if (authProvider.isInitializing) {
+          debugPrint('AuthWrapper: Initializing... Showing LoadingIndicator');
           return const Scaffold(
             body: Center(
               child: LoadingIndicator(message: 'Đang tải...'),
@@ -74,9 +116,11 @@ class AuthWrapper extends StatelessWidget {
 
         // Navigate based on auth state
         if (authProvider.isAuthenticated) {
+          debugPrint('AuthWrapper: Authenticated! Removing LoadingIndicator, showing DesktopHomeScreen');
           return DesktopHomeScreen(key: UniqueKey()); 
         }
 
+        debugPrint('AuthWrapper: Not authenticated. Showing LoginScreen');
         return const LoginScreen();
       },
     );

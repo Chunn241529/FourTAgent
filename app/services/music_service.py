@@ -31,6 +31,9 @@ class MusicService:
                 "extract_flat": True,
                 "noplaylist": True,
                 "limit": max_results,
+                "nocheckcertificate": True,
+                "ignoreerrors": True,
+                "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -78,10 +81,21 @@ class MusicService:
                 "quiet": True,
                 "format": "bestaudio/best",
                 "noplaylist": True,
+                "nocheckcertificate": True,
+                "ignoreerrors": True,
+                "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+
+                if info is None:
+                    return json.dumps(
+                        {
+                            "error": "Unable to extract video information. The video might be restricted or unavailable."
+                        }
+                    )
+
                 stream_url = info.get("url", url)
                 title = info.get("title", "Unknown")
                 thumbnail = info.get("thumbnail", "")

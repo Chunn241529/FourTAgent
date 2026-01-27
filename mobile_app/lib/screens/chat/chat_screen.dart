@@ -29,16 +29,38 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().loadConversations();
       
-      // Set music callback for voice mode
+      // Set music callback for voice mode and tool actions
       final musicPlayer = context.read<MusicPlayerProvider>();
-      context.read<ChatProvider>().setMusicPlayCallback((url, title, thumbnail, duration) {
-        musicPlayer.playFromUrl(
-          url: url,
-          title: title,
-          thumbnail: thumbnail,
-          duration: duration,
-        );
-      });
+      context.read<ChatProvider>().setMusicCallbacks(
+        onPlay: (url, title, thumbnail, duration) {
+          musicPlayer.playFromUrl(
+            url: url,
+            title: title,
+            thumbnail: thumbnail,
+            duration: duration,
+          );
+        },
+        onQueueAdd: (item) {
+           musicPlayer.addToQueue(
+             url: item['url'],
+             title: item['title'],
+             thumbnail: item['thumbnail'],
+             duration: item['duration'],
+           );
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               SnackBar(
+                 content: Text('Đã thêm vào danh sách phát: ${item['title']}'),
+                 behavior: SnackBarBehavior.floating,
+                 width: 400,
+               ),
+             );
+           }
+        },
+        onControl: (action) {
+           musicPlayer.handleControl(action);
+        },
+      );
     });
 
     // Add listener for pending tool calls

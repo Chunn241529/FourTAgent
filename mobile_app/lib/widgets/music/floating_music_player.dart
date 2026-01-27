@@ -172,7 +172,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
               const SizedBox(width: 8),
               // Close button
               IconButton(
-                onPressed: () => player.hide(),
+                onPressed: () => player.hideAndStop(),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 icon: Icon(
@@ -238,7 +238,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () => player.hide(),
+                    onPressed: () => player.hideAndStop(),
                     icon: Icon(Icons.close_rounded,
                         size: 18, color: theme.colorScheme.onSurface.withOpacity(0.5)),
                     padding: EdgeInsets.zero,
@@ -296,7 +296,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                 ),
               ),
               const SizedBox(height: 8),
-              // Progress bar + Play button inline
+              // Progress bar
               Row(
                 children: [
                   // Time current
@@ -337,14 +337,38 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                       decoration: TextDecoration.none,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Small play/pause button
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Controls
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                   // PREV Button
+                   IconButton(
+                     onPressed: (player.queueIndex > 0) ? () => player.playPrevious() : null,
+                     icon: Icon(Icons.skip_previous_rounded, 
+                       color: (player.queueIndex > 0) ? theme.colorScheme.primary : theme.disabledColor),
+                     iconSize: 32,
+                   ),
+                   const SizedBox(width: 24),
+                  
+                  // Play/pause button
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: theme.colorScheme.primary,
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: IconButton(
                       onPressed: player.isLoading ? null : () => player.toggle(),
@@ -352,8 +376,8 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                       constraints: const BoxConstraints(),
                       icon: player.isLoading
                           ? SizedBox(
-                              width: 14,
-                              height: 14,
+                              width: 24,
+                              height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
@@ -364,10 +388,19 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
                               color: Colors.white,
-                              size: 18,
+                              size: 32,
                             ),
                     ),
                   ),
+
+                   const SizedBox(width: 24),
+                   // NEXT Button
+                   IconButton(
+                     onPressed: (player.queue.isNotEmpty) ? () => player.playNext() : null,
+                     icon: Icon(Icons.skip_next_rounded, 
+                        color: (player.queue.isNotEmpty) ? theme.colorScheme.primary : theme.disabledColor),
+                     iconSize: 32,
+                   ),
                 ],
               ),
             ],

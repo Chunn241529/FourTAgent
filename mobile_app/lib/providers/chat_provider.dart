@@ -44,6 +44,8 @@ class ChatProvider extends ChangeNotifier {
 
   // Music callback for voice mode
   void Function(String url, String title, String? thumbnail, int? duration)? _musicPlayCallback;
+  void Function(Map<String, dynamic> item)? _musicQueueAddCallback;
+  void Function(String action)? _musicControlCallback;
 
   // New getter for 'Processing' state (Thinking/Transcribing but not yet Speaking)
   bool get isVoiceProcessing => _isTranscribing || (_isStreaming && !_isPlayingVoice);
@@ -74,8 +76,14 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Set the music play callback for voice mode
-  void setMusicPlayCallback(void Function(String url, String title, String? thumbnail, int? duration)? callback) {
-    _musicPlayCallback = callback;
+  void setMusicCallbacks({
+    void Function(String url, String title, String? thumbnail, int? duration)? onPlay,
+    void Function(Map<String, dynamic> item)? onQueueAdd,
+    void Function(String action)? onControl,
+  }) {
+    if (onPlay != null) _musicPlayCallback = onPlay;
+    if (onQueueAdd != null) _musicQueueAddCallback = onQueueAdd;
+    if (onControl != null) _musicControlCallback = onControl;
   }
 
   void setVoice(String voiceId) {
@@ -268,7 +276,7 @@ class ChatProvider extends ChangeNotifier {
         if (!kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
           // Use mpv for desktop (more reliable)
           print('>>> Playing voice with mpv: ${tempFile.path}');
-          final result = await Process.run('mpv', ['--no-video', '--volume=100', tempFile.path]);
+          final result = await Process.run('mpv', ['--no-video', '--volume=80', tempFile.path]);
           if (result.exitCode != 0) {
             print('>>> mpv error (${result.exitCode}): ${result.stderr}');
           } else {
@@ -753,9 +761,35 @@ class ChatProvider extends ChangeNotifier {
             // Handle music_play
             if (data['music_play'] != null) {
               final musicData = data['music_play'];
-              if (musicData['url'] != null && onMusicPlay != null) {
-                onMusicPlay(musicData['url'], musicData['title'] ?? 'Music', musicData['thumbnail'], musicData['duration']);
+              print('>>> ChatProvider received music_play: $musicData'); // DEBUG
+              if (musicData['url'] != null) {
+                // Use local callback if available, otherwise use strict passed callback
+                if (onMusicPlay != null) {
+                  print('>>> Executing local onMusicPlay callback'); // DEBUG
+                  onMusicPlay(musicData['url'], musicData['title'] ?? 'Music', musicData['thumbnail'], musicData['duration']);
+                } else if (_musicPlayCallback != null) {
+                   print('>>> Executing global _musicPlayCallback'); // DEBUG
+                   _musicPlayCallback!(musicData['url'], musicData['title'] ?? 'Music', musicData['thumbnail'], musicData['duration']);
+                } else {
+                   print('>>> NO CALLBACK REGISTERED for music_play'); // DEBUG
+                }
               }
+            }
+
+            // Handle music_queue_add
+            if (data['music_queue_add'] != null) {
+              final queueItem = data['music_queue_add']['item'];
+              if (queueItem != null && _musicQueueAddCallback != null) {
+                _musicQueueAddCallback!(Map<String, dynamic>.from(queueItem));
+              }
+            }
+
+            // Handle music_control
+            if (data['music_control'] != null) {
+               final action = data['music_control']['action'] as String?;
+               if (action != null && _musicControlCallback != null) {
+                 _musicControlCallback!(action);
+               }
             }
 
             // Handle thinking

@@ -31,7 +31,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   Duration _duration = Duration.zero;
   
   // Floating player position
-  double _posX = -1;
+  double _posX = 20; // Default valid position
   double _posY = 100;
   bool _isExpanded = false;
   
@@ -83,7 +83,72 @@ class MusicPlayerProvider extends ChangeNotifier {
       _isPlaying = false;
       _position = Duration.zero;
       notifyListeners();
+      // Auto-next if not stopped manually
+      if (!_stoppedManually) {
+         playNext();
+      }
     });
+  }
+
+  // Queue state
+  final List<Map<String, dynamic>> _queue = [];
+  int _queueIndex = -1;
+  
+  List<Map<String, dynamic>> get queue => _queue;
+  int get queueIndex => _queueIndex;
+  
+  // Logic to determine if we should auto-play next
+  bool _stoppedManually = false;
+
+  /// Add to queue
+  void addToQueue({
+    required String url,
+    required String title,
+    String? thumbnail,
+    int? duration,
+  }) {
+     _queue.add({
+       'url': url,
+       'title': title,
+       'thumbnail': thumbnail,
+       'duration': duration,
+     });
+     notifyListeners();
+  }
+  
+  /// Play next song in queue
+  Future<void> playNext() async {
+    if (_queue.isEmpty) return;
+    
+    int nextIndex = _queueIndex + 1;
+    if (nextIndex < _queue.length) {
+      _queueIndex = nextIndex;
+      final track = _queue[nextIndex];
+      await playFromUrl(
+         url: track['url'],
+         title: track['title'],
+         thumbnail: track['thumbnail'],
+         duration: track['duration'],
+         isQueueItem: true, 
+      );
+    } else {
+      stop(); // End of queue
+    }
+  }
+
+  /// Play previous song
+  Future<void> playPrevious() async {
+    if (_queueIndex > 0) {
+      _queueIndex--;
+      final track = _queue[_queueIndex];
+      await playFromUrl(
+         url: track['url'],
+         title: track['title'],
+         thumbnail: track['thumbnail'],
+         duration: track['duration'],
+         isQueueItem: true,
+      );
+    }
   }
 
   /// Play music from URL with metadata
@@ -93,12 +158,31 @@ class MusicPlayerProvider extends ChangeNotifier {
     String? thumbnail,
     int? duration,
     Duration? startTime,
+    bool isQueueItem = false,
   }) async {
+    debugPrint('MusicPlayerProvider: playFromUrl called for $title');
     try {
-      await stop();
+      // Ensure stop doesn't crash us
+      try {
+        await stop(clearQueue: !isQueueItem); 
+      } catch (e) {
+        debugPrint('Error stopping previous track: $e');
+      }
       
+      if (!isQueueItem) {
+          _queue.clear();
+          _queue.add({
+             'url': url,
+             'title': title,
+             'thumbnail': thumbnail,
+             'duration': duration,
+          });
+          _queueIndex = 0;
+      }
+      
+      _stoppedManually = false;
       _isLoading = true;
-      _isVisible = true;
+      _isVisible = true; // Make visible immediately
       _title = title;
       _thumbnail = thumbnail ?? '';
       _totalDuration = duration ?? 0;
@@ -110,14 +194,13 @@ class MusicPlayerProvider extends ChangeNotifier {
         await _playDesktop(url, startTime: startTime);
       } else if (_isMobile) {
         await _playMobile(url);
-        // Mobile seek if needed - wait for load?
-        // Simplifying for now
       }
       
     } catch (e) {
       debugPrint('Error playing music: $e');
       _isLoading = false;
       _isPlaying = false;
+      // Keep _isVisible true so user sees error state if needed
       notifyListeners();
     }
   }
@@ -166,9 +249,7 @@ class MusicPlayerProvider extends ChangeNotifier {
       if (_isPlaying && _totalDuration > 0) {
         _position += const Duration(seconds: 1);
         if (_position.inSeconds >= _totalDuration) {
-          _isPlaying = false;
-          _position = Duration.zero;
-          timer.cancel();
+          // Timer finished
         }
         notifyListeners();
       }
@@ -181,6 +262,10 @@ class MusicPlayerProvider extends ChangeNotifier {
           _isPlaying = false;
           _positionTimer?.cancel();
           notifyListeners();
+          
+          if (!_stoppedManually) {
+             playNext();
+          }
       }
     });
     
@@ -217,6 +302,7 @@ class MusicPlayerProvider extends ChangeNotifier {
           thumbnail: _thumbnail,
           duration: _totalDuration,
           startTime: _position, // Resume from current position
+          isQueueItem: true, // Resume doesn't clear queue
         );
       }
     } else if (_isMobile && _audioPlayer != null) {
@@ -259,21 +345,41 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
 
   /// Stop playback
-  Future<void> stop() async {
+  Future<void> stop({bool clearQueue = false}) async {
+    debugPrint('MusicPlayerProvider: stop called');
+    _stoppedManually = true;
     _positionTimer?.cancel();
     
-    if (_isDesktop && _mpvProcess != null) {
-      _mpvProcess!.kill(ProcessSignal.sigkill); // Force kill
-      _mpvProcess = null;
-    }
-    
-    if (_isMobile && _audioPlayer != null) {
-      await _audioPlayer!.stop();
+    try {
+      if (_isDesktop && _mpvProcess != null) {
+        _mpvProcess!.kill(ProcessSignal.sigkill); // Force kill
+        _mpvProcess = null;
+      }
+      
+      if (_isMobile && _audioPlayer != null) {
+        await _audioPlayer!.stop();
+      }
+    } catch (e) {
+      debugPrint('Error in stop execution: $e');
     }
     
     _isPlaying = false;
     _position = Duration.zero;
+        
+    if (clearQueue) {
+      _queue.clear();
+      _queueIndex = -1;
+    }
+
     notifyListeners();
+  }
+  
+  /// Handle control actions
+  void handleControl(String action) {
+    if (action == 'next_music') playNext();
+    if (action == 'previous_music') playPrevious();
+    if (action == 'pause_music' || action == 'resume_music') toggle();
+    if (action == 'stop_music') stop(clearQueue: true);
   }
   
   /// Hide the player (just hide UI, keep track info for restore)
@@ -327,4 +433,3 @@ class MusicPlayerProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

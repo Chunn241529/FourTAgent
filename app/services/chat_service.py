@@ -491,7 +491,7 @@ class ChatService:
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "Lumina", tools, True
+            return "qwen3-coder", tools, False
         elif needs_reasoning:
             return "Lumina", tools, True
         else:
@@ -847,9 +847,13 @@ class ChatService:
 
                     # Async iteration over stream
                     async for chunk in stream:
+                        # print(f"DEBUG CHUNK: {chunk}") # Excessive
                         if "message" in chunk:
                             msg_chunk = chunk["message"]
                             if "tool_calls" in msg_chunk and msg_chunk["tool_calls"]:
+                                print(
+                                    f"DEBUG: Tool call detected: {msg_chunk['tool_calls']}"
+                                )
                                 iteration_has_tool_calls = True
                                 has_tool_calls = True
 
@@ -1133,6 +1137,63 @@ class ChatService:
                                             f"Could not parse search results for count: {e}"
                                         )
 
+                                elif function_name == "search_music":
+                                    # Add logging for search_music
+                                    try:
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+                                        results = result_data.get("results", [])
+                                        count = len(results)
+                                        print(
+                                            f"DEBUG: Music search found {count} results"
+                                        )
+
+                                        # Emit thinking update
+                                        yield f"data: {json.dumps({'thinking': f'Found {count} songs...'}, separators=(',', ':'))}\n\n"
+
+                                        # AUTO-PLAY Logic: Pick first result and play immediately
+                                        if count > 0:
+                                            first_song = results[0]
+                                            song_url = first_song.get("url")
+                                            song_title = first_song.get("title")
+
+                                            print(
+                                                f"DEBUG: Auto-playing first result: {song_title}"
+                                            )
+                                            yield f"data: {json.dumps({'thinking': f'Auto-playing: {song_title}...'}, separators=(',', ':'))}\n\n"
+
+                                            # Call play_music directly
+                                            from app.services.music_service import (
+                                                music_service,
+                                            )
+
+                                            play_result_json = music_service.play_music(
+                                                song_url
+                                            )
+                                            play_result = json.loads(play_result_json)
+
+                                            if (
+                                                "action" in play_result
+                                                and play_result["action"]
+                                                == "play_music"
+                                            ):
+                                                logger.info(
+                                                    f"[MUSIC] Auto-emitting music_play for: {play_result.get('title')}"
+                                                )
+                                                yield f"data: {json.dumps({'music_play': play_result}, separators=(',', ':'))}\n\n"
+                                            else:
+                                                logger.error(
+                                                    f"[MUSIC] Auto-play failed: {play_result}"
+                                                )
+
+                                    except Exception as e:
+                                        print(
+                                            f"DEBUG: Error processing search_music result: {e}"
+                                        )
+
                                 # Handle play_music - emit music_play event for Flutter to play
                                 elif function_name == "play_music":
                                     try:
@@ -1155,6 +1216,44 @@ class ChatService:
                                     except Exception as e:
                                         logger.error(
                                             f"Could not parse play_music result: {e}"
+                                        )
+
+                                elif function_name == "add_to_queue":
+                                    try:
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+                                        if (
+                                            "action" in result_data
+                                            and result_data["action"] == "add_to_queue"
+                                        ):
+                                            yield f"data: {json.dumps({'music_queue_add': result_data}, separators=(',', ':'))}\n\n"
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error emitting music_queue_add: {e}"
+                                        )
+
+                                elif function_name in [
+                                    "stop_music",
+                                    "pause_music",
+                                    "resume_music",
+                                    "next_music",
+                                    "previous_music",
+                                ]:
+                                    try:
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+                                        if "action" in result_data:
+                                            # Emit generic music_control event
+                                            yield f"data: {json.dumps({'music_control': result_data}, separators=(',', ':'))}\n\n"
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error emitting music_control for {function_name}: {e}"
                                         )
 
                                 elif function_name in [

@@ -300,6 +300,11 @@ def create_file_server(path: str, content: str) -> str:
         return f"Error creating file: {str(e)}"
 
 
+from app.services.music_queue_service import music_queue_service
+
+# ... (imports)
+
+
 class ToolService:
     def __init__(self, max_workers: int = 4):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -308,7 +313,12 @@ class ToolService:
             "web_fetch": safe_web_fetch,
             "search_music": music_service.search_music,
             "play_music": music_service.play_music,
-            "stop_music": music_service.stop_music,
+            "stop_music": music_queue_service.stop_music,  # Use queue service for client command
+            "add_to_queue": music_queue_service.add_to_queue,
+            "next_music": music_queue_service.next_music,
+            "previous_music": music_queue_service.previous_music,
+            "pause_music": music_queue_service.pause_music,
+            "resume_music": music_queue_service.resume_music,
             "read_file": read_file_server,
             "search_file": search_file_server,
             "create_file": create_file_server,
@@ -375,7 +385,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "play_music",
-                    "description": "Play music from a YouTube URL. Call search_music first to get a list of tracks, then use this to play a specific track by its URL.",
+                    "description": "Play music from a YouTube URL IMMEDIATELY (replaces current track). Call search_music first to get a list of tracks.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -391,8 +401,73 @@ class ToolService:
             {
                 "type": "function",
                 "function": {
+                    "name": "add_to_queue",
+                    "description": "Add a music track to the playback queue (does not interrupt current song).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The YouTube video URL to add (from search_music results)",
+                            }
+                        },
+                        "required": ["url"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "stop_music",
-                    "description": "Stop the currently playing music.",
+                    "description": "Stop and clear the currently playing music.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "pause_music",
+                    "description": "Pause the currently playing music.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "resume_music",
+                    "description": "Resume paused music.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "next_music",
+                    "description": "Skip to the next song in the queue.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "previous_music",
+                    "description": "Go back to the previous song.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
