@@ -37,10 +37,12 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Main content
-          Positioned.fill(
+          // Main content - Use SizedBox.expand as the base non-positioned child
+          // to ensure the Stack fills the screen and provides constraints.
+          SizedBox.expand(
             child: IndexedStack(
               index: _selectedIndex,
               children: _screens,
