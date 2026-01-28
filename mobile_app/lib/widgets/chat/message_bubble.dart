@@ -14,15 +14,43 @@ import 'code_block_builder.dart';
 import 'file_action_indicator.dart';
 import 'simple_tool_indicator.dart';
 
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   final Message message;
 
   const MessageBubble({super.key, required this.message});
 
   @override
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble> {
+  bool _isEditing = false;
+  late TextEditingController _editController;
+
+  @override
+  void initState() {
+    super.initState();
+    _editController = TextEditingController(text: widget.message.content);
+  }
+
+  @override
+  void didUpdateWidget(covariant MessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message.content != widget.message.content && !_isEditing) {
+      _editController.text = widget.message.content;
+    }
+  }
+
+  @override
+  void dispose() {
+    _editController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isUser = message.role == 'user';
+    final isUser = widget.message.role == 'user';
     final isDark = theme.brightness == Brightness.dark;
 
     if (isUser) {
@@ -50,10 +78,10 @@ class MessageBubble extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     // Display image if present
-                    if (message.imageBase64 != null && message.imageBase64!.isNotEmpty)
+                    if (widget.message.imageBase64 != null && widget.message.imageBase64!.isNotEmpty)
                       Builder(
                         builder: (context) {
-                          String base64Str = message.imageBase64!;
+                          String base64Str = widget.message.imageBase64!;
                           // Check for data URI info
                           bool isImage = true;
                           String mimeType = '';
@@ -73,26 +101,33 @@ class MessageBubble extends StatelessWidget {
                           if (base64Data.contains(',')) {
                             base64Data = base64Data.split(',').last;
                           }
+                          
+                          // Decode to check validity (optional, but good for safety)
+                          try {
+                              base64Decode(base64Data);
+                          } catch (e) {
+                              return const SizedBox.shrink();
+                          }
 
                           if (isImage) {
                              return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.memory(
-                                  base64Decode(base64Data),
-                                  width: 200,
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 200,
-                                    height: 100,
-                                    color: theme.colorScheme.surfaceContainerHighest,
-                                    child: const Icon(Icons.broken_image, size: 40),
-                                  ),
-                                ),
-                              ),
-                            );
+                               padding: const EdgeInsets.only(bottom: 8),
+                               child: ClipRRect(
+                                 borderRadius: BorderRadius.circular(12),
+                                 child: Image.memory(
+                                   base64Decode(base64Data),
+                                   width: 200,
+                                   height: 200,
+                                   fit: BoxFit.cover,
+                                   errorBuilder: (_, __, ___) => Container(
+                                     width: 200,
+                                     height: 100,
+                                     color: theme.colorScheme.surfaceContainerHighest,
+                                     child: const Icon(Icons.broken_image, size: 40),
+                                   ),
+                                 ),
+                               ),
+                             );
                           } else {
                             // Render File Card for non-image files
                             return Container(
@@ -127,16 +162,110 @@ class MessageBubble extends StatelessWidget {
                           }
                         },
                       ),
-                    // Display text content
-                    if (message.content.isNotEmpty && !message.content.startsWith('[Đã gửi'))
-                      SelectableText(
-                        message.content,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          height: 1.5,
-                          color: theme.colorScheme.onSurface,
+                      
+                    if (widget.message.content.isNotEmpty && !widget.message.content.startsWith('[Đã gửi')) ...[
+                      if (_isEditing)
+                         Container(
+                           margin: const EdgeInsets.only(top: 8),
+                           width: double.infinity,
+                           decoration: BoxDecoration(
+                             color: theme.colorScheme.surface,
+                             borderRadius: BorderRadius.circular(12),
+                 
+                           ),
+                           child: Column(
+                             crossAxisAlignment: CrossAxisAlignment.end,
+                             children: [
+                               TextField(
+                                 controller: _editController,
+                                 autofocus: true,
+                                 maxLines: null,
+                                 style: theme.textTheme.bodyLarge,
+                                 decoration: const InputDecoration(
+                                   contentPadding: EdgeInsets.all(12),
+                                   border: InputBorder.none,
+                                   isDense: true,
+                                 ),
+                               ),
+                               Padding(
+                                 padding: const EdgeInsets.all(8.0),
+                                 child: Row(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     TextButton(
+                                       onPressed: () {
+                                         setState(() {
+                                           _isEditing = false;
+                                           _editController.text = widget.message.content;
+                                         });
+                                       },
+                                       style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                       ),
+                                       child: const Text('Hủy'),
+                                     ),
+                                     const SizedBox(width: 8),
+                                     FilledButton(
+                                       onPressed: () {
+                                         final newContent = _editController.text.trim();
+                                         if (newContent.isNotEmpty && newContent != widget.message.content) {
+                                           context.read<ChatProvider>().editMessage(widget.message, newContent);
+                                         }
+                                         setState(() {
+                                           _isEditing = false;
+                                         });
+                                       },
+                                       style: FilledButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                       ),
+                                       child: const Text('Lưu'),
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             ],
+                           ),
+                         )
+                      else
+                        Column(
+                           crossAxisAlignment: CrossAxisAlignment.end,
+                           children: [
+                              SelectableText(
+                                widget.message.content,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  height: 1.5,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                              // Edit Icon (placed below message, right aligned)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _isEditing = true;
+                                      _editController.text = widget.message.content;
+                                    });
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Icon(
+                                      Icons.edit_outlined, 
+                                      size: 14, 
+                                      color: theme.colorScheme.onSurface.withOpacity(0.4)
+                                    ),
+                                  ),
+                                ),
+                              ),
+                           ],
                         ),
-                        textAlign: TextAlign.right,
-                      ),
+                    ],
                   ],
                 ),
               ),
@@ -196,41 +325,41 @@ class MessageBubble extends StatelessWidget {
                     const SizedBox(height: 6),
 
                     // 1. Deep Search Indicator (status updates)
-                    if (message.deepSearchUpdates.isNotEmpty)
+                    if (widget.message.deepSearchUpdates.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildDeepSearchIndicator(message),
+                        child: _buildDeepSearchIndicator(widget.message),
                       ),
 
                     // 2. Plan Indicator (collapsible)
-                    if (message.plan != null && message.plan!.isNotEmpty)
+                    if (widget.message.plan != null && widget.message.plan!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: PlanIndicator(
-                          plan: message.plan!,
-                          isStreaming: message.isStreaming,
+                          plan: widget.message.plan!,
+                          isStreaming: widget.message.isStreaming,
                         ),
                       ),
 
                     // 3. Interleaved Thinking and Tool Indicators
                     // Replaces old Thinking Indicator
-                    if (message.thinking != null && message.thinking!.isNotEmpty)
+                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildReasoningChain(context, theme, message),
+                        child: _buildReasoningChain(context, theme, widget.message),
                       ),
 
                     // 2. Content with interleaved indicators (using imageBuilder)
                     _buildMarkdownContent(theme, isDark),
 
                     // Streaming indicator
-                    if (message.isStreaming)
+                    if (widget.message.isStreaming)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: _buildStreamingIndicator(theme),
                       ),
                     // Actions
-                    if (!message.isStreaming && message.content.isNotEmpty)
+                    if (!widget.message.isStreaming && widget.message.content.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: _buildActions(context, theme),
@@ -255,16 +384,9 @@ class MessageBubble extends StatelessWidget {
     return Icons.insert_drive_file;
   }
 
-  // Removed _buildInterleavedContent as it's replaced by single MarkdownBody with imageBuilder
-
-  // Deprecated _buildMarkdownContent removed/replaced
-  // Widget _buildMarkdownContent(ThemeData theme, bool isDark) { ... } preserved if needed but replacing call site.
-
-
-
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
     return MarkdownBody(
-      data: message.content,
+      data: widget.message.content,
       selectable: true,
       softLineBreak: true,
       builders: {
@@ -361,7 +483,7 @@ class MessageBubble extends StatelessWidget {
         // Handle custom SEARCH indicator
         if (uriStr.startsWith('search:')) {
           final query = Uri.decodeComponent(uriStr.substring(7));
-          final isCompleted = message.completedSearches.contains(query);
+          final isCompleted = widget.message.completedSearches.contains(query);
           return Align(
             alignment: Alignment.centerLeft,
             child: Padding(
@@ -387,14 +509,14 @@ class MessageBubble extends StatelessWidget {
             
             final target = parts.sublist(1).join(':'); // Path might contain colons
             final actionTag = '${action}:${target}';
-            final isActionCompleted = message.completedFileActions.contains(actionTag);
+            final isActionCompleted = widget.message.completedFileActions.contains(actionTag);
             
             return Align(
               alignment: Alignment.centerLeft,
               child: FileActionIndicator(
                 action: action,
                 target: target,
-                isCompleted: !message.isStreaming || isActionCompleted, 
+                isCompleted: !widget.message.isStreaming || isActionCompleted, 
               ),
             );
           }
@@ -433,15 +555,15 @@ class MessageBubble extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.zero, // Fixed alignment
       child: _TypingIndicator(
-        dotCount: message.content.isEmpty ? 3 : 1, // 3 dots when thinking/empty, 1 dot when streaming text
+        dotCount: widget.message.content.isEmpty ? 3 : 1, // 3 dots when thinking/empty, 1 dot when streaming text
       ),
     );
   }
 
   Widget _buildActions(BuildContext context, ThemeData theme) {
     final chatProvider = context.read<ChatProvider>();
-    final isLiked = message.feedback == 'like';
-    final isDisliked = message.feedback == 'dislike';
+    final isLiked = widget.message.feedback == 'like';
+    final isDisliked = widget.message.feedback == 'dislike';
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -449,7 +571,7 @@ class MessageBubble extends StatelessWidget {
         _ActionButton(
           icon: Icons.copy_outlined,
           onTap: () {
-            Clipboard.setData(ClipboardData(text: message.content));
+            Clipboard.setData(ClipboardData(text: widget.message.content));
             if (context.mounted) {
               CustomSnackBar.showSuccess(context, 'Đã sao chép');
             }
@@ -460,8 +582,8 @@ class MessageBubble extends StatelessWidget {
           icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
           isActive: isLiked,
           onTap: () {
-            if (message.id != null && context.mounted) {
-              chatProvider.submitFeedback(message.id!, 'like');
+            if (widget.message.id != null && context.mounted) {
+              chatProvider.submitFeedback(widget.message.id!, 'like');
             }
           },
         ),
@@ -470,8 +592,8 @@ class MessageBubble extends StatelessWidget {
           icon: isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
           isActive: isDisliked,
           onTap: () {
-            if (message.id != null && context.mounted) {
-              chatProvider.submitFeedback(message.id!, 'dislike');
+            if (widget.message.id != null && context.mounted) {
+              chatProvider.submitFeedback(widget.message.id!, 'dislike');
             }
           },
         ),
@@ -746,5 +868,3 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
     );
   }
 }
-
-

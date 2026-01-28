@@ -501,9 +501,6 @@ class ChatProvider extends ChangeNotifier {
       }
     }
     
-    // Stop any existing stream
-    stopStreaming();
-
     final userId = await StorageService.getUserId() ?? 0;
 
     // Add user message
@@ -517,6 +514,21 @@ class ChatProvider extends ChangeNotifier {
     );
     _messages.add(userMessage);
     notifyListeners();
+
+    await _initiateStreamResponse(content, file: file, onMusicPlay: onMusicPlay, voiceEnabled: voiceEnabled);
+  }
+
+  /// Initialise assistant message placeholder and start streaming
+  Future<void> _initiateStreamResponse(
+    String content, {
+    String? file,
+    void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
+    bool? voiceEnabled,
+  }) async {
+    // Stop any existing stream
+    stopStreaming();
+    
+    final userId = await StorageService.getUserId() ?? 0;
 
     // Add empty assistant message for streaming
     final assistantMessage = Message(
@@ -532,10 +544,6 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      String fullResponse = '';
-      String fullThinking = '';
-      DateTime lastUpdate = DateTime.now();
-      
       // Clear voice audio chunks
       _voiceAudioChunks = [];
       
@@ -564,6 +572,32 @@ class ChatProvider extends ChangeNotifier {
       _streamSubscription = null;
       notifyListeners();
     }
+  }
+
+  /// Edit a message and regenerate response
+  Future<void> editMessage(Message message, String newContent) async {
+    if (message.role != 'user' || _currentConversation == null) return;
+
+    // 1. Find the message index
+    final index = _messages.indexWhere((m) => m.id == message.id || m == message);
+    if (index == -1) return;
+
+    // 2. Update content
+    _messages[index] = _messages[index].copyWith(content: newContent);
+
+    // 3. Truncate history: Remove all messages after this one
+    if (index < _messages.length - 1) {
+      _messages.removeRange(index + 1, _messages.length);
+    }
+    notifyListeners();
+
+    // 4. Trigger regeneration
+    // We reuse the existing file attachment if any
+    final file = _messages[index].imageBase64;
+    
+    // We need to use the callback settings if they were set globally, or passed previously?
+    // Using current global callbacks for simplicity
+    await _initiateStreamResponse(newContent, file: file, onMusicPlay: _musicPlayCallback);
   }
 
   /// Unified stream processor
