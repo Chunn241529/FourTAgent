@@ -67,6 +67,7 @@ class MusicPlayerProvider extends ChangeNotifier {
         title: 'Lumina AI Music',
       ),
     );
+    _desktopPlayer!.setVolume(100.0);
 
     // Listen to desktop streams
     _subs.add(_desktopPlayer!.stream.position.listen((pos) {
@@ -80,6 +81,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     }));
     
     _subs.add(_desktopPlayer!.stream.playing.listen((playing) {
+      debugPrint('Desktop Player State: playing=$playing');
       _isPlaying = playing;
       if (playing) _isLoading = false;
       notifyListeners();
@@ -87,6 +89,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     
     _subs.add(_desktopPlayer!.stream.completed.listen((completed) {
       if (completed) {
+        debugPrint('Desktop Player: Track completed');
         _isPlaying = false;
         _position = Duration.zero;
         notifyListeners();
@@ -95,6 +98,19 @@ class MusicPlayerProvider extends ChangeNotifier {
           playNext();
         }
       }
+    }));
+    
+    _subs.add(_desktopPlayer!.stream.error.listen((error) {
+      debugPrint('Desktop Player Error: $error');
+      // Attempt to recover or show error?
+      _isLoading = false;
+      _isPlaying = false;
+      notifyListeners();
+    }));
+    
+    _subs.add(_desktopPlayer!.stream.log.listen((log) {
+       // Filter out noisy logs if needed, but useful for debugging
+       debugPrint('Desktop Player Log: $log');
     }));
   }
 
