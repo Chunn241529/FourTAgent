@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../common/custom_snackbar.dart';
+import '../../providers/music_player_provider.dart';
+import 'package:provider/provider.dart';
 
 /// Modern message input - input on top, icons on bottom
 class MessageInput extends StatefulWidget {
@@ -252,6 +254,7 @@ class _MessageInputState extends State<MessageInput> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMusicActive = context.watch<MusicPlayerProvider>().isVisible;
 
     return Container(
       margin: EdgeInsets.only(
@@ -345,12 +348,14 @@ class _MessageInputState extends State<MessageInput> {
                   //   onTap: _toggleRecording,
                   //   color: (_isListening || _recordedAudioPath != null) ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
                   // ),
-                  // if (widget.onMusicTap != null)
-                  //   _IconBtn(
-                  //     icon: Icons.music_note_outlined,
-                  //     onTap: widget.onMusicTap!,
-                  //     color: theme.colorScheme.onSurface.withOpacity(0.5),
-                  //   ),
+                  if (widget.onMusicTap != null)
+                    _IconBtn(
+                      icon: isMusicActive ? Icons.music_note : Icons.music_note_outlined,
+                      onTap: widget.onMusicTap!,
+                      color: isMusicActive 
+                          ? theme.colorScheme.primary 
+                          : theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                   // Voice Mode Toggle
                   _IconBtn(
                     icon: widget.voiceModeEnabled 

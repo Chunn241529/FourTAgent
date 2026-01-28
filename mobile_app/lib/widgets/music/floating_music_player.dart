@@ -92,15 +92,15 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
           width: 200,
           height: 56,
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withOpacity(0.8),
+            color: theme.colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(50),
             border: Border.all(
-              color: theme.colorScheme.primary.withOpacity(0.3),
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.15),
+                color: theme.colorScheme.primary.withValues(alpha: 0.15),
                 blurRadius: 20,
                 spreadRadius: 2,
               ),
@@ -128,8 +128,8 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                           child: CachedNetworkImage(
                             imageUrl: player.thumbnail,
                             fit: BoxFit.cover,
-                            placeholder: (_, __) => _buildMusicIcon(theme),
-                            errorWidget: (_, __, ___) => _buildMusicIcon(theme),
+                            placeholder: (_, ___) => _buildMusicIcon(theme),
+                            errorWidget: (_, ___, ____) => _buildMusicIcon(theme),
                           ),
                         )
                       : _buildMusicIcon(theme),
@@ -169,6 +169,16 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                         color: theme.colorScheme.primary,
                       ),
               ),
+              // Repeat indicator (mini) - to the right of pause button
+              if (player.repeatMode != RepeatMode.off)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 4),
+                  child: Icon(
+                    player.repeatMode == RepeatMode.all ? Icons.repeat_rounded : Icons.repeat_one_rounded,
+                    size: 14,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                  ),
+                ),
               const SizedBox(width: 8),
               // Close button
               IconButton(
@@ -178,10 +188,10 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                 icon: Icon(
                   Icons.close_rounded,
                   size: 18,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
             ],
           ),
         ),
@@ -200,15 +210,15 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
           width: 280,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withOpacity(0.85),
+            color: theme.colorScheme.surface.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: theme.colorScheme.primary.withOpacity(0.3),
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.2),
+                color: theme.colorScheme.primary.withValues(alpha: 0.2),
                 blurRadius: 30,
                 spreadRadius: 5,
               ),
@@ -233,14 +243,14 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       decoration: TextDecoration.none,
                     ),
                   ),
                   IconButton(
                     onPressed: () => player.hideAndStop(),
                     icon: Icon(Icons.close_rounded,
-                        size: 18, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                        size: 18, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -263,7 +273,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.3),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -304,7 +314,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                     _formatDuration(player.position),
                     style: TextStyle(
                       fontSize: 10,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -317,7 +327,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
                         activeTrackColor: theme.colorScheme.primary,
-                        inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
+                        inactiveTrackColor: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                         thumbColor: theme.colorScheme.primary,
                       ),
                       child: Slider(
@@ -333,7 +343,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                     _formatDuration(player.duration),
                     style: TextStyle(
                       fontSize: 10,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -346,14 +356,32 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                   // Repeat Toggle - Far Left
+                   IconButton(
+                     onPressed: () => player.toggleRepeatMode(),
+                     icon: Icon(
+                       _getRepeatIcon(player.repeatMode),
+                       color: player.repeatMode == RepeatMode.off 
+                           ? theme.colorScheme.onSurface.withValues(alpha: 0.4) 
+                           : theme.colorScheme.primary,
+                       size: 22,
+                     ),
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
+                     tooltip: 'Repeat Mode',
+                   ),
+                   const SizedBox(width: 20),
+                   
                    // PREV Button
                    IconButton(
                      onPressed: (player.queueIndex > 0) ? () => player.playPrevious() : null,
                      icon: Icon(Icons.skip_previous_rounded, 
                        color: (player.queueIndex > 0) ? theme.colorScheme.primary : theme.disabledColor),
                      iconSize: 32,
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
                    ),
-                   const SizedBox(width: 24),
+                   const SizedBox(width: 16),
                   
                   // Play/pause button
                   Container(
@@ -364,7 +392,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                       color: theme.colorScheme.primary,
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -375,7 +403,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       icon: player.isLoading
-                          ? SizedBox(
+                          ? const SizedBox(
                               width: 24,
                               height: 24,
                               child: CircularProgressIndicator(
@@ -393,13 +421,15 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
                     ),
                   ),
 
-                   const SizedBox(width: 24),
+                   const SizedBox(width: 16),
                    // NEXT Button
                    IconButton(
                      onPressed: (player.queue.isNotEmpty) ? () => player.playNext() : null,
                      icon: Icon(Icons.skip_next_rounded, 
                         color: (player.queue.isNotEmpty) ? theme.colorScheme.primary : theme.disabledColor),
                      iconSize: 32,
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
                    ),
                 ],
               ),
@@ -414,7 +444,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
     return Center(
       child: Icon(
         Icons.music_note_rounded,
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withValues(alpha: 0.9),
         size: 28,
       ),
     );
@@ -424,7 +454,7 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
     return Center(
       child: Icon(
         Icons.music_note_rounded,
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withValues(alpha: 0.9),
         size: 48,
       ),
     );
@@ -434,5 +464,16 @@ class _FloatingMusicPlayerState extends State<FloatingMusicPlayer> {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  IconData _getRepeatIcon(RepeatMode mode) {
+    switch (mode) {
+      case RepeatMode.off:
+        return Icons.repeat_rounded;
+      case RepeatMode.one:
+        return Icons.repeat_one_rounded;
+      case RepeatMode.all:
+        return Icons.repeat_rounded;
+    }
   }
 }

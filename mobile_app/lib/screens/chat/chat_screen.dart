@@ -649,9 +649,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   onStop: () => chatProvider.stopStreaming(),
                   onMusicTap: () {
                     final musicPlayer = context.read<MusicPlayerProvider>();
-                    // If there's an existing track, just show the player
-                    // Otherwise do nothing (or could show a message)
-                    if (musicPlayer.hasTrack) {
+                    if (musicPlayer.isVisible) {
+                      musicPlayer.hide();
+                    } else {
                       musicPlayer.show();
                     }
                   },

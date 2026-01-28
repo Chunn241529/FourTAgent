@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,10 +11,13 @@ import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/desktop_home_screen.dart';
 import 'widgets/common/loading_indicator.dart';
-import 'widgets/music/floating_music_player.dart';
+
+import 'package:media_kit/media_kit.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Initialize MediaKit for desktop support
+  MediaKit.ensureInitialized();
   
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([

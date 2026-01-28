@@ -1,27 +1,26 @@
+import 'package:flutter/foundation.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+
+enum RepeatMode { off, one, all }
 
 /// Music Player Provider - Global state for music playback
-/// Cross-platform: mpv for Desktop, audioplayers for Mobile
 class MusicPlayerProvider extends ChangeNotifier {
-  // Desktop: mpv process
-  Process? _mpvProcess;
-  
   // Mobile: audioplayers
-  AudioPlayer? _audioPlayer;
-  StreamSubscription? _positionSub;
-  StreamSubscription? _durationSub;
-  StreamSubscription? _stateSub;
-  StreamSubscription? _completeSub;
+  AudioPlayer? _mobilePlayer;
   
+  // Desktop: media_kit
+  Player? _desktopPlayer;
+  
+  // Subscriptions
+  final List<StreamSubscription> _subs = [];
+
   // Current track info
   String? _currentUrl;
   String _title = '';
   String _thumbnail = '';
-  int _totalDuration = 0;
   
   // Player state
   bool _isPlaying = false;
@@ -29,18 +28,15 @@ class MusicPlayerProvider extends ChangeNotifier {
   bool _isVisible = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  RepeatMode _repeatMode = RepeatMode.all; // Default to repeat all
   
   // Floating player position
-  double _posX = 20; // Default valid position
-  double _posY = 100;
+  double _posX = -1; // Use -1 to trigger auto-positioning in UI on first show
+  double _posY = -1;
   bool _isExpanded = false;
-  
-  // Position timer (for desktop)
-  Timer? _positionTimer;
 
   // Platform check
   bool get _isDesktop => !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
-  bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   // Getters
   String get title => _title;
@@ -50,44 +46,89 @@ class MusicPlayerProvider extends ChangeNotifier {
   bool get isVisible => _isVisible;
   Duration get position => _position;
   Duration get duration => _duration;
+  RepeatMode get repeatMode => _repeatMode;
   double get posX => _posX;
   double get posY => _posY;
   bool get isExpanded => _isExpanded;
 
   MusicPlayerProvider() {
-    if (_isMobile) {
+    if (_isDesktop) {
+      _initDesktopPlayer();
+    } else {
       _initMobilePlayer();
     }
   }
 
-  void _initMobilePlayer() {
-    _audioPlayer = AudioPlayer();
-    
-    _positionSub = _audioPlayer!.onPositionChanged.listen((pos) {
+  void _initDesktopPlayer() {
+    // Configure for audio only (no video window)
+    _desktopPlayer = Player(
+      configuration: const PlayerConfiguration(
+        vo: 'null', // Disable video output on Linux/mpv
+        title: 'Lumina AI Music',
+      ),
+    );
+
+    // Listen to desktop streams
+    _subs.add(_desktopPlayer!.stream.position.listen((pos) {
       _position = pos;
       notifyListeners();
-    });
+    }));
     
-    _durationSub = _audioPlayer!.onDurationChanged.listen((dur) {
+    _subs.add(_desktopPlayer!.stream.duration.listen((dur) {
       _duration = dur;
       notifyListeners();
-    });
+    }));
     
-    _stateSub = _audioPlayer!.onPlayerStateChanged.listen((state) {
-      _isPlaying = state == PlayerState.playing;
-      _isLoading = false;
+    _subs.add(_desktopPlayer!.stream.playing.listen((playing) {
+      _isPlaying = playing;
+      if (playing) _isLoading = false;
       notifyListeners();
-    });
+    }));
     
-    _completeSub = _audioPlayer!.onPlayerComplete.listen((_) {
+    _subs.add(_desktopPlayer!.stream.completed.listen((completed) {
+      if (completed) {
+        _isPlaying = false;
+        _position = Duration.zero;
+        notifyListeners();
+        
+        if (!_stoppedManually) {
+          playNext();
+        }
+      }
+    }));
+  }
+
+  void _initMobilePlayer() {
+    _mobilePlayer = AudioPlayer();
+    
+    // Listen to mobile streams
+    _subs.add(_mobilePlayer!.onPositionChanged.listen((pos) {
+      _position = pos;
+      notifyListeners();
+    }));
+    
+    _subs.add(_mobilePlayer!.onDurationChanged.listen((dur) {
+      _duration = dur;
+      notifyListeners();
+    }));
+    
+    _subs.add(_mobilePlayer!.onPlayerStateChanged.listen((state) {
+      _isPlaying = state == PlayerState.playing;
+      if (state == PlayerState.playing || state == PlayerState.paused) {
+        _isLoading = false;
+      }
+      notifyListeners();
+    }));
+    
+    _subs.add(_mobilePlayer!.onPlayerComplete.listen((_) {
       _isPlaying = false;
       _position = Duration.zero;
       notifyListeners();
-      // Auto-next if not stopped manually
+      
       if (!_stoppedManually) {
          playNext();
       }
-    });
+    }));
   }
 
   // Queue state
@@ -117,9 +158,22 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
   
   /// Play next song in queue
-  Future<void> playNext() async {
+  Future<void> playNext({bool autoPlay = true}) async {
     if (_queue.isEmpty) return;
     
+    if (_repeatMode == RepeatMode.one && autoPlay) {
+      // Repeat current song
+      final track = _queue[_queueIndex.clamp(0, _queue.length - 1)];
+      await playFromUrl(
+        url: track['url'],
+        title: track['title'],
+        thumbnail: track['thumbnail'],
+        duration: track['duration'],
+        isQueueItem: true,
+      );
+      return;
+    }
+
     int nextIndex = _queueIndex + 1;
     if (nextIndex < _queue.length) {
       _queueIndex = nextIndex;
@@ -130,6 +184,17 @@ class MusicPlayerProvider extends ChangeNotifier {
          thumbnail: track['thumbnail'],
          duration: track['duration'],
          isQueueItem: true, 
+      );
+    } else if (_repeatMode == RepeatMode.all) {
+      // Wrap around to start
+      _queueIndex = 0;
+      final track = _queue[0];
+      await playFromUrl(
+         url: track['url'],
+         title: track['title'],
+         thumbnail: track['thumbnail'],
+         duration: track['duration'],
+         isQueueItem: true,
       );
     } else {
       stop(); // End of queue
@@ -160,15 +225,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     Duration? startTime,
     bool isQueueItem = false,
   }) async {
-    debugPrint('MusicPlayerProvider: playFromUrl called for $title');
+    debugPrint('MusicPlayerProvider: playFromUrl called for $title ($url)');
     try {
-      // Ensure stop doesn't crash us
-      try {
-        await stop(clearQueue: !isQueueItem); 
-      } catch (e) {
-        debugPrint('Error stopping previous track: $e');
-      }
-      
       if (!isQueueItem) {
           _queue.clear();
           _queue.add({
@@ -185,162 +243,53 @@ class MusicPlayerProvider extends ChangeNotifier {
       _isVisible = true; // Make visible immediately
       _title = title;
       _thumbnail = thumbnail ?? '';
-      _totalDuration = duration ?? 0;
       _currentUrl = url;
+      // Optimistic duration set (will be updated by stream)
       _duration = Duration(seconds: duration ?? 0);
       notifyListeners();
 
-      if (_isDesktop) {
-        await _playDesktop(url, startTime: startTime);
-      } else if (_isMobile) {
-        await _playMobile(url);
+      if (_isDesktop && _desktopPlayer != null) {
+        // MediaKit playback
+        await _desktopPlayer!.open(Media(url), play: true);
+        if (startTime != null) {
+          await _desktopPlayer!.seek(startTime);
+        }
+      } else if (_mobilePlayer != null) {
+        // AudioPlayers playback
+        await _mobilePlayer?.stop();
+        await _mobilePlayer?.play(UrlSource(url));
+        if (startTime != null) {
+          await _mobilePlayer?.seek(startTime);
+        }
       }
       
     } catch (e) {
       debugPrint('Error playing music: $e');
       _isLoading = false;
       _isPlaying = false;
-      // Keep _isVisible true so user sees error state if needed
       notifyListeners();
     }
-  }
-
-  // Track mpv process generation to avoid race condition on exit callback
-  int _mpvGeneration = 0;
-
-  /// Desktop playback using mpv
-  Future<void> _playDesktop(String url, {Duration? startTime}) async {
-    debugPrint('Starting mpv (Desktop) with URL... Start: $startTime');
-    
-    // Increment generation to invalidate old exit callbacks
-    _mpvGeneration++;
-    final currentGen = _mpvGeneration;
-    
-    // Use keep-open and idle to prevent premature exit
-    List<String> args = ['--no-video', '--keep-open=yes', '--idle', '--really-quiet', url];
-    if (startTime != null) {
-      args.add('--start=${startTime.inSeconds}');
-    }
-
-    _mpvProcess = await Process.start(
-      'mpv',
-      args,
-      mode: ProcessStartMode.normal,
-    );
-    
-    // Capture stderr for debugging
-    _mpvProcess?.stderr.transform(const SystemEncoding().decoder).listen((data) {
-      debugPrint('mpv stderr: $data');
-    });
-    
-    // Capture stdout
-    _mpvProcess?.stdout.transform(const SystemEncoding().decoder).listen((data) {
-      debugPrint('mpv stdout: $data');
-    });
-    
-    _isPlaying = true;
-    _isLoading = false;
-    _position = startTime ?? Duration.zero;
-    notifyListeners();
-    
-    // Simulated position timer
-    _positionTimer?.cancel();
-    _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isPlaying && _totalDuration > 0) {
-        _position += const Duration(seconds: 1);
-        if (_position.inSeconds >= _totalDuration) {
-          // Timer finished
-        }
-        notifyListeners();
-      }
-    });
-    
-    _mpvProcess?.exitCode.then((exitCode) {
-      debugPrint('mpv exited with code: $exitCode (gen=$currentGen, current=$_mpvGeneration)');
-      // Only update state if this is still the current process (not an old killed one)
-      if (currentGen == _mpvGeneration && _isPlaying) { 
-          _isPlaying = false;
-          _positionTimer?.cancel();
-          notifyListeners();
-          
-          if (!_stoppedManually) {
-             playNext();
-          }
-      }
-    });
-    
-    debugPrint('mpv started successfully for: $_title (gen=$currentGen)');
-  }
-
-  /// Mobile playback using audioplayers
-  Future<void> _playMobile(String url) async {
-    debugPrint('Starting audioplayers (Mobile) with URL...');
-    
-    await _audioPlayer?.stop();
-    await _audioPlayer?.play(UrlSource(url));
-    
-    _isPlaying = true;
-    _isLoading = false;
-    notifyListeners();
-    
-    debugPrint('audioplayers started successfully for: $_title');
   }
 
   /// Toggle play/pause
   Future<void> toggle() async {
-    if (_isDesktop) {
-      // Desktop: restart since mpv simple mode doesn't support pause
+    if (_isDesktop && _desktopPlayer != null) {
+      await _desktopPlayer!.playOrPause();
+    } else if (_mobilePlayer != null) {
       if (_isPlaying) {
-        _isPlaying = false;
-        _positionTimer?.cancel();
-        _mpvProcess?.kill();
-        notifyListeners();
-      } else if (_currentUrl != null) {
-        await playFromUrl(
-          url: _currentUrl!,
-          title: _title,
-          thumbnail: _thumbnail,
-          duration: _totalDuration,
-          startTime: _position, // Resume from current position
-          isQueueItem: true, // Resume doesn't clear queue
-        );
-      }
-    } else if (_isMobile && _audioPlayer != null) {
-      if (_isPlaying) {
-        await _audioPlayer!.pause();
+        await _mobilePlayer!.pause();
       } else {
-        await _audioPlayer!.resume();
+        await _mobilePlayer!.resume();
       }
     }
   }
 
-  // Seek debounce timer (for desktop)
-  Timer? _seekDebounceTimer;
-  Duration? _pendingSeekPosition;
-
   /// Seek to position
   Future<void> seek(Duration position) async {
-    if (_isMobile && _audioPlayer != null) {
-      await _audioPlayer!.seek(position);
-    } else if (_isDesktop) {
-      // Debounce seek for desktop to avoid rapid mpv restarts
-      _pendingSeekPosition = position;
-      _position = position; // Update UI immediately
-      notifyListeners();
-      
-      _seekDebounceTimer?.cancel();
-      _seekDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
-        if (_pendingSeekPosition != null && _currentUrl != null) {
-          debugPrint('Seeking on desktop (restart mpv at ${_pendingSeekPosition!.inSeconds}s)');
-          // Kill current process
-          _mpvProcess?.kill();
-          _positionTimer?.cancel();
-          
-          // Restart at new position
-          await _playDesktop(_currentUrl!, startTime: _pendingSeekPosition);
-          _pendingSeekPosition = null;
-        }
-      });
+    if (_isDesktop && _desktopPlayer != null) {
+      await _desktopPlayer!.seek(position);
+    } else if (_mobilePlayer != null) {
+      await _mobilePlayer!.seek(position);
     }
   }
 
@@ -348,16 +297,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> stop({bool clearQueue = false}) async {
     debugPrint('MusicPlayerProvider: stop called');
     _stoppedManually = true;
-    _positionTimer?.cancel();
     
     try {
-      if (_isDesktop && _mpvProcess != null) {
-        _mpvProcess!.kill(ProcessSignal.sigkill); // Force kill
-        _mpvProcess = null;
-      }
-      
-      if (_isMobile && _audioPlayer != null) {
-        await _audioPlayer!.stop();
+      if (_isDesktop && _desktopPlayer != null) {
+        await _desktopPlayer!.stop();
+      } else if (_mobilePlayer != null) {
+        await _mobilePlayer!.stop();
       }
     } catch (e) {
       debugPrint('Error in stop execution: $e');
@@ -376,10 +321,26 @@ class MusicPlayerProvider extends ChangeNotifier {
   
   /// Handle control actions
   void handleControl(String action) {
-    if (action == 'next_music') playNext();
+    if (action == 'next_music') playNext(autoPlay: false); // Manual trigger
     if (action == 'previous_music') playPrevious();
     if (action == 'pause_music' || action == 'resume_music') toggle();
     if (action == 'stop_music') stop(clearQueue: true);
+  }
+
+  /// Toggle repeat mode
+  void toggleRepeatMode() {
+    switch (_repeatMode) {
+      case RepeatMode.off:
+        _repeatMode = RepeatMode.one;
+        break;
+      case RepeatMode.one:
+        _repeatMode = RepeatMode.all;
+        break;
+      case RepeatMode.all:
+        _repeatMode = RepeatMode.off;
+        break;
+    }
+    notifyListeners();
   }
   
   /// Hide the player (just hide UI, keep track info for restore)
@@ -396,12 +357,10 @@ class MusicPlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Show the player (restore visibility without changing track)
+  /// Show the player (restore visibility)
   void show() {
-    if (_currentUrl != null && _title.isNotEmpty) {
-      _isVisible = true;
-      notifyListeners();
-    }
+    _isVisible = true;
+    notifyListeners();
   }
 
   /// Check if there's a track loaded
@@ -422,14 +381,11 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _positionTimer?.cancel();
-    _seekDebounceTimer?.cancel();
-    _mpvProcess?.kill();
-    _positionSub?.cancel();
-    _durationSub?.cancel();
-    _stateSub?.cancel();
-    _completeSub?.cancel();
-    _audioPlayer?.dispose();
+    for (var sub in _subs) {
+      sub.cancel();
+    }
+    _desktopPlayer?.dispose();
+    _mobilePlayer?.dispose();
     super.dispose();
   }
 }
