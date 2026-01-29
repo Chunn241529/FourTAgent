@@ -334,13 +334,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "web_search",
-                    "description": "Search the web using DuckDuckGo. IMPORTANT: Query MUST be in ENGLISH KEYWORDS only (e.g., 'Python install Ubuntu', 'today news', 'ChatGPT features'). DO NOT use Vietnamese or full sentences.",
+                    "description": "Search the web for information. Use this when you need current news, facts, technical documentation, or knowledge outside your training data. Prefer English keywords for technical/international topics.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "Search query in ENGLISH KEYWORDS ONLY (2-10 words, e.g., 'machine learning tutorial')",
+                                "description": "Search keywords (e.g., 'Python install Ubuntu', 'today news').",
                             }
                         },
                         "required": ["query"],
@@ -351,7 +351,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "web_fetch",
-                    "description": "Fetch and extract clean text content from a URL using BeautifulSoup. Returns the main content of the page.",
+                    "description": "Fetch content from a specific URL to read its details. Useful when a search result looks promising but needs full reading.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -368,13 +368,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "search_music",
-                    "description": "Search for music using keywords. Returns a list of tracks with titles and URLs. Use this before playing music if the user hasn't provided a specific URL.",
+                    "description": "Search for music tracks. Returns a list of tracks with titles and URLs. REQUIRED step before playing music unless you already have a URL.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "Keywords to search for (e.g., 'classical music', 'Imagine Dragons')",
+                                "description": "Keywords (e.g., 'Lạc Trôi', 'Chill music')",
                             }
                         },
                         "required": ["query"],
@@ -385,13 +385,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "play_music",
-                    "description": "Play music from a YouTube URL IMMEDIATELY (replaces current track). Call search_music first to get a list of tracks.",
+                    "description": "Play a specific YouTube URL. Call this immediately if you find a high-confidence match from `search_music`. This replaces the current track.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "url": {
                                 "type": "string",
-                                "description": "The YouTube video URL to play (from search_music results)",
+                                "description": "The YouTube video URL to play",
                             }
                         },
                         "required": ["url"],
@@ -402,13 +402,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "add_to_queue",
-                    "description": "Add a music track to the playback queue (does not interrupt current song).",
+                    "description": "Add a music track to the queue instead of playing immediately.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "url": {
                                 "type": "string",
-                                "description": "The YouTube video URL to add (from search_music results)",
+                                "description": "The YouTube video URL to add",
                             }
                         },
                         "required": ["url"],
@@ -419,7 +419,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "stop_music",
-                    "description": "Stop and clear the currently playing music.",
+                    "description": "Stop playback and clear the standard music player.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -431,7 +431,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "pause_music",
-                    "description": "Pause the currently playing music.",
+                    "description": "Pause playback.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -443,7 +443,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "resume_music",
-                    "description": "Resume paused music.",
+                    "description": "Resume playback.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -455,7 +455,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "next_music",
-                    "description": "Skip to the next song in the queue.",
+                    "description": "Skip to next track.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -467,7 +467,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "previous_music",
-                    "description": "Go back to the previous song.",
+                    "description": "Go back to previous track.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -479,13 +479,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "read_file",
-                    "description": "Read the content of a local file. REQUIRED after 'search_file' if you need to see the file's actual content to summarize or explain it. Returns the full text content.",
+                    "description": "Read content of a local file. Use this when you need to analyze, summarize, or explain a specific file found via `search_file`.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "path": {
                                 "type": "string",
-                                "description": "The full path to the file (obtained from search results or user input)",
+                                "description": "Full path to the file.",
                             }
                         },
                         "required": ["path"],
@@ -496,13 +496,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "search_file",
-                    "description": "Search for files by name/pattern on the Server (Linux). Returns a list of matching file paths.",
+                    "description": "Search for files on the user's system (Linux). Useful for finding documents, code, or data.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "Filename or pattern (e.g., 'budget.xlsx', 'report', '*.py')",
+                                "description": "Filename pattern (e.g., '*.pdf', 'budget_report').",
                             },
                         },
                         "required": ["query"],
@@ -513,17 +513,17 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "create_file",
-                    "description": "Create a file on the server. Defaults to 'Downloads' folder if only a filename is given. If specific path is needed, provide full path.",
+                    "description": "Create a new file with content. Useful for saving notes, code, or reports.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "path": {
                                 "type": "string",
-                                "description": "Filename (e.g. 'hello.txt' -> Downloads/hello.txt) or Full Path.",
+                                "description": "Filename or Path.",
                             },
                             "content": {
                                 "type": "string",
-                                "description": "The text content to write.",
+                                "description": "Content to write.",
                             },
                         },
                         "required": ["path", "content"],
@@ -534,13 +534,13 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "deep_search",
-                    "description": "Perform comprehensive in-depth research on a topic. Use this for complex questions that require: multiple perspectives, detailed analysis, current information from multiple sources, or thorough explanations. This tool searches broadly, analyzes results, and synthesizes a detailed report. DO NOT use for simple questions.",
+                    "description": "Perform in-depth research on a complex topic. Generates a detailed report from multiple sources. Use only for complex requests.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "topic": {
                                 "type": "string",
-                                "description": "The topic or question to research in depth (can be Vietnamese or English)",
+                                "description": "Topic to research.",
                             }
                         },
                         "required": ["topic"],

@@ -102,9 +102,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
 
-
-// ... (imports)
-
   void _showError(String message) {
     // Set inline error message
     setState(() => _errorMessage = message);

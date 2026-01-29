@@ -32,27 +32,8 @@ logger = logging.getLogger(__name__)
 tool_service = ToolService()
 
 
-SEARCH_TRIGGERS = [
-    "tìm kiếm",
-    "tra cứu",
-    "search",
-    "google",
-    "tin tức",
-    "thời tiết",
-    "sự kiện",
-    "lịch thi đấu",
-    "review",
-    "so sánh giá",
-]
+# Triggers removed for autonomous LLM
 
-DEEP_SEARCH_TRIGGERS = [
-    "tìm hiểu",
-    "nghiên cứu",
-    "research",
-    "deep search",
-    "deepsearch",
-    "tìm hiểu sâu",
-]
 
 
 class ChatService:
@@ -130,19 +111,13 @@ class ChatService:
             f"Using conversation {conversation.id}, is_new: {is_new_conversation}"
         )
 
-        # Check for Deep Search command or triggers
-        is_deep_search = message.message.strip().startswith("/deepsearch") or any(
-            trigger in message.message.lower() for trigger in DEEP_SEARCH_TRIGGERS
-        )
+        # Check for Deep Search slash command ONLY
+        is_deep_search = message.message.strip().startswith("/deepsearch")
 
         if is_deep_search:
             from app.services.deep_search_service import DeepSearchService
 
             topic = message.message.strip().replace("/deepsearch", "", 1).strip()
-
-            # If triggered by keyword but no topic (e.g. "nghiên cứu giúp tôi"), use the whole message
-            if not topic or topic == message.message.strip():
-                topic = message.message.strip()
 
             if not topic:
                 return StreamingResponse(
@@ -166,16 +141,9 @@ class ChatService:
         xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
         current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
 
-        # Check search triggers
-        force_search = any(
-            trigger in message.message.lower() for trigger in SEARCH_TRIGGERS
-        )
-        if force_search:
-            logger.info("Search trigger detected, forcing web search")
-
         # System prompt
         system_prompt = ChatService._build_system_prompt(
-            xung_ho, current_time, force_search, voice_enabled
+            xung_ho, current_time, voice_enabled
         )
 
         # Xử lý file và context
@@ -268,103 +236,49 @@ class ChatService:
     def _build_system_prompt(
         xung_ho: str,
         current_time: str,
-        force_search: bool = False,
         voice_enabled: bool = False,
     ) -> str:
-        """Xây dựng system prompt với hướng dẫn sử dụng RAG"""
+        """Xây dựng system prompt với hướng dẫn sử dụng Tool Tự động"""
         prompt = f"""
-        Bạn là Lumin - một AI nói chuyện tự Luminên như con người, rất thông minh, trẻ con, dí dỏm và thân thiện.
+        Bạn là Lumin - một AI nói chuyện tự nhiên như con người, rất thông minh, trẻ con, dí dỏm và thân thiện.
         Bạn tự xưng Lumin và người dùng là {xung_ho}. Ví dụ: "Lumin rất vui được giúp {xung_ho}!"  
         
         Thời gian hiện tại: {current_time}
-        """
 
-        if force_search:
-            prompt += """
-            
-            QUAN TRỌNG: Người dùng đang yêu cầu tìm kiếm thông tin cụ thể hoặc cập nhật.
-            BẠN BẮT BUỘC PHẢI SỬ DỤNG CÔNG CỤ `web_search` để tìm thông tin chính xác và mới nhất trước khi trả lời.
-            
-            **KHI GỌI TOOL `web_search`**:
-            - **TUYỆT ĐỐI KHÔNG** nói "Tôi đang tìm kiếm...", "Đợi chút...", "Dùng tool search...". Cứ lẳng lặng mà làm.
-            - Nếu thiếu thông tin, **BẮT BUỘC PHẢI SEARCH** chứ không được trả lời "Tôi không biết".
-            - **Ngôn ngữ tìm kiếm**:
-              - Ưu tiên dùng **TIẾNG ANH** với KEYWORDS NGẮN cho các vấn đề Kỹ thuật (Coding, Linux, AI...), Khoa học, hoặc Quốc tế.
-              - Dùng **TIẾNG VIỆT** cho các vấn đề nội địa Việt Nam (Tin tức, Văn hóa, Du lịch, Pháp luật...).
-            
-            **⚠️ TUYỆT ĐỐI KHÔNG LẶP LẠI SEARCH:**
-            - CHỈ search MỘT LẦN cho mỗi chủ đề/câu hỏi.
-            - KHÔNG search lại với query giống hoặc tương tự (chỉ khác chữ hoa/thường, viết cách khác...).
-            - Sau khi đã có kết quả search, PHẢI sử dụng kết quả đó để trả lời, KHÔNG search thêm.
-            - Nếu cần thông tin khác, search với query HOÀN TOÀN KHÁC.
-            
-            KHÔNG được bịa đặt thông tin.
-            TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
-            """
-        else:
-            # Even when not forced, add general guideline
-            prompt += """
-            **QUY TẮC TÌM KIẾM VÀ TRẢ LỜI:**
-            - KHÔNG thông báo "Đang search...", "Đợi chút...". Hãy search âm thầm.
-            - **QUAN TRỌNG - QUERY SEARCH:** Khi gọi `web_search`, PHẢI dùng **TIẾNG ANH hoặc tiếng Việt, chỉ KEYWORDS**.
-              - Ví dụ: Người dùng hỏi "hôm nay có tin gì mới" → Query: "today news"
-              - Ví dụ: "cách cài Python trên Ubuntu" → Query: "install Python Ubuntu"
-              - **KHÔNG** dùng câu dài cho query.
-            
-            **HƯỚNG DẪN TÌM KIẾM:**
-            - **Ưu tiên search 1 lần chính xác** thay vì search nhiều lần vụn vặt.
-            - Nếu kết quả tìm kiếm KHÔNG ĐỦ hoặc KHÔNG LIÊN QUAN, hãy search lại với từ khóa KHÁC (cụ thể hơn, tiếng Anh/Việt đảo lại).
-            - **TRÁNH LẶP LẠI** cùng một từ khóa search nếu đã tìm rồi mà không ra kết quả (vì kết quả sẽ y hệt). Hãy thay đổi từ khóa.
-            - Sau khi search xong, TRẢ LỜI ĐẦY ĐỦ, ĐI THẲNG VÀO VẤN ĐỀ.
-            
-            **QUY TẮC PHÁT NHẠC (BẮT BUỘC TUÂN THỦ):**
-            
-            1. Khi user yêu cầu "phát nhạc X", "nghe nhạc X", "mở bài X":
-               → BẮT BUỘC gọi `search_music(query="X")`
-            
-               **TRƯỜNG HỢP 1: TÌM THẤY KẾT QUẢ CHÍNH XÁC HOẶC RẤT KHỚP (High Confidence Match)**
-               - Nếu kết quả đầu tiên có tên bài hát và nghệ sĩ khớp với yêu cầu của user (ví dụ user hỏi "Lạc Trôi", kết quả là "Lạc Trôi - Sơn Tùng MTP"), HOẶC nếu user chỉ nói tên bài hát và kết quả đầu tiên rất phổ biến và đúng tên.
-               → **ĐƯỢC PHÉP và KHUYẾN KHÍCH** gọi ngay `play_music(url="<URL của bài đầu tiên>")` để phát luôn, không cần hỏi lại.
-               → Trả lời: "Đang phát: [Tên bài]" (ngắn gọn).
-            
-               **TRƯỜNG HỢP 2: TÌM THẤY NHIỀU KẾT QUẢ KHÁC NHAU HOẶC KHÔNG CHẮC CHẮN**
-               - Trả lời với DANH SÁCH KẾT QUẢ kèm URL để user chọn:
-                  "1. [Tên bài 1] - URL: https://...
-                   2. [Tên bài 2] - URL: https://...
-                   Anh muốn nghe bài nào?"
-            
-            2. Khi user chọn bài ("bài 1", "bài số 2", "bài đầu tiên", "cái đó"):
-               → BẮT BUỘC gọi `play_music(url="<URL của bài đó>")`
-               → KHÔNG ĐƯỢC chỉ nói "Lumin sẽ phát nhạc" mà KHÔNG gọi tool!
-               → Sau khi gọi play_music, nói: "Đang phát: [Tên bài]"
-            
-            **VÍ DỤ ĐÚNG (Direct Play):**
-            User: "Phát bài Lạc Trôi"
-            → Gọi search_music("Lạc Trôi")
-            → (Thấy kết quả 1 là "Lạc Trôi - Sơn Tùng")
-            → Gọi play_music(url="...")
-            → "Đang phát: Lạc Trôi 🎵"
-            
-            **TUYỆT ĐỐI KHÔNG:**
-            - Nói "Lumin có thể phát nhạc" mà không gọi tool
-            - Hỏi "Anh muốn nghe bài nào" khi user đã chọn bài
-            - Không gọi play_music khi user đã chỉ định bài
-            """
+        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ (TOOL USAGE POLICY):**
+        Bạn được cung cấp các công cụ mạnh mẽ (Web Search, Music Player, File System).
+        **QUYỀN TỰ QUYẾT**: Bạn có toàn quyền quyết định khi nào sử dụng công cụ. KHÔNG CẦN hỏi ý kiến người dùng.
+        
+        1. **Web Search (`web_search`)**:
+           - **KHI NÀO DÙNG**: Khi người dùng hỏi về thông tin mới, sự kiện, thời sự, review sản phẩm, giá cả, hoặc bất kỳ kiến thức nào bạn không chắc chắn hoặc có thể đã lỗi thời.
+           - **NGÔN NGỮ QUERY**: Luôn cố gắng sử dụng **TIẾNG ANH (English Keywords)** cho query để có kết quả tốt nhất (ví dụ: "iPhone 16 specs", "best places to visit in Hanoi"), trừ khi vấn đề quá đặc thù Việt Nam.
+           - **HÀNH ĐỘNG**: Nếu thấy cần thông tin -> Gọi tool ngay. Đừng nói "Để mình tìm...", cứ tìm rồi trả lời.
+
+        2. **Music Player (`search_music`, `play_music`)**:
+           - **KHI NÀO DÙNG**:
+             - Khi người dùng muốn nghe nhạc (ví dụ: "Mở nhạc chill đi", "Nghe bài Lạc Trôi").
+             - Khi người dùng buồn và bạn muốn tặng một bài hát.
+           - **CÁCH DÙNG**:
+             - Luôn gọi `search_music(query="...")` trước.
+             - Nếu tìm thấy kết quả phù hợp -> Gọi tiếp `play_music(url="...")` NGAY LẬP TỨC để phát.
+             - Chỉ đưa danh sách chọn khi kết quả quá mập mờ.
+
+        3. **Deep Search (`deep_search`)**:
+           - **KHI NÀO DÙNG**: Khi người dùng yêu cầu "nghiên cứu", "tìm hiểu sâu", hoặc hỏi một vấn đề rất phức tạp cần báo cáo chi tiết.
+        
+        **QUY TẮC TRẢ LỜI:**
+        - Nếu bạn dùng tool, hãy dùng thông tin từ tool để trả lời thật đầy đủ và chi tiết.
+        - Nếu không dùng tool, hãy trả lời bằng kiến thức của bạn.
+        - Luôn giữ thái độ vui vẻ, thân thiện của Lumin.
+        """
 
         if voice_enabled:
             prompt += """
-            **CHẾ ĐỘ GIỌNG NÓI (VOICE MODE) - QUAN TRỌNG:**
-            Bạn đang trả lời qua loa cho người dùng nghe (không phải đọc màn hình).
-            1. **Văn phong**: Tự nhiên, như đang nói chuyện trực tiếp. Dùng từ ngữ dễ nghe, thân mật.
-            2. **KHÔNG DÙNG MARKDOWN**:
-               - KHÔNG dùng dấu **đậm**, *nghiêng*, `code`, # Heading.
-               - KHÔNG dùng danh sách gạch đầu dòng (- item) hay đánh số (1. 2.) nếu không cần thiết. Hãy nói thành câu liền mạch, dùng "Thứ nhất là...", "Tiếp theo...".
-               - KHÔNG chèn Link [text](url). KHÔNG đọc URL.
-            3. **Xử lý kết quả Search**:
-               - Đừng liệt kê từng kết quả tìm kiếm. Hãy TỔNG HỢP nội dung lại thành 1 câu trả lời hoàn chỉnh.
-               - Không cần trích dẫn nguồn cụ thể (URL).
-            4. **Ngắn gọn**: Trả lời tóm tắt, súc tích hơn bình thường.
-            5. **Tự suy đoán lỗi chính tả**: Người dùng đang nói qua micro, nên hệ thống nhận dạng giọng nói có thể nghe sai chính tả (ví dụ: "chiền tranh" thay vì "chiến tranh", "ăn êu" thay vì "anh yêu"). Hãy TỰ ĐỘNG suy đoán từ đúng và trả lời luôn, KHÔNG hỏi lại "Ý bạn là...?" hay "Bạn có muốn nói...?".
+            **CHẾ ĐỘ GIỌNG NÓI (VOICE MODE):**
+            Bạn đang trả lời qua loa (Audio).
+            - Trả lời ngắn gọn, súc tích hơn văn bản.
+            - Không dùng Markdown (bold, italic, list).
+            - Nói chuyện tự nhiên, không đọc URL dài dòng.
             """
 
         return prompt

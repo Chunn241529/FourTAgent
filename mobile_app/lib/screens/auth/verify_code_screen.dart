@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/custom_button.dart';
-import '../chat/conversation_list_screen.dart';
+
+import '../../auth_wrapper.dart';
 import '../../widgets/common/custom_snackbar.dart';
 
 class VerifyCodeScreen extends StatefulWidget {
@@ -50,8 +51,10 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     setState(() => _isLoading = false);
 
     if (success) {
+      // Force navigation to AuthWrapper which will show DesktopHomeScreen
+      // This ensures we are at the root and DesktopHomeScreen is mounted correctly
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const ConversationListScreen()),
+        MaterialPageRoute(builder: (_) => const AuthWrapper()),
         (route) => false,
       );
     } else {
