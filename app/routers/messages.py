@@ -75,6 +75,18 @@ def get_messages(
             except json.JSONDecodeError:
                 msg_dict["embedding"] = None
 
+        if msg.generated_images and isinstance(msg.generated_images, str):
+            try:
+                msg_dict["generated_images"] = json.loads(msg.generated_images)
+            except json.JSONDecodeError:
+                msg_dict["generated_images"] = []
+
+        if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
+            try:
+                msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
+            except json.JSONDecodeError:
+                msg_dict["deep_search_updates"] = []
+
         # Add feedback status
         msg_dict["feedback"] = feedback_map.get(msg.id)
 
@@ -136,6 +148,24 @@ def create_message(
         except json.JSONDecodeError:
             msg_dict["embedding"] = None
 
+    if msg_dict.get("generated_images") and isinstance(
+        msg_dict["generated_images"], str
+    ):
+        try:
+            msg_dict["generated_images"] = json.loads(msg_dict["generated_images"])
+        except json.JSONDecodeError:
+            msg_dict["generated_images"] = []
+
+    if msg_dict.get("deep_search_updates") and isinstance(
+        msg_dict["deep_search_updates"], str
+    ):
+        try:
+            msg_dict["deep_search_updates"] = json.loads(
+                msg_dict["deep_search_updates"]
+            )
+        except json.JSONDecodeError:
+            msg_dict["deep_search_updates"] = []
+
     return ChatMessage(**msg_dict)
 
 
@@ -158,6 +188,19 @@ def get_message(
             msg_dict["embedding"] = parsed_embedding
         except json.JSONDecodeError:
             msg_dict["embedding"] = None
+
+    if msg.generated_images and isinstance(msg.generated_images, str):
+        try:
+            msg_dict["generated_images"] = json.loads(msg.generated_images)
+        except json.JSONDecodeError:
+            msg_dict["generated_images"] = []
+
+    if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
+        try:
+            msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
+        except json.JSONDecodeError:
+            msg_dict["deep_search_updates"] = []
+
     return ChatMessage(**msg_dict)
 
 
@@ -207,6 +250,25 @@ def update_message(
             msg_dict["embedding"] = parsed_embedding
         except json.JSONDecodeError:
             msg_dict["embedding"] = None
+
+    if msg_dict.get("generated_images") and isinstance(
+        msg_dict["generated_images"], str
+    ):
+        try:
+            msg_dict["generated_images"] = json.loads(msg_dict["generated_images"])
+        except json.JSONDecodeError:
+            msg_dict["generated_images"] = []
+
+    if msg_dict.get("deep_search_updates") and isinstance(
+        msg_dict["deep_search_updates"], str
+    ):
+        try:
+            msg_dict["deep_search_updates"] = json.loads(
+                msg_dict["deep_search_updates"]
+            )
+        except json.JSONDecodeError:
+            msg_dict["deep_search_updates"] = []
+
     return ChatMessage(**msg_dict)
 
 

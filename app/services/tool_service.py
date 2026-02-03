@@ -12,6 +12,7 @@ from app.services.music_service import music_service
 import os
 import glob
 from pathlib import Path
+from app.services.image_generation_service import image_generation_service
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +323,37 @@ class ToolService:
             "read_file": read_file_server,
             "search_file": search_file_server,
             "create_file": create_file_server,
+            "generate_image": self._generate_image_sync,
         }
+
+    def _generate_image_sync(
+        self, prompt: str = "", description: str = "", size: str = "768x768"
+    ) -> str:
+        """
+        Synchronous wrapper for async image generation.
+        Runs the async function in a new event loop.
+        'prompt' is the new parameter (English SD tags from LLM).
+        'description' kept for backward compatibility.
+        Returns full result (chat_service will filter for LLM).
+        """
+        # Use prompt if provided, else fallback to description
+        sd_prompt = prompt if prompt else description
+
+        try:
+            # Run async function in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    image_generation_service.generate_image_direct(sd_prompt, size)
+                )
+            finally:
+                loop.close()
+
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error in generate_image: {e}")
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     def get_tools(self) -> List[Any]:
         """
@@ -544,6 +575,27 @@ class ToolService:
                             }
                         },
                         "required": ["topic"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "generate_image",
+                    "description": "Generate an image using Stable Diffusion. You MUST convert the user's description into a detailed, ENGLISH, comma-separated tag-based prompt suitable for Stable Diffusion. After success, respond naturally without showing file paths - just confirm the image was created.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {
+                                "type": "string",
+                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1girl', '1boy', '1cat', '2dogs', etc. Example: '1girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1girl/1cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
+                            },
+                            "size": {
+                                "type": "string",
+                                "description": "Image size. Use '512x512' for small, '768x768' for medium/default, '1024x1024' for large. If user says 'lớn'/'big'/'high quality' use 1024x1024.",
+                            },
+                        },
+                        "required": ["prompt"],
                     },
                 },
             },

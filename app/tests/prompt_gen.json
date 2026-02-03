@@ -1,0 +1,110 @@
+{
+  "client_id": "e1c3a84093a249138802cde9165a5e0f",
+  "prompt": {
+    "3": {
+      "inputs": {
+        "seed": 685468484323813,
+        "steps": 20,
+        "cfg": 7,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 1,
+        "model": [
+          "4",
+          0
+        ],
+        "positive": [
+          "6",
+          0
+        ],
+        "negative": [
+          "7",
+          0
+        ],
+        "latent_image": [
+          "5",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "4": {
+      "inputs": {
+        "ckpt_name": "4t_inpaint.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "5": {
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "6": {
+      "inputs": {
+        "text": "beautiful scenery nature glass bottle landscape, purple galaxy bottle,",
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "7": {
+      "inputs": {
+        "text": "(worst quality, low quality, normal quality, blurry, noisy, artifacts), (deformed, mutated, ugly, disfigured, poorly drawn, extra limbs, missing limbs, fused fingers, extra fingers, mutated hands, mutated feet, bad anatomy, bad proportions, extra arms, extra legs, malformed limbs, long neck, belly bulge), (bad face, deformed face, ugly face, bad eyes, deformed eyes, deformed iris, deformed pupils, bad teeth, deformed teeth, deformed lips), (text, watermark, signature, username, artist name, logo, pixelated, sketch), (extra toes, missing toes)",
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "8": {
+      "inputs": {
+        "samples": [
+          "3",
+          0
+        ],
+        "vae": [
+          "4",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "9": {
+      "inputs": {
+        "filename_prefix": "SD1.5",
+        "images": [
+          "8",
+          0
+        ]
+      },
+      "class_type": "SaveImage",
+      "_meta": {
+        "title": "Save Image"
+      }
+    }
+  }
+}

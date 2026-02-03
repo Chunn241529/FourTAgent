@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import '../services/storage_service.dart';
 
 /// Authentication state provider
@@ -18,7 +19,18 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _isAuthenticated;
 
   AuthProvider() {
+    // Register token expiration callback
+    ApiService.setTokenExpiredCallback(() {
+      print('>>> AuthProvider: Token expired callback triggered');
+      _handleTokenExpiration();
+    });
     _checkAuth();
+  }
+
+  void _handleTokenExpiration() {
+    logout();
+    _error = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+    notifyListeners();
   }
 
   /// Check if user is already authenticated (only called on app startup)

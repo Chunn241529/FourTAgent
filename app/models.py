@@ -47,6 +47,9 @@ class ChatMessage(Base):
     tool_name = Column(String, nullable=True)
     tool_call_id = Column(String, nullable=True)
     tool_calls = Column(JSON, nullable=True)  # Store assistant's tool calls
+    generated_images = Column(JSON, nullable=True)  # List of base64 images from ComfyUI
+    thinking = Column(String, nullable=True)  # AI reasoning/thinking content
+    deep_search_updates = Column(JSON, nullable=True)  # Logs of deep search process
 
 
 class MessageFeedback(Base):

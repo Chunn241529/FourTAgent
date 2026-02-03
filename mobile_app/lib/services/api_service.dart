@@ -8,6 +8,18 @@ import 'storage_service.dart';
 /// API Service for HTTP requests
 class ApiService {
   static final _client = http.Client();
+  static Function()? _onTokenExpired;
+
+  static void setTokenExpiredCallback(Function() callback) {
+    _onTokenExpired = callback;
+  }
+
+  static void _checkStatus(http.Response response) {
+    if (response.statusCode == 401) {
+      print('>>> 401 received: Triggering token expiration callback');
+      _onTokenExpired?.call();
+    }
+  }
 
   /// Get headers with authentication token
   static Future<Map<String, String>> _getHeaders() async {
@@ -26,36 +38,44 @@ class ApiService {
     if (queryParams != null) {
       uri = uri.replace(queryParameters: queryParams);
     }
-    return await _client.get(uri, headers: headers);
+    final response = await _client.get(uri, headers: headers);
+    _checkStatus(response);
+    return response;
   }
 
   /// POST request
   static Future<http.Response> post(String endpoint, {Map<String, dynamic>? body}) async {
     final headers = await _getHeaders();
     final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    return await _client.post(
+    final response = await _client.post(
       uri,
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
     );
+    _checkStatus(response);
+    return response;
   }
 
   /// PUT request
   static Future<http.Response> put(String endpoint, {Map<String, dynamic>? body}) async {
     final headers = await _getHeaders();
     final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    return await _client.put(
+    final response = await _client.put(
       uri,
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
     );
+    _checkStatus(response);
+    return response;
   }
 
   /// DELETE request
   static Future<http.Response> delete(String endpoint) async {
     final headers = await _getHeaders();
     final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    return await _client.delete(uri, headers: headers);
+    final response = await _client.delete(uri, headers: headers);
+    _checkStatus(response);
+    return response;
   }
 
   /// Streaming POST request for chat
@@ -73,6 +93,11 @@ class ApiService {
     request.body = jsonEncode(body);
     
     final response = await _client.send(request);
+    
+    if (response.statusCode == 401) {
+       print('>>> 401 received during stream init');
+       _onTokenExpired?.call();
+    }
     
     // Use LineSplitter to properly handle SSE lines that may be split across HTTP chunks
     await for (final line in response.stream

@@ -29,4 +29,7 @@ class ApiConfig {
   
   // Feedback endpoint
   static const String feedback = '/feedback';
+  
+  // Generated image endpoint (ComfyUI proxy)
+  static const String generatedImage = '/generate/image/view';
 }

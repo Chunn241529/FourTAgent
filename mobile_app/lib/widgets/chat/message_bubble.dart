@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
+import '../../config/api_config.dart';
 import 'search_indicator.dart';
 import 'deep_search_indicator.dart';
 import '../common/custom_snackbar.dart';
@@ -352,8 +353,107 @@ class _MessageBubbleState extends State<MessageBubble> {
                     // 2. Content with interleaved indicators (using imageBuilder)
                     _buildMarkdownContent(theme, isDark),
 
-                    // Streaming indicator
-                    if (widget.message.isStreaming)
+                    // Generated Images from ComfyUI (base64 encoded)
+                    if (widget.message.generatedImages.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: widget.message.generatedImages.map((imageBase64) {
+                            // Decode base64 to bytes
+                            final imageBytes = base64Decode(imageBase64);
+                            
+                            return GestureDetector(
+                              onTap: () {
+                                // Show full screen image dialog
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => Dialog(
+                                    backgroundColor: Colors.transparent,
+                                    child: Stack(
+                                      children: [
+                                        InteractiveViewer(
+                                          child: Image.memory(
+                                            imageBytes,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              padding: const EdgeInsets.all(20),
+                                              color: theme.colorScheme.surface,
+                                              child: const Text('Failed to load image'),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: IconButton(
+                                            icon: const Icon(Icons.close, color: Colors.white),
+                                            onPressed: () => Navigator.pop(ctx),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(
+                                  imageBytes,
+                                  width: 256,
+                                  height: 256,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 256,
+                                    height: 256,
+                                    color: theme.colorScheme.surfaceContainerHighest,
+                                    child: const Icon(Icons.broken_image, size: 48),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+
+                    // Image Generation Shimmer
+                    if (widget.message.isGeneratingImage)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: const ShimmerPlaceholder(width: 256, height: 256),
+                      ),
+                    
+                    // Generation Warning/Error
+                    if (widget.message.generationError != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          border: Border.all(color: Colors.red.withOpacity(0.5)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Colors.red[400]),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                widget.message.generationError!, 
+                                style: TextStyle(
+                                  color: theme.brightness == Brightness.dark ? Colors.red[200] : Colors.red[900],
+                                  fontSize: 13,
+                                )
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Streaming indicator (hide if generating image)
+                    if (widget.message.isStreaming && !widget.message.isGeneratingImage)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: _buildStreamingIndicator(theme),
@@ -865,6 +965,69 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class ShimmerPlaceholder extends StatefulWidget {
+  final double width;
+  final double height;
+  const ShimmerPlaceholder({super.key, required this.width, required this.height});
+
+  @override
+  State<ShimmerPlaceholder> createState() => _ShimmerPlaceholderState();
+}
+
+class _ShimmerPlaceholderState extends State<ShimmerPlaceholder> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
+    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: baseColor,
+            gradient: LinearGradient(
+              begin: Alignment(-2.0 + _controller.value * 4, -1.0),
+              end: Alignment(1.0 + _controller.value * 4, 1.0),
+              colors: [
+                baseColor,
+                highlightColor,
+                baseColor,
+              ],
+              stops: const [0.3, 0.5, 0.7],
+            ),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.image, 
+              size: 48, 
+              color: isDark ? Colors.white10 : Colors.black12
+            ),
+          ),
+        );
+      },
     );
   }
 }

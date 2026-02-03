@@ -98,6 +98,9 @@ class ChatMessage(BaseModel):
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
     tool_calls: Optional[Union[list, dict, str]] = None  # Can be list, dict or json str
+    generated_images: Optional[Union[list, str]] = None  # List of base64 images
+    thinking: Optional[str] = None  # AI thinking content
+    deep_search_updates: Optional[Union[list, str]] = None  # Deep search logs
 
     class Config:
         from_attributes = True

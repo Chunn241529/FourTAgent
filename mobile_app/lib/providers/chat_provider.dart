@@ -617,6 +617,9 @@ class ChatProvider extends ChangeNotifier {
     String fullThinking = (_messages.isNotEmpty && _messages.last.role == 'assistant') 
         ? (_messages.last.thinking ?? '') 
         : '';
+    
+    // Buffer for generated images - applied after stream done to prevent jittery UI
+    List<String> bufferedImages = [];
         
     DateTime lastUpdate = DateTime.now();
 
@@ -635,6 +638,7 @@ class ChatProvider extends ChangeNotifier {
         }
 
         if (jsonStr != null) {
+          // print('>>> STREAM CHUNK: $jsonStr'); // DEBUG LOG
           if (jsonStr == '[DONE]') {
             print('>>> Stream [DONE] received');
             return;
@@ -869,7 +873,51 @@ class ChatProvider extends ChangeNotifier {
                 _queueAudioChunk(audioBase64, voiceData['sentence'] as String?);
               }
             }
-          } catch (e) { print('JSON parse error: $e'); }
+
+            // Handle image_generation_started
+            if (data.containsKey('image_generation_started')) {
+               final lastIndex = _messages.length - 1;
+               if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(isGeneratingImage: true, generationError: null);
+                 shouldNotify = true;
+               }
+            }
+
+            // Handle image_generated - buffer images, apply after stream done
+            if (data.containsKey('image_generated')) {
+              final imageData = data['image_generated'] as Map<String, dynamic>;
+              
+              // Stop loading state immediately
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(isGeneratingImage: false);
+                 shouldNotify = true;
+              }
+
+              if (imageData['success'] == true) {
+                final imageBase64 = imageData['image_base64'] as String?;
+                if (imageBase64 != null && imageBase64.isNotEmpty) {
+                  print('>>> Image generated (base64), buffered for stream done');
+                  bufferedImages.add(imageBase64);
+                  // Don't notify yet - will apply when stream is done
+                }
+              } else {
+                 // Handle Error (e.g. Blacklist)
+                 final error = imageData['error'] as String?;
+                 if (error != null) {
+                    print('>>> Image generation error: $error');
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0) {
+                       _messages[lastIndex] = _messages[lastIndex].copyWith(generationError: error);
+                       shouldNotify = true;
+                    }
+                 }
+              }
+            }
+          } catch (e) { 
+            print('JSON parse error: $e'); 
+            print('Invalid JSON: $jsonStr'); // Log invalid JSON
+          }
         }
         if (shouldNotify) notifyListeners();
       },
@@ -885,7 +933,15 @@ class ChatProvider extends ChangeNotifier {
       onDone: () async {
         final lastIndex = _messages.length - 1;
         if (lastIndex >= 0) {
-           _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse.isEmpty ? '...' : fullResponse, isStreaming: false);
+           // Apply buffered images now that stream is complete
+           List<String> finalImages = List<String>.from(_messages[lastIndex].generatedImages);
+           finalImages.addAll(bufferedImages);
+           
+           _messages[lastIndex] = _messages[lastIndex].copyWith(
+             content: fullResponse.isEmpty ? '...' : fullResponse, 
+             isStreaming: false,
+             generatedImages: finalImages,
+           );
         }
         notifyListeners();
         _maybeGenerateTitle();

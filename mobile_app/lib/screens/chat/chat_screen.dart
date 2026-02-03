@@ -622,7 +622,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       },
                     );
                     // Scroll to bottom after user sends
-                    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                    _isUserScrolling = false;
+                    Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
                   },
                   onSendWithFile: (message, file) async {
                     // Auto-create conversation if none exists
@@ -643,7 +644,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       },
                     );
                     // Scroll to bottom after user sends
-                    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+                    _isUserScrolling = false;
+                    Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
                   },
                   isLoading: chatProvider.isStreaming,
                   onStop: () => chatProvider.stopStreaming(),

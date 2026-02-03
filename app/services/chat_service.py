@@ -35,19 +35,38 @@ tool_service = ToolService()
 # Triggers removed for autonomous LLM
 
 
-
 class ChatService:
     # Cache for voice fillers: {(text, voice_id): audio_bytes}
     _filler_cache = {}
 
+    # Track last used filler index to avoid repetition
+    _last_filler_index = -1
+
     # List of filler phrases to rotate
     FILLER_PHRASES = [
-        "Okay, ừm...",
-        "Được rồi, ừm...",
-        "Để em kiểm tra nhé...",
-        "À, câu này hay đấy...",
-        "Đợi em một chút...",
+        "Okay, được rồi, đợi em chút nhé",
+        "Được rồi",
+        "Đợi em một chút",
     ]
+
+    @classmethod
+    def _get_random_filler(cls) -> str:
+        """Get a random filler that's different from the last one used"""
+        import random
+
+        if len(cls.FILLER_PHRASES) <= 1:
+            return cls.FILLER_PHRASES[0] if cls.FILLER_PHRASES else ""
+
+        # Get available indices (excluding the last used one)
+        available_indices = [
+            i for i in range(len(cls.FILLER_PHRASES)) if i != cls._last_filler_index
+        ]
+
+        # Pick a random index from available ones
+        new_index = random.choice(available_indices)
+        cls._last_filler_index = new_index
+
+        return cls.FILLER_PHRASES[new_index]
 
     @classmethod
     async def warmup_fillers(cls):
@@ -616,14 +635,13 @@ class ChatService:
             logger.info(f"Voice mode: overriding model to {model_name}")
 
         async def generate_stream():
+            logger.info(f"Stream generation started for conversation {conversation_id}")
             yield f"data: {json.dumps({'conversation_id': conversation_id}, separators=(',', ':'))}\n\n"
 
             # Emit filler TTS immediately for voice mode
             # Emit filler TTS immediately for voice mode
             if voice_enabled:
-                import random
-
-                filler_text = random.choice(ChatService.FILLER_PHRASES)
+                filler_text = ChatService._get_random_filler()
                 cache_key = (filler_text, voice_id)
 
                 filler_audio = ChatService._filler_cache.get(cache_key)
@@ -659,13 +677,26 @@ class ChatService:
 
             # Get hierarchical memory (summary + semantic + working)
             # Use run_in_executor for embedding generation inside this method
+            # Get hierarchical memory (summary + semantic + working)
+            # Use run_in_executor for embedding generation inside this method
             loop = asyncio.get_running_loop()
-            summary, semantic_messages, working_memory = await loop.run_in_executor(
-                None,
-                lambda: ChatService._get_hierarchical_memory(
-                    db, conversation_id, current_query=full_prompt, user_id=user_id
-                ),
-            )
+            summary = ""
+            semantic_messages = []
+            working_memory = []
+
+            try:
+                logger.info("Retrieving hierarchical memory...")
+                summary, semantic_messages, working_memory = await loop.run_in_executor(
+                    None,
+                    lambda: ChatService._get_hierarchical_memory(
+                        db, conversation_id, current_query=full_prompt, user_id=user_id
+                    ),
+                )
+                logger.info("Hierarchical memory retrieved successfully")
+            except Exception as e:
+                logger.error(f"Error retrieving hierarchical memory: {e}")
+                # Fallback: just use empty memory or try to get working memory only if possible
+                # For now, proceed with empty context to avoid blocking the user
 
             # Update system prompt with conversation summary AND semantic memory
             enhanced_system_prompt = system_prompt
@@ -737,14 +768,18 @@ class ChatService:
 
                 # Track executed search queries to prevent repetition
                 executed_search_queries = set()
+                last_saved_assistant_msg_id = None
 
                 while current_iteration < max_iterations:
                     current_iteration += 1
                     current_message: Dict[str, Any] = {
                         "role": "assistant",
                         "content": "",
+                        "thinking": "",
                     }
                     tool_calls: List[Dict[str, Any]] = []
+                    generated_images_list: List[str] = []
+                    deep_search_updates_list: List[str] = []
 
                     # Async chat call
                     stream = await client.chat(
@@ -756,11 +791,13 @@ class ChatService:
                         think=level_think,
                     )
 
+                    logger.info(f"Ollama chat stream started using model {model_name}")
+
                     iteration_has_tool_calls = False
 
                     # Async iteration over stream
                     async for chunk in stream:
-                        # print(f"DEBUG CHUNK: {chunk}") # Excessive
+                        # logger.debug(f"DEBUG CHUNK: {chunk}")
                         if "message" in chunk:
                             msg_chunk = chunk["message"]
                             if "tool_calls" in msg_chunk and msg_chunk["tool_calls"]:
@@ -797,23 +834,30 @@ class ChatService:
                                 and msg_chunk["reasoning_content"]
                             ):
                                 delta = msg_chunk["reasoning_content"]
+                                current_message["thinking"] += delta
                                 yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "think" in msg_chunk and msg_chunk["think"]:
                                 delta = msg_chunk["think"]
+                                current_message["thinking"] += delta
                                 yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "reasoning" in msg_chunk and msg_chunk["reasoning"]:
                                 delta = msg_chunk["reasoning"]
+                                current_message["thinking"] += delta
                                 yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                             elif "thought" in msg_chunk and msg_chunk["thought"]:
                                 delta = msg_chunk["thought"]
+                                current_message["thinking"] += delta
                                 yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
 
                         # Check top-level chunk for thinking fields (some models might put it here)
+                        # Check top-level chunk for thinking fields (some models might put it here)
                         if "reasoning_content" in chunk and chunk["reasoning_content"]:
                             delta = chunk["reasoning_content"]
+                            current_message["thinking"] += delta
                             yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
                         elif "think" in chunk and chunk["think"]:
                             delta = chunk["think"]
+                            current_message["thinking"] += delta
                             yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
 
                         # Always stream the raw chunk if it's not a tool call
@@ -827,16 +871,43 @@ class ChatService:
                             yield f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
 
                     if tool_calls:
-                        current_message["tool_calls"] = tool_calls
+                        # Convert ToolCall objects to dicts for JSON serialization
+                        serializable_tool_calls = []
+                        for tc in tool_calls:
+                            if hasattr(tc, "model_dump"):
+                                serializable_tool_calls.append(tc.model_dump())
+                            elif hasattr(tc, "__dict__"):
+                                serializable_tool_calls.append(dict(tc))
+                            else:
+                                serializable_tool_calls.append(tc)
+                        current_message["tool_calls"] = serializable_tool_calls
 
                     messages.append(current_message)
                     # Save intermediate assistant message step to DB
-                    await loop.run_in_executor(
-                        None,
-                        lambda: ChatService._save_message_to_db(
-                            db, user_id, conversation_id, current_message
-                        ),
-                    )
+                    # Save intermediate assistant message step to DB
+                    if last_saved_assistant_msg_id:
+                        saved_msg = await loop.run_in_executor(
+                            None,
+                            lambda: ChatService._update_merged_message(
+                                db,
+                                last_saved_assistant_msg_id,
+                                current_message,
+                                thinking=current_message.get("thinking"),
+                            ),
+                        )
+                    else:
+                        saved_msg = await loop.run_in_executor(
+                            None,
+                            lambda: ChatService._save_message_to_db(
+                                db,
+                                user_id,
+                                conversation_id,
+                                current_message,
+                                thinking=current_message.get("thinking"),
+                            ),
+                        )
+                        if saved_msg:
+                            last_saved_assistant_msg_id = saved_msg.id
 
                     if tool_calls:
                         # 1. Prepare tasks and emit "Started" events
@@ -931,7 +1002,33 @@ class ChatService:
                                     ) in deep_search_service.execute_deep_search(
                                         topic, user_id, conversation_id, db
                                     ):
+                                        # Extract data for persistence if available
+                                        if isinstance(
+                                            sse_chunk, str
+                                        ) and sse_chunk.startswith("data: "):
+                                            try:
+                                                data_json = json.loads(sse_chunk[6:])
+                                                if "deep_search_update" in data_json:
+                                                    deep_search_updates_list.append(
+                                                        sse_chunk
+                                                    )
+                                            except:
+                                                pass
                                         yield sse_chunk
+
+                                    # After Deep Search completes, update the Assistant message in DB with logs
+                                    # Since Deep Search is a "tool", but special handling might mean we need to attach logs to the tool output or assistant message?
+                                    # Actually deep_search is executed as a tool call. The logs should probably be associated with the tool usage or the assistant message.
+                                    # Let's attach to the assistant message for now as that's where we added the column.
+                                    if deep_search_updates_list and saved_msg:
+                                        await loop.run_in_executor(
+                                            None,
+                                            lambda: ChatService._update_message_deep_search_logs(
+                                                db,
+                                                saved_msg.id,
+                                                deep_search_updates_list,
+                                            ),
+                                        )
 
                                     # DeepSearch already saves to DB, so we're done
                                     # Exit the tool loop and main loop
@@ -964,6 +1061,10 @@ class ChatService:
 
                             # Create task for parallel execution (only for non-skipped, non-deep_search tools)
                             if not should_skip and function_name != "deep_search":
+                                # Emit start event for image generation to show UI loading state
+                                if function_name == "generate_image":
+                                    yield f"data: {json.dumps({'image_generation_started': True}, separators=(',', ':'))}\n\n"
+
                                 tasks.append(
                                     tool_service.execute_tool_async(
                                         function_name, args_str
@@ -995,19 +1096,39 @@ class ChatService:
                         # 3. Process results
                         for i, execution_result in enumerate(execution_results):
                             function_name = execution_result["tool_name"]
-                            # Use tool_call_to_task_mapping for correct index (since some tool_calls may be skipped)
                             tool_call = tool_call_to_task_mapping[i]
                             args_str = tool_call["function"]["arguments"]
                             result = execution_result["result"]
                             error = execution_result["error"]
 
+                            # For generate_image: filter result for LLM (hide paths/technical details)
+                            tool_content = (
+                                str(result)[:8000] if not error else f"Error: {error}"
+                            )
+                            if function_name == "generate_image" and not error:
+                                try:
+                                    result_data = (
+                                        json.loads(result)
+                                        if isinstance(result, str)
+                                        else result
+                                    )
+                                    if result_data.get("success"):
+                                        # Only send user-friendly message to LLM
+                                        tool_content = json.dumps(
+                                            {
+                                                "success": True,
+                                                "message": result_data.get(
+                                                    "message", "Đã tạo xong ảnh!"
+                                                ),
+                                            },
+                                            ensure_ascii=False,
+                                        )
+                                except:
+                                    pass
+
                             tool_msg = {
                                 "role": "tool",
-                                "content": (
-                                    str(result)[:8000]
-                                    if not error
-                                    else f"Error: {error}"
-                                ),
+                                "content": tool_content,
                                 "tool_name": function_name,
                                 "tool_call_id": tool_call.get("id"),
                             }
@@ -1204,12 +1325,51 @@ class ChatService:
                                             f"Error emitting file tool complete event: {e}"
                                         )
 
+                                # Handle generate_image - emit image_generated event for Flutter
+                                elif function_name == "generate_image":
+                                    try:
+                                        result_data = (
+                                            json.loads(result)
+                                            if isinstance(result, str)
+                                            else result
+                                        )
+
+                                        # Emit event for both success and failure so UI can handle it
+                                        logger.info(
+                                            f"[IMAGE] Emitting image_generated event (Success: {result_data.get('success')})"
+                                        )
+                                        yield f"data: {json.dumps({'image_generated': result_data}, separators=(',', ':'))}\n\n"
+
+                                        if result_data.get("success"):
+                                            if result_data.get("image_base64"):
+                                                generated_images_list.append(
+                                                    result_data["image_base64"]
+                                                )
+                                        else:
+                                            logger.error(
+                                                f"[IMAGE] Generation failed: {result_data.get('error')}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error emitting image_generated event: {e}"
+                                        )
+
                             messages.append(tool_msg)
                             # Save tool result to DB
                             await loop.run_in_executor(
                                 None,
                                 lambda: ChatService._save_message_to_db(
                                     db, user_id, conversation_id, tool_msg
+                                ),
+                            )
+
+                        # After tool execution loop (inside if tool_calls block)
+                        # If images were generated, update the assistant message
+                        if generated_images_list and saved_msg:
+                            await loop.run_in_executor(
+                                None,
+                                lambda: ChatService._update_message_generated_images(
+                                    db, saved_msg.id, generated_images_list
                                 ),
                             )
 
@@ -1336,6 +1496,8 @@ class ChatService:
         conversation_id: int,
         msg: Dict[str, Any],
         embedding: Optional[List[float]] = None,
+        generated_images: Optional[List[str]] = None,
+        thinking: Optional[str] = None,
     ):
         """Helper to save a message to DB"""
         try:
@@ -1368,6 +1530,10 @@ class ChatService:
                 tool_name=tool_name,
                 tool_call_id=tool_call_id,
                 tool_calls=json.dumps(tool_calls) if tool_calls else None,
+                generated_images=(
+                    json.dumps(generated_images) if generated_images else None
+                ),
+                thinking=thinking,
             )
             db.add(db_msg)
             db.commit()
@@ -1375,4 +1541,102 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error saving message to DB: {e}")
             db.rollback()
+            return None
+
+    @staticmethod
+    def _update_message_generated_images(
+        db: Session, message_id: int, images: List[str]
+    ):
+        try:
+            msg = (
+                db.query(ModelChatMessage)
+                .filter(ModelChatMessage.id == message_id)
+                .first()
+            )
+            if msg:
+                msg.generated_images = json.dumps(images)
+                db.commit()
+                logger.info(f"Updated message {message_id} with {len(images)} images")
+        except Exception as e:
+            logger.error(f"Error updating message images: {e}")
+
+    @staticmethod
+    def _update_message_deep_search_logs(db: Session, message_id: int, logs: List[str]):
+        try:
+            msg = (
+                db.query(ModelChatMessage)
+                .filter(ModelChatMessage.id == message_id)
+                .first()
+            )
+            if msg:
+                # Store cleaned logs or raw SSE strings?
+                # Raw SSE strings are what UI expects in deepSearchUpdates list
+                msg.deep_search_updates = json.dumps(logs)
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error updating deep search logs: {e}")
+
+    @staticmethod
+    def _update_merged_message(
+        db: Session,
+        message_id: int,
+        new_msg_data: Dict[str, Any],
+        thinking: Optional[str] = None,
+    ) -> Optional[ModelChatMessage]:
+        """
+        Updates an existing assistant message by determining if we should append content
+        (for multi-step tool use) or just update fields.
+        """
+        try:
+            msg = (
+                db.query(ModelChatMessage)
+                .filter(ModelChatMessage.id == message_id)
+                .first()
+            )
+            if not msg:
+                return None
+
+            # Append content if new content exists
+            new_content = new_msg_data.get("content")
+            if new_content:
+                if msg.content:
+                    msg.content += "\n" + new_content
+                else:
+                    msg.content = new_content
+
+            # Append thinking if new thinking exists
+            if thinking:
+                if msg.thinking:
+                    msg.thinking += "\n\n" + thinking
+                else:
+                    msg.thinking = thinking
+
+            # Merge tool calls if new ones exist
+            new_tool_calls = new_msg_data.get("tool_calls")
+            if new_tool_calls:
+                existing_calls = []
+                if msg.tool_calls:
+                    # Check type because it might be string or list/dict
+                    if isinstance(msg.tool_calls, str):
+                        try:
+                            existing_calls = json.loads(msg.tool_calls)
+                        except:
+                            existing_calls = []
+                    elif isinstance(msg.tool_calls, list):
+                        existing_calls = msg.tool_calls
+
+                # Append new calls
+                if existing_calls is None:
+                    existing_calls = []
+
+                if isinstance(existing_calls, list):
+                    # Dedup? No, usually distinct calls.
+                    existing_calls.extend(new_tool_calls)
+                    msg.tool_calls = json.dumps(existing_calls)  # Save as JSON string
+
+            db.commit()
+            db.refresh(msg)
+            return msg
+        except Exception as e:
+            logger.error(f"Error merging message: {e}")
             return None

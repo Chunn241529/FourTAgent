@@ -18,6 +18,9 @@ class Message {
   final String? toolName;
   final String? toolCallId;
   final dynamic toolCalls;
+  List<String> generatedImages; // Generated images from ComfyUI
+  bool isGeneratingImage;
+  String? generationError;
 
   Message({
     this.id,
@@ -27,6 +30,8 @@ class Message {
     required this.role,
     required this.timestamp,
     this.isStreaming = false,
+    this.isGeneratingImage = false,
+    this.generationError,
     this.feedback,
     this.thinking,
     this.imageBase64,
@@ -38,12 +43,37 @@ class Message {
     this.toolName,
     this.toolCallId,
     this.toolCalls,
+    List<String>? generatedImages,
   }) : activeSearches = activeSearches ?? [],
        completedSearches = completedSearches ?? [],
        completedFileActions = completedFileActions ?? [],
-       deepSearchUpdates = deepSearchUpdates ?? [];
+       deepSearchUpdates = deepSearchUpdates ?? [],
+       generatedImages = generatedImages ?? [];
 
   factory Message.fromJson(Map<String, dynamic> json) {
+    // Reconstruct completed searches from tool calls
+    List<String> reconstructedSearches = [];
+    if (json['tool_calls'] != null) {
+      final calls = json['tool_calls'];
+      if (calls is List) {
+        for (var call in calls) {
+          if (call is Map && 
+              call['function'] != null && 
+              call['function']['name'] == 'web_search') {
+             try {
+                final args = call['function']['arguments'];
+                if (args is Map && args['query'] is String) {
+                   reconstructedSearches.add(args['query']);
+                } else if (args is String) {
+                   // Try to extract query from string if possible, or ignore complexity for now
+                   // In backend we ensure args is usually parsed or we can try limited parsing
+                }
+             } catch (_) {}
+          }
+        }
+      }
+    }
+
     return Message(
       id: json['id'],
       userId: json['user_id'],
@@ -55,6 +85,14 @@ class Message {
       toolName: json['tool_name'],
       toolCallId: json['tool_call_id'],
       toolCalls: json['tool_calls'],
+      thinking: json['thinking'],
+      generatedImages: json['generated_images'] != null 
+          ? List<String>.from(json['generated_images']) 
+          : null,
+      completedSearches: reconstructedSearches,
+      deepSearchUpdates: json['deep_search_updates'] != null
+          ? List<String>.from(json['deep_search_updates'])
+          : null,
     );
   }
 
@@ -77,6 +115,8 @@ class Message {
     int? id,
     String? content,
     bool? isStreaming,
+    bool? isGeneratingImage,
+    String? generationError,
     String? feedback,
     String? thinking,
     String? imageBase64,
@@ -88,6 +128,7 @@ class Message {
     String? toolName,
     String? toolCallId,
     dynamic toolCalls,
+    List<String>? generatedImages,
   }) {
     return Message(
       id: id ?? this.id,
@@ -97,6 +138,8 @@ class Message {
       role: role,
       timestamp: timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
+      isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
+      generationError: generationError ?? this.generationError,
       feedback: feedback ?? this.feedback,
       thinking: thinking ?? this.thinking,
       imageBase64: imageBase64 ?? this.imageBase64,
@@ -108,6 +151,7 @@ class Message {
       toolName: toolName ?? this.toolName,
       toolCallId: toolCallId ?? this.toolCallId,
       toolCalls: toolCalls ?? this.toolCalls,
+      generatedImages: generatedImages ?? this.generatedImages,
     );
   }
 }
