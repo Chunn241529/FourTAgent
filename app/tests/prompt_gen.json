@@ -1,16 +1,16 @@
 {
-  "client_id": "e1c3a84093a249138802cde9165a5e0f",
+  "client_id": "568f407c5e88466d806fb9d853b33268",
   "prompt": {
     "3": {
       "inputs": {
-        "seed": 685468484323813,
-        "steps": 20,
-        "cfg": 7,
-        "sampler_name": "euler_ancestral",
-        "scheduler": "normal",
+        "seed": 83771165916737,
+        "steps": 15,
+        "cfg": 1.5,
+        "sampler_name": "dpmpp_sde",
+        "scheduler": "karras",
         "denoise": 1,
         "model": [
-          "4",
+          "19",
           0
         ],
         "positive": [
@@ -33,7 +33,7 @@
     },
     "4": {
       "inputs": {
-        "ckpt_name": "4t_inpaint.safetensors"
+        "ckpt_name": "Lumina_Gen.safetensors"
       },
       "class_type": "CheckpointLoaderSimple",
       "_meta": {
@@ -42,8 +42,8 @@
     },
     "5": {
       "inputs": {
-        "width": 512,
-        "height": 512,
+        "width": 728,
+        "height": 728,
         "batch_size": 1
       },
       "class_type": "EmptyLatentImage",
@@ -53,9 +53,9 @@
     },
     "6": {
       "inputs": {
-        "text": "beautiful scenery nature glass bottle landscape, purple galaxy bottle,",
+        "text": "1 cat, cute",
         "clip": [
-          "4",
+          "19",
           1
         ]
       },
@@ -66,9 +66,9 @@
     },
     "7": {
       "inputs": {
-        "text": "(worst quality, low quality, normal quality, blurry, noisy, artifacts), (deformed, mutated, ugly, disfigured, poorly drawn, extra limbs, missing limbs, fused fingers, extra fingers, mutated hands, mutated feet, bad anatomy, bad proportions, extra arms, extra legs, malformed limbs, long neck, belly bulge), (bad face, deformed face, ugly face, bad eyes, deformed eyes, deformed iris, deformed pupils, bad teeth, deformed teeth, deformed lips), (text, watermark, signature, username, artist name, logo, pixelated, sketch), (extra toes, missing toes)",
+        "text": "(deformed iris, deformed pupils), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, UnrealisticDream",
         "clip": [
-          "4",
+          "19",
           1
         ]
       },
@@ -104,6 +104,30 @@
       "class_type": "SaveImage",
       "_meta": {
         "title": "Save Image"
+      }
+    },
+    "19": {
+      "inputs": {
+        "lora_01": "add_detail.safetensors",
+        "strength_01": 1,
+        "lora_02": "None",
+        "strength_02": 1,
+        "lora_03": "None",
+        "strength_03": 1,
+        "lora_04": "None",
+        "strength_04": 1,
+        "model": [
+          "4",
+          0
+        ],
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "Lora Loader Stack (rgthree)",
+      "_meta": {
+        "title": "Lora Loader Stack (rgthree)"
       }
     }
   }

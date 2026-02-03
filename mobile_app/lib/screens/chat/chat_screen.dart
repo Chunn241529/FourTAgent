@@ -135,29 +135,34 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chatProvider = context.watch<ChatProvider>();
 
-    // Handle case when no conversation is selected (show empty/welcome state)
-    // Don't try to pop - this screen is now embedded in DesktopHomeScreen
-    
-    // Scroll to bottom when new messages arrive (only if not user scrolling)
-    if (chatProvider.messages.isNotEmpty) {
-      _scrollToBottom(isStreaming: chatProvider.isStreaming);
-    }
+    // Use Consumer to scope provider access - the build method still rebuilds,
+    // but individual children can use Selector for fine-grained control
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, _) {
+        // Scroll to bottom when streaming - debounced via postFrameCallback
+        // This prevents layout during build phase
+        if (chatProvider.messages.isNotEmpty && chatProvider.isStreaming) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom(isStreaming: true);
+          });
+        }
 
-    return Row(
-      children: [
-        // Left sidebar - Conversation list
-        SizedBox(
-          width: 280,
-          child: _buildConversationSidebar(context, theme, chatProvider),
-        ),
-        const VerticalDivider(width: 1, thickness: 1),
-        // Right side - Chat area
-        Expanded(
-          child: _buildChatArea(context, theme, chatProvider),
-        ),
-      ],
+        return Row(
+          children: [
+            // Left sidebar - Conversation list (use Selector for conversations)
+            SizedBox(
+              width: 280,
+              child: _buildConversationSidebar(context, theme, chatProvider),
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            // Right side - Chat area
+            Expanded(
+              child: _buildChatArea(context, theme, chatProvider),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -558,14 +563,38 @@ class _ChatScreenState extends State<ChatScreen> {
           if (chatProvider.currentConversation != null && chatProvider.messages.isNotEmpty)
             Positioned.fill(
               bottom: 120, // Space for input
-              child: ListView.builder(
-                controller: _scrollController,
-                reverse: false, // Start from top
-                padding: const EdgeInsets.only(top: 16, bottom: 24, left: 24, right: 24),
-                itemCount: chatProvider.messages.length,
-                itemBuilder: (context, index) {
-                  return MessageBubble(
-                    message: chatProvider.messages[index],
+              child: Selector<ChatProvider, int>(
+                // Only rebuild when message count changes (not on every stream update)
+                selector: (_, provider) => provider.messages.length,
+                builder: (context, messageCount, _) {
+                  return ListView.builder(
+                    controller: _scrollController,
+                    reverse: false, // Start from top
+                    padding: const EdgeInsets.only(top: 16, bottom: 24, left: 24, right: 24),
+                    itemCount: messageCount,
+                    itemBuilder: (context, index) {
+                      // Use Selector for individual message to minimize rebuilds
+                      return Selector<ChatProvider, _MessageSnapshot>(
+                        selector: (_, provider) {
+                          final msg = provider.messages[index];
+                          return _MessageSnapshot(
+                            id: msg.id,
+                            content: msg.content,
+                            thinking: msg.thinking,
+                            isStreaming: msg.isStreaming,
+                            isGeneratingImage: msg.isGeneratingImage,
+                            generatedImages: msg.generatedImages.length,
+                          );
+                        },
+                        shouldRebuild: (prev, next) => prev != next,
+                        builder: (context, snapshot, _) {
+                          return MessageBubble(
+                            key: ValueKey('msg_${snapshot.id ?? index}_${snapshot.content.length}'),
+                            message: context.read<ChatProvider>().messages[index],
+                          );
+                        },
+                      );
+                    },
                   );
                 },
               ),
@@ -889,4 +918,39 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+}
+
+/// Lightweight snapshot class for efficient Selector comparison
+/// This avoids rebuilding MessageBubble when irrelevant fields change
+class _MessageSnapshot {
+  final int? id;
+  final String content;
+  final String? thinking;
+  final bool isStreaming;
+  final bool isGeneratingImage;
+  final int generatedImages;
+
+  const _MessageSnapshot({
+    required this.id,
+    required this.content,
+    required this.thinking,
+    required this.isStreaming,
+    required this.isGeneratingImage,
+    required this.generatedImages,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is _MessageSnapshot &&
+        other.id == id &&
+        other.content == content &&
+        other.thinking == thinking &&
+        other.isStreaming == isStreaming &&
+        other.isGeneratingImage == isGeneratingImage &&
+        other.generatedImages == generatedImages;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, content, thinking, isStreaming, isGeneratingImage, generatedImages);
 }

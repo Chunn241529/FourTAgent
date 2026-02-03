@@ -327,7 +327,11 @@ class ToolService:
         }
 
     def _generate_image_sync(
-        self, prompt: str = "", description: str = "", size: str = "768x768"
+        self,
+        prompt: str = "",
+        description: str = "",
+        size: str = "768x768",
+        seed: int = None,
     ) -> str:
         """
         Synchronous wrapper for async image generation.
@@ -345,7 +349,9 @@ class ToolService:
             asyncio.set_event_loop(loop)
             try:
                 result = loop.run_until_complete(
-                    image_generation_service.generate_image_direct(sd_prompt, size)
+                    image_generation_service.generate_image_direct(
+                        sd_prompt, size, seed=seed
+                    )
                 )
             finally:
                 loop.close()
@@ -593,6 +599,10 @@ class ToolService:
                             "size": {
                                 "type": "string",
                                 "description": "Image size. Use '512x512' for small, '768x768' for medium/default, '1024x1024' for large. If user says 'lớn'/'big'/'high quality' use 1024x1024.",
+                            },
+                            "seed": {
+                                "type": "integer",
+                                "description": "Optional seed for reproducibility. System uses this automatically for edits.",
                             },
                         },
                         "required": ["prompt"],

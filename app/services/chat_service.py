@@ -36,6 +36,9 @@ tool_service = ToolService()
 
 
 class ChatService:
+    # Reuse Ollama Client
+    _client = None
+
     # Cache for voice fillers: {(text, voice_id): audio_bytes}
     _filler_cache = {}
 
@@ -44,10 +47,25 @@ class ChatService:
 
     # List of filler phrases to rotate
     FILLER_PHRASES = [
-        "Okay, được rồi, đợi em chút nhé",
-        "Được rồi",
-        "Đợi em một chút",
+        "Ok, được rồi, đợi em chút nhé",
+        "Được rồi, đợi em chút nhé",
+        "Đợi em một chút nhé",
     ]
+
+    @classmethod
+    def get_client(cls):
+        """Get or create singleton AsyncClient"""
+        if cls._client is None:
+            # Check API Key
+            api_key = os.getenv("OLLAMA_API_KEY")
+            if not api_key:
+                # Minimal fallback or let it fail later
+                logger.warning("OLLAMA_API_KEY not set in env, connection might fail.")
+            else:
+                os.environ["OLLAMA_API_KEY"] = api_key
+
+            cls._client = ollama.AsyncClient()
+        return cls._client
 
     @classmethod
     def _get_random_filler(cls) -> str:
@@ -139,21 +157,16 @@ class ChatService:
             topic = message.message.strip().replace("/deepsearch", "", 1).strip()
 
             if not topic:
-                return StreamingResponse(
-                    iter(
-                        [
-                            f"data: {json.dumps({'message': {'content': 'Vui lòng nhập chủ đề cần nghiên cứu'}}, separators=(',', ':'))}\n\n"
-                        ]
-                    ),
-                    media_type="text/event-stream",
-                )
+                # Return an async generator for consistency
+                async def _empty_topic_error():
+                    yield f"data: {json.dumps({'message': {'content': 'Vui lòng nhập chủ đề cần nghiên cứu'}}, separators=(',', ':'))}\n\n"
+
+                return _empty_topic_error()
 
             deep_search_service = DeepSearchService()
-            return StreamingResponse(
-                deep_search_service.execute_deep_search(
-                    topic, user_id, conversation.id, db
-                ),
-                media_type="text/event-stream",
+            # Return raw generator, caller will wrap in StreamingResponse
+            return deep_search_service.execute_deep_search(
+                topic, user_id, conversation.id, db
             )
 
         gender = user.gender
@@ -264,14 +277,13 @@ class ChatService:
         
         Thời gian hiện tại: {current_time}
 
-        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ (TOOL USAGE POLICY):**
-        Bạn được cung cấp các công cụ mạnh mẽ (Web Search, Music Player, File System).
-        **QUYỀN TỰ QUYẾT**: Bạn có toàn quyền quyết định khi nào sử dụng công cụ. KHÔNG CẦN hỏi ý kiến người dùng.
+        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ:**
+        Bạn có các công cụ mạnh. **TỰ QUYẾT ĐỊNH** khi dùng - KHÔNG hỏi trước.
         
-        1. **Web Search (`web_search`)**:
-           - **KHI NÀO DÙNG**: Khi người dùng hỏi về thông tin mới, sự kiện, thời sự, review sản phẩm, giá cả, hoặc bất kỳ kiến thức nào bạn không chắc chắn hoặc có thể đã lỗi thời.
-           - **NGÔN NGỮ QUERY**: Luôn cố gắng sử dụng **TIẾNG ANH (English Keywords)** cho query để có kết quả tốt nhất (ví dụ: "iPhone 16 specs", "best places to visit in Hanoi"), trừ khi vấn đề quá đặc thù Việt Nam.
-           - **HÀNH ĐỘNG**: Nếu thấy cần thông tin -> Gọi tool ngay. Đừng nói "Để mình tìm...", cứ tìm rồi trả lời.
+        **1. Web Search (`web_search`)** - TÌM KIẾM:
+           **TRIGGER**: Người dùng hỏi tin tức, giá cả, review, hoặc info bạn không chắc
+           **VD**: "iPhone 16 giá bao nhiêu?" → `web_search("iPhone 16 price Vietnam")`
+           **ACTION**: Thấy cần info → Gọi ngay, dùng English keywords
 
         2. **Music Player (`search_music`, `play_music`)**:
            - **KHI NÀO DÙNG**:
@@ -282,7 +294,18 @@ class ChatService:
              - Nếu tìm thấy kết quả phù hợp -> Gọi tiếp `play_music(url="...")` NGAY LẬP TỨC để phát.
              - Chỉ đưa danh sách chọn khi kết quả quá mập mờ.
 
-        3. **Deep Search (`deep_search`)**:
+        **3. Image Generation (`generate_image`)** - TẠO ẢNH:
+           **TRIGGER**: Người dùng muốn thấy/tạo/vẽ hình ảnh, hoặc mô tả visual
+           **VD**: 
+           - "Vẽ con mèo" → `generate_image("cute cat, digital art, ...")`
+           - "Tạo ảnh cô gái" → `generate_image("1girl, cute smile, ...")`
+           - "Làm hình nền" → `generate_image("beautiful wallpaper, ...")`
+           **PROMPT**: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
+           - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
+           - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
+           - VD: "1girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
+
+        4. **Deep Search (`deep_search`)**:
            - **KHI NÀO DÙNG**: Khi người dùng yêu cầu "nghiên cứu", "tìm hiểu sâu", hoặc hỏi một vấn đề rất phức tạp cần báo cáo chi tiết.
         
         **QUY TẮC TRẢ LỜI:**
@@ -427,6 +450,44 @@ class ChatService:
         elif needs_reasoning:
             return "Lumina", tools, True
         else:
+            # Check if there are any images in recent history (working memory) to enable Vision
+            if conversation_id and db:
+                try:
+                    # Check last 3 messages for generated_images or potential image content
+                    recent_msgs = (
+                        db.query(ModelChatMessage)
+                        .filter(ModelChatMessage.conversation_id == conversation_id)
+                        .order_by(ModelChatMessage.timestamp.desc())
+                        .limit(3)
+                        .all()
+                    )
+                    for msg in recent_msgs:
+                        # detections: 1. Application-generated images
+                        has_generated = False
+                        if msg.generated_images:
+                            try:
+                                imgs = json.loads(msg.generated_images)
+                                if imgs and len(imgs) > 0:
+                                    has_generated = True
+                            except:
+                                pass
+
+                        # detections: 2. User uploaded images (blind check if not storing file metadata in useful way yet,
+                        # but standard flow usually processes file immediately.
+                        # However, if we want to "chat about previous image", we need vision model.)
+
+                        if has_generated:
+                            pass
+                            # logger.info(
+                            #     "Found images in recent history, switching to Vision Model (qwen3-vl:8b)"
+                            # )
+                            # return "qwen3-vl:8b", tools, False
+
+                except Exception as e:
+                    logger.warning(
+                        f"Error checking recent images for vision switch: {e}"
+                    )
+
             return "Lumina", tools, False
 
     @staticmethod
@@ -638,31 +699,76 @@ class ChatService:
             logger.info(f"Stream generation started for conversation {conversation_id}")
             yield f"data: {json.dumps({'conversation_id': conversation_id}, separators=(',', ':'))}\n\n"
 
-            # Emit filler TTS immediately for voice mode
-            # Emit filler TTS immediately for voice mode
+            loop = asyncio.get_running_loop()
+
+            # --- PARALLEL TASK 1: Hierarchical Memory Retrieval ---
+            memory_future = loop.run_in_executor(
+                None,
+                lambda: ChatService._get_hierarchical_memory(
+                    db, conversation_id, current_query=full_prompt, user_id=user_id
+                ),
+            )
+
+            # --- PARALLEL TASK 2: Voice Filler Generation (if enabled) ---
+            filler_audio = None
+            filler_text = None
             if voice_enabled:
                 filler_text = ChatService._get_random_filler()
                 cache_key = (filler_text, voice_id)
-
                 filler_audio = ChatService._filler_cache.get(cache_key)
 
                 if not filler_audio:
+                    # If not cached, try to generate asynchronously (wrapped in thread)
+                    # to avoid blocking the main thread significantly if TTS is slow
+                    async def _generate_filler_async():
+                        try:
+                            from app.services.tts_service import tts_service
+
+                            # Run TTS in executor to avoid blocking event loop
+                            audio = await loop.run_in_executor(
+                                None,
+                                lambda: tts_service.synthesize(
+                                    filler_text, voice_id=voice_id
+                                ),
+                            )
+                            return audio
+                        except Exception as e:
+                            logger.warning(f"Failed to generate filler TTS: {e}")
+                            return None
+
+                    # Start generation task
+                    # We await it later or do we want to emit it AS SOON AS POSSIBLE?
+                    # Ideally we want to emit it ASAP.
+                    # Let's simple await it here since it's "parallel" to memory retrieval
+                    # But wait! run_in_executor starts immediately.
+                    # We can await the specific filler generation here concurrently with memory.
+
+                    # Refinement: We want to emit the filler audio ASAP to the client.
+                    # So we shouldn't wait for memory to finish before emitting filler.
+                    pass
+
+            # handle filler emission logic immediately if cached, otherwise parallelize
+            if voice_enabled:
+                if not filler_audio:
+                    # Generate if missing
                     try:
                         from app.services.tts_service import tts_service
 
-                        logger.info(
-                            f"Synthesizing filler for cache (miss): {filler_text}"
-                        )
-                        filler_audio = tts_service.synthesize(
-                            filler_text, voice_id=voice_id
+                        # Async generation
+                        filler_audio = await loop.run_in_executor(
+                            None,
+                            lambda: tts_service.synthesize(
+                                filler_text, voice_id=voice_id
+                            ),
                         )
                         if filler_audio:
-                            ChatService._filler_cache[cache_key] = filler_audio
+                            ChatService._filler_cache[(filler_text, voice_id)] = (
+                                filler_audio
+                            )
                     except Exception as e:
-                        logger.warning(f"Failed to generate filler TTS: {e}")
-                else:
-                    logger.info(f"Using cached filler: {filler_text}")
+                        logger.warning(f"TTS filler gen failed: {e}")
 
+                # Emit filler immediately if we have it
                 if filler_audio:
                     try:
                         import base64
@@ -673,30 +779,19 @@ class ChatService:
                     except Exception as e:
                         logger.error(f"Error emitting filler: {e}")
 
-            full_response = []
-
-            # Get hierarchical memory (summary + semantic + working)
-            # Use run_in_executor for embedding generation inside this method
-            # Get hierarchical memory (summary + semantic + working)
-            # Use run_in_executor for embedding generation inside this method
-            loop = asyncio.get_running_loop()
+            # Now we wait for memory
             summary = ""
             semantic_messages = []
             working_memory = []
 
             try:
-                logger.info("Retrieving hierarchical memory...")
-                summary, semantic_messages, working_memory = await loop.run_in_executor(
-                    None,
-                    lambda: ChatService._get_hierarchical_memory(
-                        db, conversation_id, current_query=full_prompt, user_id=user_id
-                    ),
-                )
+                # Await the memory task we started earlier
+                summary, semantic_messages, working_memory = await memory_future
                 logger.info("Hierarchical memory retrieved successfully")
             except Exception as e:
                 logger.error(f"Error retrieving hierarchical memory: {e}")
-                # Fallback: just use empty memory or try to get working memory only if possible
-                # For now, proceed with empty context to avoid blocking the user
+
+            full_response = []
 
             # Update system prompt with conversation summary AND semantic memory
             enhanced_system_prompt = system_prompt
@@ -722,6 +817,21 @@ class ChatService:
             # Add Working Memory (Flow)
             for msg in working_memory:
                 msg_dict = {"role": msg.role, "content": msg.content}
+
+                # INJECT GENERATED IMAGES FROM HISTORY
+                if msg.generated_images:
+                    try:
+                        gen_imgs = json.loads(msg.generated_images)
+                        if gen_imgs and isinstance(gen_imgs, list):
+                            # Ensure limit to avoid context overflow (max 1 recent image set?)
+                            # For now, append all. Ollama handles base64 in "images" list.
+                            msg_dict["images"] = gen_imgs
+                            logger.info(
+                                f"Injected {len(gen_imgs)} generated images into message history for Vision Model"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to inject generated images: {e}")
+
                 if msg.role == "assistant" and msg.tool_calls:
                     try:
                         msg_dict["tool_calls"] = (
@@ -749,13 +859,8 @@ class ChatService:
 
             save_db = None
             try:
-                api_key = os.getenv("OLLAMA_API_KEY")
-                if not api_key:
-                    raise ValueError("OLLAMA_API_KEY env var not set")
-                os.environ["OLLAMA_API_KEY"] = api_key
-
-                # Use AsyncClient
-                client = ollama.AsyncClient()
+                # Reuse client
+                client = ChatService.get_client()
 
                 options = {
                     "temperature": 0.6,
@@ -801,8 +906,8 @@ class ChatService:
                         if "message" in chunk:
                             msg_chunk = chunk["message"]
                             if "tool_calls" in msg_chunk and msg_chunk["tool_calls"]:
-                                print(
-                                    f"DEBUG: Tool call detected: {msg_chunk['tool_calls']}"
+                                logger.debug(
+                                    f"Tool call detected: {msg_chunk['tool_calls']}"
                                 )
                                 iteration_has_tool_calls = True
                                 has_tool_calls = True
@@ -1065,6 +1170,85 @@ class ChatService:
                                 if function_name == "generate_image":
                                     yield f"data: {json.dumps({'image_generation_started': True}, separators=(',', ':'))}\n\n"
 
+                                    # --- SEED REUSE LOGIC ---
+                                    # Check if this is an "edit" request and inject seed
+                                    try:
+                                        img_args = (
+                                            json.loads(args_str)
+                                            if isinstance(args_str, str)
+                                            else args_str
+                                        )
+                                        if isinstance(img_args, dict):
+                                            current_query_lower = (
+                                                effective_query.lower()
+                                            )
+                                            edit_keywords = [
+                                                "change",
+                                                "edit",
+                                                "modify",
+                                                "update",
+                                                "replace",
+                                                "thêm",
+                                                "sửa",
+                                                "đổi",
+                                                "chỉnh",
+                                                "bỏ",
+                                                "xoá",
+                                                "fix",
+                                                "biến",
+                                            ]
+                                            is_edit = any(
+                                                k in current_query_lower
+                                                for k in edit_keywords
+                                            )
+
+                                            if is_edit:
+                                                last_seed = None
+                                                # Scan history for previous generate_image seed
+                                                # Look in messages list which contains history
+                                                for msg in reversed(messages):
+                                                    if (
+                                                        msg.get("role") == "tool"
+                                                        or msg.get("role") == "function"
+                                                    ):
+                                                        t_name = msg.get(
+                                                            "tool_name"
+                                                        ) or msg.get("name")
+                                                        if t_name == "generate_image":
+                                                            try:
+                                                                content_json = (
+                                                                    json.loads(
+                                                                        msg.get(
+                                                                            "content",
+                                                                            "{}",
+                                                                        )
+                                                                    )
+                                                                )
+                                                                if (
+                                                                    "seed"
+                                                                    in content_json
+                                                                ):
+                                                                    last_seed = (
+                                                                        content_json[
+                                                                            "seed"
+                                                                        ]
+                                                                    )
+                                                                    break
+                                                            except:
+                                                                pass
+
+                                                if last_seed is not None:
+                                                    img_args["seed"] = last_seed
+                                                    logger.info(
+                                                        f"♻️ Injected seed {last_seed} for image edit request"
+                                                    )
+                                                    # Update args_str with new seed
+                                                    args_str = json.dumps(img_args)
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"Error in seed injection logic: {e}"
+                                        )
+
                                 tasks.append(
                                     tool_service.execute_tool_async(
                                         function_name, args_str
@@ -1119,6 +1303,10 @@ class ChatService:
                                                 "success": True,
                                                 "message": result_data.get(
                                                     "message", "Đã tạo xong ảnh!"
+                                                ),
+                                                "seed": result_data.get("seed"),
+                                                "prompt": result_data.get(
+                                                    "generated_prompt"
                                                 ),
                                             },
                                             ensure_ascii=False,
@@ -1181,8 +1369,8 @@ class ChatService:
                                         )
                                         results = result_data.get("results", [])
                                         count = len(results)
-                                        print(
-                                            f"DEBUG: Music search found {count} results"
+                                        logger.debug(
+                                            f"Music search found {count} results"
                                         )
 
                                         # Emit thinking update
@@ -1194,8 +1382,8 @@ class ChatService:
                                             song_url = first_song.get("url")
                                             song_title = first_song.get("title")
 
-                                            print(
-                                                f"DEBUG: Auto-playing first result: {song_title}"
+                                            logger.debug(
+                                                f"Auto-playing first result: {song_title}"
                                             )
                                             yield f"data: {json.dumps({'thinking': f'Auto-playing: {song_title}...'}, separators=(',', ':'))}\n\n"
 
@@ -1224,8 +1412,8 @@ class ChatService:
                                                 )
 
                                     except Exception as e:
-                                        print(
-                                            f"DEBUG: Error processing search_music result: {e}"
+                                        logger.debug(
+                                            f"Error processing search_music result: {e}"
                                         )
 
                                 # Handle play_music - emit music_play event for Flutter to play
@@ -1420,7 +1608,9 @@ class ChatService:
 
                 yield "data: [DONE]\n\n"
 
-        return StreamingResponse(generate_stream(), media_type="text/event-stream")
+        # Return the generator directly for the caller to wrap
+        # This avoids double-wrapping in StreamingResponse which causes buffering
+        return generate_stream()
 
     @staticmethod
     async def handle_client_tool_result(

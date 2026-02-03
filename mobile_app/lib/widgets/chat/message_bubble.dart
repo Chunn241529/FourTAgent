@@ -288,25 +288,30 @@ class _MessageBubbleState extends State<MessageBubble> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // AI Avatar
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.secondary,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              // AI Avatar with Spinner
+              _AvatarSpinner(
+                // Show spinner only when streaming/generating but no content yet
+                isAnimating: (widget.message.isStreaming && widget.message.content.isEmpty) || 
+                            widget.message.isGeneratingImage,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.secondary,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  color: Colors.white,
-                  size: 16,
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -404,6 +409,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                   width: 256,
                                   height: 256,
                                   fit: BoxFit.cover,
+                                  gaplessPlayback: true,
                                   errorBuilder: (_, __, ___) => Container(
                                     width: 256,
                                     height: 256,
@@ -452,12 +458,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                         ),
                       ),
 
-                    // Streaming indicator (hide if generating image)
-                    if (widget.message.isStreaming && !widget.message.isGeneratingImage)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: _buildStreamingIndicator(theme),
-                      ),
+                    // Streaming indicator REMOVED (replaced by Avatar Spinner)
+                    // if (widget.message.isStreaming && !widget.message.isGeneratingImage)
+                    //   Padding(
+                    //     padding: const EdgeInsets.only(top: 12),
+                    //     child: _buildStreamingIndicator(theme),
+                    //   ),
                     // Actions
                     if (!widget.message.isStreaming && widget.message.content.isNotEmpty)
                       Padding(
@@ -485,6 +491,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
+    // Always use MarkdownBody for consistency
     return MarkdownBody(
       data: widget.message.content,
       selectable: true,
@@ -1028,6 +1035,113 @@ class _ShimmerPlaceholderState extends State<ShimmerPlaceholder> with SingleTick
           ),
         );
       },
+    );
+  }
+}
+
+class _AvatarSpinner extends StatefulWidget {
+  final bool isAnimating;
+  final Widget child;
+
+  const _AvatarSpinner({
+    required this.isAnimating,
+    required this.child,
+  });
+
+  @override
+  State<_AvatarSpinner> createState() => _AvatarSpinnerState();
+}
+
+class _AvatarSpinnerState extends State<_AvatarSpinner> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500), // Faster rotation
+    );
+    if (widget.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AvatarSpinner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAnimating != oldWidget.isAnimating) {
+      if (widget.isAnimating) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+        _controller.reset();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isAnimating) return widget.child;
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Glow Effect
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+        ),
+        // Rotating Loop
+        RotationTransition(
+          turns: _controller,
+          child: Container(
+             width: 34,
+             height: 34,
+             padding: const EdgeInsets.all(2), // The thickness of the Ring
+             decoration: BoxDecoration(
+               shape: BoxShape.circle,
+               gradient: SweepGradient(
+                 colors: [
+                   Colors.transparent,
+                   Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                   Theme.of(context).colorScheme.primary,
+                 ],
+                 stops: const [0.0, 0.5, 1.0],
+               ),
+             ),
+             // This creates a mask to make it a ring
+             child: Container(
+               decoration: BoxDecoration(
+                 shape: BoxShape.circle,
+                 color: Theme.of(context).scaffoldBackgroundColor, 
+                  // Note: In message bubbles, we might be on a colored bg, 
+                  // but usually avatars are in a transparent row. 
+                  // Transparent hole is tricky with SweepGradient without CustomPainter.
+                  // Let's rely on the Child covering the center.
+               ),
+             ),
+          ),
+        ),
+        // The Avatar stays on top
+        widget.child,
+      ],
     );
   }
 }

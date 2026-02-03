@@ -622,6 +622,11 @@ class ChatProvider extends ChangeNotifier {
     List<String> bufferedImages = [];
         
     DateTime lastUpdate = DateTime.now();
+    DateTime lastNotify = DateTime.now();
+    
+    // Batching mechanism: collect chunks and process them together
+    List<String> pendingChunks = [];
+    Timer? batchTimer;
 
     try {
       _streamSubscription = stream.listen(
@@ -629,54 +634,70 @@ class ChatProvider extends ChangeNotifier {
         final line = chunk.trim();
         if (line.isEmpty) return;
         
-        bool shouldNotify = false;
-        String? jsonStr;
-        if (line.startsWith('data: ')) {
-           jsonStr = line.substring(6).trim();
-        } else if (line.startsWith('data:')) {
-           jsonStr = line.substring(5).trim();
-        }
+        // Add chunk to pending buffer
+        pendingChunks.add(line);
+        
+        // Cancel previous batch timer
+        batchTimer?.cancel();
+        
+        // Process batch after 30ms delay - balances smooth streaming with performance
+        // Shorter than before to reduce perceived lag
+        batchTimer = Timer(const Duration(milliseconds: 22), () {
+          if (pendingChunks.isEmpty) return;
+          
+          bool shouldNotify = false;
+          
+          // Process all pending chunks in one go
+          for (final bufferedLine in pendingChunks) {
+            String? jsonStr;
+            if (bufferedLine.startsWith('data: ')) {
+               jsonStr = bufferedLine.substring(6).trim();
+            } else if (bufferedLine.startsWith('data:')) {
+               jsonStr = bufferedLine.substring(5).trim();
+            }
 
-        if (jsonStr != null) {
-          // print('>>> STREAM CHUNK: $jsonStr'); // DEBUG LOG
-          if (jsonStr == '[DONE]') {
-            print('>>> Stream [DONE] received');
-            return;
-          }
+            if (jsonStr != null) {
+              // print('>>> STREAM CHUNK: $jsonStr'); // DEBUG LOG
+              if (jsonStr == '[DONE]') {
+                print('>>> Stream [DONE] received');
+                continue;
+              }
 
-          try {
-            final data = _parseJson(jsonStr);
-            if (data == null) return;
+              try {
+                final data = _parseJson(jsonStr);
+                if (data == null) continue;
 
-            // Handle message_saved
-            if (data['message_saved'] != null) {
-              final messageId = data['message_saved']['id'] as int?;
-              if (messageId != null) {
-                final lastIndex = _messages.length - 1;
-                if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
-                  _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
-                  shouldNotify = true;
+                // Handle message_saved
+                if (data['message_saved'] != null) {
+                  final messageId = data['message_saved']['id'] as int?;
+                  if (messageId != null) {
+                    final lastIndex = _messages.length - 1;
+                    if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
+                      _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
+                      shouldNotify = true;
+                    }
+                  }
                 }
-              }
-            }
 
-            // Handle client_tool_call
-            if (data['client_tool_call'] != null) {
-              final toolCall = data['client_tool_call'];
-              _pendingClientTool = toolCall;
-              _isStreaming = false;
-              _streamSubscription?.cancel();
-              _streamSubscription = null;
-              final lastIndex = _messages.length - 1;
-              if (lastIndex >= 0) {
-                 _messages[lastIndex] = _messages[lastIndex].copyWith(isStreaming: false);
-              }
-              notifyListeners();
-              if (!completer.isCompleted) completer.complete();
-              return;
-            }
+                // Handle client_tool_call
+                if (data['client_tool_call'] != null) {
+                  final toolCall = data['client_tool_call'];
+                  _pendingClientTool = toolCall;
+                  _isStreaming = false;
+                  _streamSubscription?.cancel();
+                  _streamSubscription = null;
+                  final lastIndex = _messages.length - 1;
+                  if (lastIndex >= 0) {
+                     _messages[lastIndex] = _messages[lastIndex].copyWith(isStreaming: false);
+                  }
+                  notifyListeners();
+                  if (!completer.isCompleted) completer.complete();
+                  pendingChunks.clear();
+                  batchTimer?.cancel();
+                  return;
+                }
 
-            // Handle tool_calls
+                // Handle tool_calls
             if (data['tool_calls'] != null) {
               final toolCalls = data['tool_calls'] as List;
               for (final tc in toolCalls) {
@@ -830,31 +851,32 @@ class ChatProvider extends ChangeNotifier {
                }
             }
 
-            // Handle thinking
-            if (data['thinking'] != null) {
-              fullThinking += data['thinking'] as String;
-              final lastIndex = _messages.length - 1;
-              if (lastIndex >= 0) {
-                _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
-                shouldNotify = true;
-              }
+            // Handle message content & thinking
+            String? contentDelta;
+            String? thinkingDelta;
+
+            if (data['message'] != null) {
+              contentDelta = data['message']['content'] as String?;
+              thinkingDelta = data['message']['thinking'] as String?;
+            } 
+            // Handle standalone thinking key (some backends send this)
+            else if (data['thinking'] != null) {
+              thinkingDelta = data['thinking'] as String;
             }
 
-            // Handle message content
-            if (data['message'] != null) {
-              final contentDelta = data['message']['content'] as String? ?? '';
-              final thinkingDelta = data['message']['thinking'] as String? ?? '';
-              if (contentDelta.isNotEmpty) fullResponse += contentDelta;
-              if (thinkingDelta.isNotEmpty) fullThinking += thinkingDelta;
+            if (contentDelta != null || thinkingDelta != null) {
+              if (contentDelta != null) fullResponse += contentDelta;
+              if (thinkingDelta != null) fullThinking += thinkingDelta;
               
-              final now = DateTime.now();
-              if (now.difference(lastUpdate).inMilliseconds > 100) {
-                final lastIndex = _messages.length - 1;
-                if (lastIndex >= 0) {
-                   _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse, thinking: fullThinking.isNotEmpty ? fullThinking : null);
-                   lastUpdate = now;
-                   shouldNotify = true;
-                }
+              // Update message content immediately - batching controls update frequency
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(
+                    content: fullResponse, 
+                    thinking: fullThinking.isNotEmpty ? fullThinking : null
+                 );
+                 lastUpdate = DateTime.now();
+                 shouldNotify = true;
               }
             }
             
@@ -918,10 +940,20 @@ class ChatProvider extends ChangeNotifier {
             print('JSON parse error: $e'); 
             print('Invalid JSON: $jsonStr'); // Log invalid JSON
           }
-        }
-        if (shouldNotify) notifyListeners();
-      },
+            } // Close if (jsonStr != null)
+          } // End of for loop over pendingChunks
+          
+          // Clear buffer
+          pendingChunks.clear();
+          
+          // Notify if there were updates
+          if (shouldNotify) {
+            notifyListeners();
+          }
+        }); // End of Timer callback
+      }, // End of stream.listen chunk handler
       onError: (e) {
+        batchTimer?.cancel();  // Cancel pending batch timer
         _error = e.toString();
         final lastIndex = _messages.length - 1;
         if (lastIndex >= 0) {
@@ -931,6 +963,7 @@ class ChatProvider extends ChangeNotifier {
         if (!completer.isCompleted) completer.complete();
       },
       onDone: () async {
+        batchTimer?.cancel();  // Cancel pending batch timer
         final lastIndex = _messages.length - 1;
         if (lastIndex >= 0) {
            // Apply buffered images now that stream is complete

@@ -59,8 +59,8 @@ async def queued_chat_stream(
         # Clear queue status
         yield f"data: {json.dumps({'queue_status': {'position': 0, 'message': 'Đang xử lý...'}}, separators=(',', ':'))}\n\n"
 
-        # Call the actual chat service
-        response = await ChatService.chat_with_rag(
+        # Call the actual chat service - now returns async generator directly
+        stream = await ChatService.chat_with_rag(
             message=message_in,
             file=file,
             conversation_id=conversation_id,
@@ -70,8 +70,8 @@ async def queued_chat_stream(
             voice_id=voice_id,
         )
 
-        # Stream the response
-        async for chunk in response.body_iterator:
+        # Stream the response directly - no double-wrapping
+        async for chunk in stream:
             yield chunk
 
     finally:
@@ -179,8 +179,8 @@ async def queued_tool_result_stream(
         return
 
     try:
-        # Call the chat service specialized for tool results
-        response = await ChatService.handle_client_tool_result(
+        # Call the chat service - now returns async generator directly
+        stream = await ChatService.handle_client_tool_result(
             user_id=user_id,
             conversation_id=conversation_id,
             tool_name=tool_name,
@@ -191,8 +191,8 @@ async def queued_tool_result_stream(
             voice_id=voice_id,
         )
 
-        # Stream the response
-        async for chunk in response.body_iterator:
+        # Stream the response directly - no double-wrapping
+        async for chunk in stream:
             yield chunk
 
     finally:

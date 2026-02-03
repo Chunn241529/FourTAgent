@@ -11,7 +11,7 @@ import asyncio
 import os
 import re
 from typing import Optional, Tuple
-from ollama import AsyncClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output
 MODEL_DEFAULT = "4t_inpaint.safetensors"
 MODEL_2D_3D = "4t_2d_3d.safetensors"
 
-# Default negative prompt
-DEFAULT_NEGATIVE_PROMPT = "lowres, worst quality, low quality, bad anatomy, worst aesthetic, jpeg artifacts, scan artifacts, compression artifacts, old, early, distorted anatomy, bad proportions, missing body part, missing limb, unclear eyes, bad hands, mutated hands, fused fingers, fewer digits, extra digits, extra arms, missing arm, missing leg, ai-generated, watermark, signature, logo"
+# Default negative prompt (Updated from new workflow)
+DEFAULT_NEGATIVE_PROMPT = "(deformed iris, deformed pupils), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, UnrealisticDream"
 
 # Keywords that suggest 2D/3D style
 KEYWORDS_2D_3D = [
@@ -36,7 +36,6 @@ KEYWORDS_2D_3D = [
     "illustration",
     "digital art",
     "cel shaded",
-    "cel-shaded",
     "toon",
     "pixar",
     "disney",
@@ -92,6 +91,23 @@ class ImageGenerationService:
     def __init__(self):
         self.client_id = "lumina_ai_" + str(random.randint(10000, 99999))
 
+    def cleanup_vram(self):
+        """Clean up VRAM after generation."""
+        import gc
+
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+                logger.info("VRAM cleanup completed (torch.cuda.empty_cache)")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"VRAM cleanup failed: {e}")
+
     def validate_prompt(self, prompt: str) -> bool:
         """Check if prompt contains blacklisted keywords."""
         prompt_lower = prompt.lower()
@@ -102,63 +118,6 @@ class ImageGenerationService:
                 )
                 return False
         return True
-
-    async def generate_prompt(self, user_description: str) -> str:
-        """
-        Use LLM to generate a detailed tag-based prompt from user description.
-
-        Args:
-            user_description: User's natural language description
-
-        Returns:
-            Tag-based prompt suitable for Stable Diffusion
-        """
-        system_prompt = """You are a Stable Diffusion prompt generator. Convert the user's description (which may be in Vietnamese or English) into a detailed, comma-separated tag-based prompt IN ENGLISH.
-
-        Rules:
-        1. Output ONLY the prompt, no explanations
-        2. ALWAYS output in ENGLISH regardless of input language
-        3. Use comma-separated tags/phrases
-        4. Include quality tags like: masterpiece, best quality, highly detailed, photorealistic (when appropriate)
-        5. Include relevant style tags: realistic, anime, 3d render, illustration, etc.
-        6. Include lighting, composition, and atmosphere tags when relevant
-        7. Be specific about subjects, poses, expressions, clothing, backgrounds
-        8. For people: include features like hair color, eye color, body type, clothing details
-        9. For animals: include breed, fur color, pose, environment
-        10. Keep reasonable length (50-150 tags)
-
-        Example Vietnamese input: "con mèo đang nằm trên ghế"
-        Example output: 1cat, solo, lying down, on chair, fluffy fur, cute, indoor, cozy room, soft lighting, masterpiece, best quality, highly detailed, photorealistic
-
-        Example input: "cô gái tóc dài mặc áo dài"
-        Example output: 1girl, solo, long hair, black hair, ao dai, vietnamese traditional dress, standing, elegant pose, beautiful face, slender body, garden background, natural lighting, masterpiece, best quality, highly detailed
-        """
-
-        try:
-            client = AsyncClient()
-            response = await client.chat(
-                model="Lumina:latest",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": f"Translate to English and generate Stable Diffusion prompt for: {user_description}",
-                    },
-                ],
-                stream=False,
-                options={"temperature": 0.2},
-                think=False,
-            )
-
-            prompt = response.get("message", {}).get("content", "").strip()
-            logger.info(f"LLM raw response: {response}")
-            logger.info(f"Generated English prompt: {prompt[:200]}...")
-            return prompt
-
-        except Exception as e:
-            logger.error(f"Error generating prompt: {e}")
-            # Fallback: use user description directly with quality tags
-            return f"{user_description}, masterpiece, best quality, highly detailed"
 
     def is_2d_3d_content(self, prompt: str) -> bool:
         """
@@ -214,25 +173,20 @@ class ImageGenerationService:
         width: int = 512,
         height: int = 512,
         seed: Optional[int] = None,
-    ) -> dict:
+    ) -> Tuple[dict, int]:
         """
         Build ComfyUI workflow JSON.
-
-        Args:
-            prompt: Positive prompt
-            width: Image width
-            height: Image height
-            seed: Random seed (generated if None)
-
-        Returns:
-            ComfyUI workflow dictionary
+        Using optimized workflow with Lumina_Gen and LoRA stack.
         """
         if seed is None:
             seed = random.randint(1, 2**53)
 
-        # Select model based on content
-        model = MODEL_2D_3D if self.is_2d_3d_content(prompt) else MODEL_DEFAULT
-        logger.info(f"Selected model: {model}")
+        # Using Lumina_Gen for all requests as per new workflow
+        # Can still keep 2D/3D logic if we want specific prompts, but checkpoint is fixed provided in request.
+        # Checkpoint name from request: "Lumina_Gen.safetensors"
+        ckpt_name = "Lumina_Gen.safetensors"
+
+        logger.info(f"Building workflow with checkpoint: {ckpt_name}")
 
         workflow = {
             "client_id": self.client_id,
@@ -240,12 +194,12 @@ class ImageGenerationService:
                 "3": {
                     "inputs": {
                         "seed": seed,
-                        "steps": 25,
-                        "cfg": 5,
-                        "sampler_name": "dpmpp_2m_sde",
+                        "steps": 15,
+                        "cfg": 1.5,
+                        "sampler_name": "dpmpp_sde",
                         "scheduler": "karras",
                         "denoise": 1,
-                        "model": ["4", 0],
+                        "model": ["19", 0],
                         "positive": ["6", 0],
                         "negative": ["7", 0],
                         "latent_image": ["5", 0],
@@ -254,7 +208,7 @@ class ImageGenerationService:
                     "_meta": {"title": "KSampler"},
                 },
                 "4": {
-                    "inputs": {"ckpt_name": model},
+                    "inputs": {"ckpt_name": ckpt_name},
                     "class_type": "CheckpointLoaderSimple",
                     "_meta": {"title": "Load Checkpoint"},
                 },
@@ -264,14 +218,17 @@ class ImageGenerationService:
                     "_meta": {"title": "Empty Latent Image"},
                 },
                 "6": {
-                    "inputs": {"text": prompt, "clip": ["4", 1]},
+                    "inputs": {"text": prompt, "clip": ["19", 1]},
                     "class_type": "CLIPTextEncode",
                     "_meta": {"title": "CLIP Text Encode (Prompt)"},
                 },
                 "7": {
-                    "inputs": {"text": DEFAULT_NEGATIVE_PROMPT, "clip": ["4", 1]},
+                    "inputs": {
+                        "text": DEFAULT_NEGATIVE_PROMPT,
+                        "clip": ["19", 1],
+                    },
                     "class_type": "CLIPTextEncode",
-                    "_meta": {"title": "CLIP Text Encode (Prompt)"},
+                    "_meta": {"title": "CLIP Text Encode (Negative)"},
                 },
                 "8": {
                     "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
@@ -283,10 +240,26 @@ class ImageGenerationService:
                     "class_type": "SaveImage",
                     "_meta": {"title": "Save Image"},
                 },
+                "19": {
+                    "inputs": {
+                        "lora_01": "add_detail.safetensors",
+                        "strength_01": 1,
+                        "lora_02": "None",
+                        "strength_02": 1,
+                        "lora_03": "None",
+                        "strength_03": 1,
+                        "lora_04": "None",
+                        "strength_04": 1,
+                        "model": ["4", 0],
+                        "clip": ["4", 1],
+                    },
+                    "class_type": "Lora Loader Stack (rgthree)",
+                    "_meta": {"title": "Lora Loader Stack (rgthree)"},
+                },
             },
         }
 
-        return workflow
+        return workflow, seed
 
     async def submit_to_comfyui(self, workflow: dict) -> dict:
         """
@@ -385,44 +358,16 @@ class ImageGenerationService:
 
     async def generate_image(self, description: str, size: str = "768x768") -> dict:
         """
-        Main entry point for image generation.
-
-        Args:
-            description: User's description of the image
-            size: Image size (e.g., "512x512")
-
-        Returns:
-            Dictionary with generation result
+        Legacy entry point using direct generation.
+        Argument is named 'description' but acts as prompt if called by updated logic,
+        or raw text if called by legacy code (though quality might suffer without Main LLM processing).
         """
-        logger.info(f"Generate image request: {description}, size: {size}")
+        logger.info(f"Generate image (legacy wrapper): {description[:50]}...")
+        return await self.generate_image_direct(description, size)
 
-        if not self.validate_prompt(description):
-            return {"success": False, "error": "Prompt contains restricted keywords"}
-
-        # Step 1: Generate detailed prompt from description
-        prompt = await self.generate_prompt(description)
-
-        # Step 2: Parse size
-        width, height = self.parse_size(size)
-
-        # Step 3: Build workflow
-        workflow = self.build_workflow(prompt, width, height)
-
-        # Step 4: Submit to ComfyUI
-        result = await self.submit_to_comfyui(workflow)
-
-        # Add info to result (only filename for internal use, not full path)
-        if result.get("success"):
-            # Extract just the filename for the client
-            filename = result.get("filename", "")
-            result["generated_prompt"] = prompt
-            result["size"] = f"{width}x{height}"
-            # For LLM response - don't show path, just confirm success
-            result["message"] = f"Đã tạo xong ảnh! (size: {width}x{height})"
-
-        return result
-
-    async def generate_image_direct(self, prompt: str, size: str = "768x768") -> dict:
+    async def generate_image_direct(
+        self, prompt: str, size: str = "768x768", seed: Optional[int] = None
+    ) -> dict:
         """
         Generate image using prompt directly (no LLM prompt generation).
         Used when main chat LLM already generates English SD prompt.
@@ -430,31 +375,41 @@ class ImageGenerationService:
         Args:
             prompt: English comma-separated tags from main LLM
             size: Image size (e.g., "512x512")
+            seed: Optional seed for reproducibility
 
         Returns:
             Dictionary with generation result
         """
-        logger.info(f"Generate image direct: prompt={prompt[:100]}..., size={size}")
+        logger.info(
+            f"Generate image direct: prompt={prompt[:100]}..., size={size}, seed={seed}"
+        )
 
         if not self.validate_prompt(prompt):
             return {"success": False, "error": "Prompt contains restricted keywords"}
 
-        # Step 1: Parse size
-        width, height = self.parse_size(size)
+        try:
+            # Step 1: Parse size
+            width, height = self.parse_size(size)
 
-        # Step 2: Build workflow (prompt is already in English SD format)
-        workflow = self.build_workflow(prompt, width, height)
+            # Step 2: Build workflow (returns workflow AND the seed used)
+            workflow, used_seed = self.build_workflow(prompt, width, height, seed=seed)
 
-        # Step 3: Submit to ComfyUI
-        result = await self.submit_to_comfyui(workflow)
+            # Step 3: Submit to ComfyUI
+            result = await self.submit_to_comfyui(workflow)
 
-        # Add info to result
-        if result.get("success"):
-            result["generated_prompt"] = prompt
-            result["size"] = f"{width}x{height}"
-            result["message"] = f"Đã tạo xong ảnh! (size: {width}x{height})"
+            # Add info to result
+            if result.get("success"):
+                result["generated_prompt"] = prompt
+                result["size"] = f"{width}x{height}"
+                result["seed"] = used_seed
+                result["message"] = (
+                    f"Đã tạo xong ảnh! (size: {width}x{height}, seed: {used_seed})"
+                )
 
-        return result
+            return result
+        finally:
+            # Always clean up VRAM
+            self.cleanup_vram()
 
 
 # Singleton instance
