@@ -285,14 +285,15 @@ class ChatService:
            **VD**: "iPhone 16 giá bao nhiêu?" → `web_search("iPhone 16 price Vietnam")`
            **ACTION**: Thấy cần info → Gọi ngay, dùng English keywords
 
-        2. **Music Player (`search_music`, `play_music`)**:
+        2. **Music Player (`search_music`, `play_music`, `get_current_playing`)**:
            - **KHI NÀO DÙNG**:
              - Khi người dùng muốn nghe nhạc (ví dụ: "Mở nhạc chill đi", "Nghe bài Lạc Trôi").
              - Khi người dùng buồn và bạn muốn tặng một bài hát.
+             - Khi người dùng hỏi đang phát bài gì → dùng `get_current_playing()`.
            - **CÁCH DÙNG**:
-             - Luôn gọi `search_music(query="...")` trước.
-             - Nếu tìm thấy kết quả phù hợp -> Gọi tiếp `play_music(url="...")` NGAY LẬP TỨC để phát.
-             - Chỉ đưa danh sách chọn khi kết quả quá mập mờ.
+             - Luôn gọi `search_music(query="...")` trước để tìm bài.
+             - **LUÔN LUÔN** tự động chọn bài phù hợp nhất (thường là bài đầu tiên) và gọi `play_music(url="...")` NGAY LẬP TỨC.
+             - **KHÔNG BAO GIỜ** đưa danh sách hỏi user chọn bài nào - hãy tự quyết định và phát luôn.
 
         **3. Image Generation (`generate_image`)** - TẠO ẢNH:
            **TRIGGER**: Người dùng muốn thấy/tạo/vẽ hình ảnh, hoặc mô tả visual
@@ -373,7 +374,7 @@ class ChatService:
     ) -> tuple:
         """Chọn model phù hợp dựa trên input evaluation"""
         if file and FileService.is_image_file(file):
-            return "qwen3-vl:8b", None, False
+            return "qwen3-vl:8b-instruct", None, False
 
         # Evaluate using keywords instead of LLM
         input_lower = effective_query.lower()

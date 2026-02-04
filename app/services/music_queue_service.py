@@ -59,6 +59,10 @@ class MusicQueueService:
         """Returns command to stop playback."""
         return json.dumps({"action": "stop_music"}, ensure_ascii=False)
 
+    def get_current_playing(self) -> str:
+        """Returns command to request current playing track info from client."""
+        return json.dumps({"action": "get_current_playing"}, ensure_ascii=False)
+
 
 # Global Access
 music_queue_service = MusicQueueService()

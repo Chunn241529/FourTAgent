@@ -320,6 +320,7 @@ class ToolService:
             "previous_music": music_queue_service.previous_music,
             "pause_music": music_queue_service.pause_music,
             "resume_music": music_queue_service.resume_music,
+            "get_current_playing": music_queue_service.get_current_playing,
             "read_file": read_file_server,
             "search_file": search_file_server,
             "create_file": create_file_server,
@@ -505,6 +506,18 @@ class ToolService:
                 "function": {
                     "name": "previous_music",
                     "description": "Go back to previous track.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_playing",
+                    "description": "Get information about the currently playing track (title, artist, duration). Use this to know what's playing now.",
                     "parameters": {
                         "type": "object",
                         "properties": {},

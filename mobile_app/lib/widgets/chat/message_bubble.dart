@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
 import '../../config/api_config.dart';
@@ -46,6 +48,48 @@ class _MessageBubbleState extends State<MessageBubble> {
   void dispose() {
     _editController.dispose();
     super.dispose();
+  }
+
+  /// Download image to Downloads folder
+  Future<void> _downloadImage(BuildContext context, List<int> imageBytes, String imageBase64) async {
+    try {
+      // Get Downloads directory
+      Directory? downloadsDir;
+      if (Platform.isAndroid || Platform.isLinux) {
+        downloadsDir = Directory('/home/${Platform.environment['USER']}/Downloads');
+        if (!downloadsDir.existsSync()) {
+          downloadsDir = await getDownloadsDirectory();
+        }
+      } else if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        downloadsDir = Directory('$userProfile\\Downloads');
+      } else if (Platform.isMacOS) {
+        final home = Platform.environment['HOME'];
+        downloadsDir = Directory('$home/Downloads');
+      } else {
+        downloadsDir = await getApplicationDocumentsDirectory();
+      }
+
+      if (downloadsDir == null) {
+        throw Exception('Could not find Downloads directory');
+      }
+
+      // Generate filename with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '${downloadsDir.path}/lumina_image_$timestamp.png';
+
+      // Write file
+      final file = File(filePath);
+      await file.writeAsBytes(imageBytes);
+
+      if (context.mounted) {
+        CustomSnackBar.showSuccess(context, 'Đã lưu ảnh: $filePath');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        CustomSnackBar.showError(context, 'Lỗi lưu ảnh: $e');
+      }
+    }
   }
 
   @override
@@ -374,31 +418,102 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 // Show full screen image dialog
                                 showDialog(
                                   context: context,
-                                  builder: (ctx) => Dialog(
-                                    backgroundColor: Colors.transparent,
-                                    child: Stack(
-                                      children: [
-                                        InteractiveViewer(
-                                          child: Image.memory(
-                                            imageBytes,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              padding: const EdgeInsets.all(20),
-                                              color: theme.colorScheme.surface,
-                                              child: const Text('Failed to load image'),
+                                  builder: (ctx) => LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final isMobile = constraints.maxWidth < 600;
+                                      
+                                      return Dialog(
+                                        backgroundColor: Colors.transparent,
+                                        insetPadding: isMobile 
+                                          ? const EdgeInsets.all(8)
+                                          : const EdgeInsets.all(40),
+                                        child: Stack(
+                                          children: [
+                                            // Image with InteractiveViewer
+                                            Container(
+                                              constraints: isMobile
+                                                ? null
+                                                : BoxConstraints(
+                                                    maxWidth: constraints.maxWidth * 0.8,
+                                                    maxHeight: constraints.maxHeight * 0.8,
+                                                  ),
+                                              child: InteractiveViewer(
+                                                minScale: 0.5,
+                                                maxScale: 4.0,
+                                                child: Image.memory(
+                                                  imageBytes,
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (_, __, ___) => Container(
+                                                    padding: const EdgeInsets.all(20),
+                                                    color: theme.colorScheme.surface,
+                                                    child: const Text('Failed to load image'),
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                            
+                                            // Buttons - positioned based on screen size
+                                            if (isMobile)
+                                              // Mobile: Buttons at bottom
+                                              Positioned(
+                                                bottom: 16,
+                                                left: 0,
+                                                right: 0,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: [
+                                                      FloatingActionButton(
+                                                        heroTag: 'download',
+                                                        backgroundColor: Colors.black.withOpacity(0.7),
+                                                        onPressed: () async {
+                                                          await _downloadImage(ctx, imageBytes, imageBase64);
+                                                        },
+                                                        child: const Icon(Icons.download, color: Colors.white),
+                                                      ),
+                                                      const SizedBox(width: 16),
+                                                      FloatingActionButton(
+                                                        heroTag: 'close',
+                                                        backgroundColor: Colors.black.withOpacity(0.7),
+                                                        onPressed: () => Navigator.pop(ctx),
+                                                        child: const Icon(Icons.close, color: Colors.white),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              // Desktop: Buttons at top right
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: Row(
+                                                  children: [
+                                                    IconButton(
+                                                      icon: const Icon(Icons.download, color: Colors.white),
+                                                      style: IconButton.styleFrom(
+                                                        backgroundColor: Colors.black.withOpacity(0.5),
+                                                      ),
+                                                      onPressed: () async {
+                                                        await _downloadImage(ctx, imageBytes, imageBase64);
+                                                      },
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    IconButton(
+                                                      icon: const Icon(Icons.close, color: Colors.white),
+                                                      style: IconButton.styleFrom(
+                                                        backgroundColor: Colors.black.withOpacity(0.5),
+                                                      ),
+                                                      onPressed: () => Navigator.pop(ctx),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                          ],
                                         ),
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.white),
-                                            onPressed: () => Navigator.pop(ctx),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      );
+                                    },
                                   ),
                                 );
                               },
