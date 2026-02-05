@@ -10,8 +10,16 @@ git.sh
 rag_system.db
 helper/model
 token.txt
+
+# Sensitive files - Environment & configs
 .env
+.env.*
+*.env
 faiss_indices
+logs/
+storage/
+*.db
+*.sqlite
 # Byte-compiled / optimized / DLL files
 __pycache__/
 app/__pycache_
