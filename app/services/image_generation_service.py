@@ -195,7 +195,7 @@ class ImageGenerationService:
                     "inputs": {
                         "seed": seed,
                         "steps": 6,
-                        "cfg": 1.5,
+                        "cfg": 1.6,
                         "sampler_name": "dpmpp_sde",
                         "scheduler": "karras",
                         "denoise": 1,

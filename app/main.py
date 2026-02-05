@@ -14,6 +14,7 @@ from app.routers.feedback import router as feedback_router
 from app.routers.tts import router as tts_router
 from app.routers.voice import router as voice_router
 from app.routers.generate import router as generate_router
+from app.routers.updates import router as updates_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
@@ -183,6 +184,7 @@ app.include_router(feedback_router)
 app.include_router(tts_router)
 app.include_router(voice_router)
 app.include_router(generate_router)
+app.include_router(updates_router)
 
 
 def main():

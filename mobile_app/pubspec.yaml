@@ -42,6 +42,9 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
+  # Auto-update
+  package_info_plus: ^8.1.2
+  archive: ^3.6.1
 
 dev_dependencies:
   flutter_test:

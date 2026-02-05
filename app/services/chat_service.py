@@ -644,13 +644,12 @@ class ChatService:
             print(f"DEBUG: Generating title with model {model_name}")
 
             system_prompt = (
-                "You are an expert at summarizing conversations. "
-                "Your task is to create a short, concise title (maximum 6 words) "
-                "that captures the main topic of the conversation. "
-                "Output ONLY the title text. Do not use quotes or prefixes."
+                "Bạn là chuyên gia tạo tiêu đề cho cuộc hội thoại. "
+                "Nhiệm vụ: Tạo tiêu đề ngắn gọn (tối đa 6 từ) tóm tắt chủ đề chính. "
+                "CHỈ TRẢ VỀ TIÊU ĐỀ, không giải thích, không dùng dấu ngoặc kép."
             )
 
-            user_prompt = f"Here is the conversation:\n\n{context}\n\nTitle:"
+            user_prompt = f"Tạo tiêu đề ngắn gọn cho cuộc trò chuyện sau:\n\n{context}"
 
             response = ollama.chat(
                 model=model_name,

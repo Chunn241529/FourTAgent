@@ -8,6 +8,8 @@ import 'tts_screen.dart';
 import 'chat/chat_screen.dart';
 import '../widgets/music/floating_music_player.dart';
 import '../widgets/mac_dock.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 
 class DesktopHomeScreen extends StatefulWidget {
   const DesktopHomeScreen({super.key});
@@ -23,6 +25,27 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
   void initState() {
     super.initState();
     debugPrint('DesktopHomeScreen init: _selectedIndex = $_selectedIndex');
+    _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Wait a bit for UI to settle
+    await Future.delayed(const Duration(seconds: 2));
+    
+    try {
+      final updateInfo = await UpdateService.checkForUpdates();
+      
+      if (updateInfo != null && mounted) {
+        // Show update dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UpdateDialog(updateInfo: updateInfo),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking for updates: $e');
+    }
   }
 
   final List<Widget> _screens = const [
