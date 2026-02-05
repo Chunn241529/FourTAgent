@@ -243,6 +243,7 @@ class _MacDockState extends State<MacDock> with SingleTickerProviderStateMixin {
       child: GestureDetector(
         onTap: item.onTap,
         child: Tooltip(
+          key: ValueKey('dock_tooltip_$index'),
           message: item.label,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),

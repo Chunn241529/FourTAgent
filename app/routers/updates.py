@@ -40,9 +40,14 @@ async def get_latest_version():
         version = tag_name.lstrip("v")
 
         # Extract download URLs from assets
+        # Extract download URLs from assets
         assets = release_data.get("assets", [])
         windows_url = None
         linux_url = None
+
+        # Debug: list all asset names
+        asset_names = [a.get("name", "") for a in assets]
+        print(f"Found assets: {asset_names}")
 
         for asset in assets:
             name = asset.get("name", "").lower()
@@ -52,6 +57,22 @@ async def get_latest_version():
                 windows_url = download_url
             elif "linux" in name and download_url:
                 linux_url = download_url
+
+        # Fallback for Linux: Look for any ZIP file if no explicit "linux" asset found
+        # This handles cases like "Lumina.zip"
+        if not linux_url:
+            for asset in assets:
+                name = asset.get("name", "").lower()
+                download_url = asset.get("browser_download_url")
+                if (
+                    name.endswith(".zip")
+                    and "windows" not in name
+                    and "win" not in name
+                    and "mac" not in name
+                    and "osx" not in name
+                ):
+                    linux_url = download_url
+                    break
 
         # Get changelog from release body
         changelog = release_data.get("body", "")
@@ -63,6 +84,7 @@ async def get_latest_version():
             "linux_url": linux_url,
             "changelog": changelog,
             "published_at": release_data.get("published_at"),
+            "debug_assets": asset_names,
         }
 
     except httpx.HTTPError as e:

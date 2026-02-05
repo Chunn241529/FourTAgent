@@ -56,7 +56,12 @@ class UpdateService {
       ).timeout(const Duration(seconds: 10));
       
       if (response.statusCode == 200) {
+        print('FULL UPDATE RESPONSE: ${response.body}');
         final data = json.decode(response.body);
+        print('Parsed Data: $data');
+        if (data.containsKey('debug_assets')) {
+          print('Debug Assets from Backend: ${data['debug_assets']}');
+        }
         
         // No releases available
         if (data['version'] == null) {
@@ -66,6 +71,8 @@ class UpdateService {
         
         final updateInfo = UpdateInfo.fromJson(data);
         print('Latest version: ${updateInfo.version}');
+        print('Linux URL: ${updateInfo.linuxUrl}');
+        print('Windows URL: ${updateInfo.windowsUrl}');
         
         // Compare versions
         if (_isNewerVersion(currentVersion, updateInfo.version)) {
@@ -159,17 +166,17 @@ class UpdateService {
     }
   }
   
-  static Future<bool> _installLinuxUpdate(String tarPath) async {
+  static Future<bool> _installLinuxUpdate(String zipPath) async {
     try {
-      // Extract tar.gz to current directory
+      // Extract zip to current directory
       final currentDir = Directory.current.path;
+      print('Extracting update to $currentDir...');
       
-      final result = await Process.run('tar', [
-        '-xzf',
-        tarPath,
-        '-C',
+      final result = await Process.run('unzip', [
+        '-o', // Overwrite existing files without prompting
+        zipPath,
+        '-d',
         currentDir,
-        '--overwrite'
       ]);
       
       if (result.exitCode == 0) {
@@ -180,6 +187,7 @@ class UpdateService {
         return true;
       } else {
         print('Failed to extract update: ${result.stderr}');
+        print('Stdout: ${result.stdout}');
         return false;
       }
     } catch (e) {

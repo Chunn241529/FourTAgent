@@ -16,8 +16,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
   String _status = '';
 
   Future<void> _handleUpdate() async {
+    print('UpdateDialog: handleUpdate called');
     final downloadUrl = widget.updateInfo.downloadUrl;
+    print('UpdateDialog: downloadUrl = $downloadUrl');
+    
     if (downloadUrl == null) {
+      print('UpdateDialog: downloadUrl is null');
       setState(() {
         _status = 'Không tìm thấy link tải cho hệ điều hành này';
       });

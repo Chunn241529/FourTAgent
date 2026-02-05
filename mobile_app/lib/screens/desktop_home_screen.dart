@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/settings/settings_dialog.dart';
 import 'ai_subtitle_screen.dart';
 import 'tts_screen.dart';
@@ -29,6 +30,10 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
   }
 
   Future<void> _checkForUpdates() async {
+    // Check settings first
+    final settings = context.read<SettingsProvider>(); // Use read here as we don't need to listen to updates inside this async method's future execution flow usually, but access current value. Actually, if we want to be safe, read is fine.
+    if (!settings.autoUpdate) return;
+
     // Wait a bit for UI to settle
     await Future.delayed(const Duration(seconds: 2));
     

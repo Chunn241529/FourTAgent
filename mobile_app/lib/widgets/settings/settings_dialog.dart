@@ -182,6 +182,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
           onTap: () => _showFontSizePicker(settings),
         ),
         _SettingsSwitch(
+          title: 'Tự động cập nhật',
+          subtitle: 'Kiểm tra bản cập nhật mới khi mở app',
+          value: settings.autoUpdate,
+          onChanged: settings.setAutoUpdate,
+        ),
+        _SettingsSwitch(
           title: 'Âm thanh',
           subtitle: 'Phát âm thanh khi gửi/nhận tin',
           value: settings.soundEnabled,

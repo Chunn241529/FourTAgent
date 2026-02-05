@@ -298,12 +298,14 @@ class ChatService:
         **3. Image Generation (`generate_image`)** - TẠO ẢNH:
            **TRIGGER**: Người dùng muốn thấy/tạo/vẽ hình ảnh, hoặc mô tả visual
            **VD**: 
-           - "Vẽ con mèo" → `generate_image("cute cat, digital art, ...")`
-           - "Tạo ảnh cô gái" → `generate_image("1girl, cute smile, ...")`
-           - "Làm hình nền" → `generate_image("beautiful wallpaper, ...")`
-           **PROMPT**: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
-           - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
-           - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
+           - "Vẽ con mèo" → `generate_image(prompt="cute cat, digital art", size="1024x1024")`
+           - "Tạo ảnh cô gái" → `generate_image(prompt="1girl, cute smile", size="768x768")`
+           - "Làm hình nền" → `generate_image(prompt="beautiful landscape", size="1024x1024")`
+           **PARAMS**:
+           - `prompt`: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
+             - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
+             - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
+           - `size`: "512x512", "768x768" (default), "1024x1024" (tốt nhất cho chi tiết), ...
            - VD: "1girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
 
         4. **Deep Search (`deep_search`)**:
