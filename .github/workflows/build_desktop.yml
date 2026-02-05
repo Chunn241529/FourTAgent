@@ -34,8 +34,8 @@ jobs:
         run: |
           cd mobile_app/build/windows/x64/runner/Release
           7z a -tzip Lumina-${{ github.ref_name }}-windows.zip *
-          move Lumina-${{ github.ref_name }}-windows.zip ../../../../..
-          cd ../../../../..
+          move Lumina-${{ github.ref_name }}-windows.zip ../../../../../..
+          cd ../../../../../..
           dir Lumina-*.zip
 
       - name: Create GitHub Release
