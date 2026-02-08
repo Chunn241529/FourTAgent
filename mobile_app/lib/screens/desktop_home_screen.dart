@@ -81,6 +81,13 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
           MacDock(
             items: [
               DockItem(
+                icon: Icons.chat_bubble_outline,
+                selectedIcon: Icons.chat_bubble,
+                label: 'Chat',
+                isSelected: _selectedIndex == 2,
+                onTap: () => setState(() => _selectedIndex = 2),
+              ),
+              DockItem(
                 icon: Icons.record_voice_over_outlined,
                 selectedIcon: Icons.record_voice_over,
                 label: 'TTS',
@@ -93,13 +100,6 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 label: 'Studio',
                 isSelected: _selectedIndex == 1,
                 onTap: () => setState(() => _selectedIndex = 1),
-              ),
-              DockItem(
-                icon: Icons.chat_bubble_outline,
-                selectedIcon: Icons.chat_bubble,
-                label: 'Chat',
-                isSelected: _selectedIndex == 2,
-                onTap: () => setState(() => _selectedIndex = 2),
               ),
             ],
             actionItems: [

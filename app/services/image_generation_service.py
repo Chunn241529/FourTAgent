@@ -19,12 +19,8 @@ logger = logging.getLogger(__name__)
 COMFYUI_HOST = os.getenv("COMFYUI_HOST", "http://localhost:8188")
 COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output")
 
-# Model choices
-MODEL_DEFAULT = "4t_inpaint.safetensors"
-MODEL_2D_3D = "4t_2d_3d.safetensors"
-
 # Default negative prompt (Updated from new workflow)
-DEFAULT_NEGATIVE_PROMPT = "(deformed iris, deformed pupils), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, UnrealisticDream"
+DEFAULT_NEGATIVE_PROMPT = "text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck"
 
 # Keywords that suggest 2D/3D style
 KEYWORDS_2D_3D = [
@@ -91,8 +87,9 @@ class ImageGenerationService:
     def __init__(self):
         self.client_id = "lumina_ai_" + str(random.randint(10000, 99999))
 
-    def cleanup_vram(self):
-        """Clean up VRAM after generation."""
+    async def cleanup_vram(self):
+        """Clean up VRAM after generation (Local + ComfyUI)."""
+        # 1. Local cleanup
         import gc
 
         gc.collect()
@@ -102,11 +99,26 @@ class ImageGenerationService:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-                logger.info("VRAM cleanup completed (torch.cuda.empty_cache)")
+                logger.info("Local VRAM cleanup completed")
         except ImportError:
             pass
         except Exception as e:
-            logger.warning(f"VRAM cleanup failed: {e}")
+            logger.warning(f"Local VRAM cleanup failed: {e}")
+
+        # 2. Remote cleanup (ComfyUI)
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{COMFYUI_HOST}/api/easyuse/cleangpu"
+                async with session.post(url, timeout=5) as response:
+                    if response.status == 200:
+                        logger.info("ComfyUI VRAM cleanup requested successfully")
+                    else:
+                        text = await response.text()
+                        logger.warning(
+                            f"ComfyUI cleanup failed: {response.status} - {text}"
+                        )
+        except Exception as e:
+            logger.warning(f"Failed to request ComfyUI VRAM cleanup: {e}")
 
     def validate_prompt(self, prompt: str) -> bool:
         """Check if prompt contains blacklisted keywords."""
@@ -157,7 +169,18 @@ class ImageGenerationService:
             Tuple of (width, height)
         """
         try:
-            parts = size.lower().split("x")
+            size_lower = size.lower().strip()
+
+            # Keyword mapping
+            if size_lower == "square":
+                return 768, 768
+            elif size_lower == "landscape":
+                return 768, 512
+            elif size_lower == "portrait":
+                return 512, 768
+
+            # Classic format "WxH"
+            parts = size_lower.split("x")
             width = int(parts[0])
             height = int(parts[1]) if len(parts) > 1 else width
             # Clamp to reasonable values
@@ -181,12 +204,116 @@ class ImageGenerationService:
         if seed is None:
             seed = random.randint(1, 2**53)
 
-        # Using Lumina_Gen for all requests as per new workflow
-        # Can still keep 2D/3D logic if we want specific prompts, but checkpoint is fixed provided in request.
-        # Checkpoint name from request: "Lumina_Gen.safetensors"
-        ckpt_name = "Lumina_Gen.safetensors"
+        # Inject positive anatomy prompt
+        prompt += ", (perfect hands, perfect fingers, correct anatomy:1.2), masterpiece, best quality"
 
+        # Checkpoint: DreamShaper LCM
+        ckpt_name = "dreamshaper_8LCM.safetensors"
         logger.info(f"Building workflow with checkpoint: {ckpt_name}")
+
+        # Analyze prompt for dynamic LoRA selection
+        prompt_lower = prompt.lower()
+
+        # Keywords
+        keywords_animal = [
+            "cat",
+            "dog",
+            "animal",
+            "creature",
+            "bird",
+            "fish",
+            "tiger",
+            "lion",
+            "wolf",
+            "bear",
+            "pet",
+            "mèo",
+            "chó",
+            "thú",
+        ]
+        keywords_female = [
+            "girl",
+            "woman",
+            "female",
+            "lady",
+            "1girl",
+            "sister",
+            "mother",
+            "aunt",
+            "gái",
+            "nữ",
+            "cô",
+        ]
+        keywords_anime = [
+            "anime",
+            "2d",
+            "manga",
+            "cartoon",
+            "illustration",
+            "hoạt hình",
+            "tranh vẽ",
+        ]
+        keywords_3d = ["3d", "render", "blender", "c4d", "unreal", "cgi"]
+
+        is_animal = any(k in prompt_lower for k in keywords_animal)
+
+        # Default LoRA config for Stacks
+        # Stack 39: Enhancers
+        stack_39_config = [
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+        ]
+        # Stack 43: Styles
+        stack_43_config = [
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+            {"name": "None", "strength": 0.0},
+        ]
+
+        if is_animal:
+            logger.info("Detected animal content - Disabling all LoRAs")
+            # All remain None/0.0
+        else:
+            # Base enhancers for non-animals (Stack 39)
+            stack_39_config[0] = {"name": "betterhands.safetensors", "strength": 0.8}
+            stack_39_config[1] = {"name": "betterfeets.safetensors", "strength": 0.8}
+
+            # Contextual enhancers
+            slot_idx_39 = 2
+
+            # Female enhancer
+            if any(k in prompt_lower for k in keywords_female):
+                if slot_idx_39 < 4:
+                    stack_39_config[slot_idx_39] = {
+                        "name": "girl_face.safetensors",
+                        "strength": 0.8,
+                    }
+                    slot_idx_39 += 1
+
+            # Style enhancers (Stack 43)
+            slot_idx_43 = 0
+            if any(k in prompt_lower for k in keywords_anime):
+                if slot_idx_43 < 4:
+                    stack_43_config[slot_idx_43] = {
+                        "name": "anime.safetensors",
+                        "strength": 0.8,
+                    }
+                    slot_idx_43 += 1
+            elif any(
+                k in prompt_lower for k in keywords_3d
+            ):  # Elif because usually mutable exclusive or specialized
+                if slot_idx_43 < 4:
+                    stack_43_config[slot_idx_43] = {
+                        "name": "3d.safetensors",
+                        "strength": 0.8,
+                    }
+                    slot_idx_43 += 1
+
+        # Updated Negative Prompt
+        negative_prompt = "embedding:easynegative, (nude, naked, nsfw, sexy:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands"
 
         workflow = {
             "client_id": self.client_id,
@@ -194,12 +321,12 @@ class ImageGenerationService:
                 "3": {
                     "inputs": {
                         "seed": seed,
-                        "steps": 6,
-                        "cfg": 1.6,
-                        "sampler_name": "dpmpp_sde",
+                        "steps": 8,
+                        "cfg": 1.5,
+                        "sampler_name": "lcm",
                         "scheduler": "karras",
                         "denoise": 1,
-                        "model": ["19", 0],
+                        "model": ["43", 0],  # Connects to Lora Stack 43
                         "positive": ["6", 0],
                         "negative": ["7", 0],
                         "latent_image": ["5", 0],
@@ -218,14 +345,17 @@ class ImageGenerationService:
                     "_meta": {"title": "Empty Latent Image"},
                 },
                 "6": {
-                    "inputs": {"text": prompt, "clip": ["19", 1]},
+                    "inputs": {
+                        "text": prompt,
+                        "clip": ["43", 1],
+                    },  # Connects to Lora Stack 43 CLIP
                     "class_type": "CLIPTextEncode",
                     "_meta": {"title": "CLIP Text Encode (Prompt)"},
                 },
                 "7": {
                     "inputs": {
-                        "text": DEFAULT_NEGATIVE_PROMPT,
-                        "clip": ["19", 1],
+                        "text": negative_prompt,
+                        "clip": ["43", 1],  # Connects to Lora Stack 43 CLIP
                     },
                     "class_type": "CLIPTextEncode",
                     "_meta": {"title": "CLIP Text Encode (Negative)"},
@@ -235,26 +365,45 @@ class ImageGenerationService:
                     "class_type": "VAEDecode",
                     "_meta": {"title": "VAE Decode"},
                 },
-                "9": {
-                    "inputs": {"filename_prefix": "Lumina", "images": ["8", 0]},
-                    "class_type": "SaveImage",
-                    "_meta": {"title": "Save Image"},
-                },
-                "19": {
+                # Stack 1: Enhancers (Node 39)
+                "39": {
                     "inputs": {
-                        "lora_01": "add_detail.safetensors",
-                        "strength_01": 1,
-                        "lora_02": "None",
-                        "strength_02": 1,
-                        "lora_03": "None",
-                        "strength_03": 1,
-                        "lora_04": "None",
-                        "strength_04": 1,
+                        "lora_01": stack_39_config[0]["name"],
+                        "strength_01": stack_39_config[0]["strength"],
+                        "lora_02": stack_39_config[1]["name"],
+                        "strength_02": stack_39_config[1]["strength"],
+                        "lora_03": stack_39_config[2]["name"],
+                        "strength_03": stack_39_config[2]["strength"],
+                        "lora_04": stack_39_config[3]["name"],
+                        "strength_04": stack_39_config[3]["strength"],
                         "model": ["4", 0],
                         "clip": ["4", 1],
                     },
                     "class_type": "Lora Loader Stack (rgthree)",
-                    "_meta": {"title": "Lora Loader Stack (rgthree)"},
+                    "_meta": {"title": "Lora Loader Stack (Enhancers)"},
+                },
+                # Stack 2: Styles (Node 43) - Takes input from 39
+                "43": {
+                    "inputs": {
+                        "lora_01": stack_43_config[0]["name"],
+                        "strength_01": stack_43_config[0]["strength"],
+                        "lora_02": stack_43_config[1]["name"],
+                        "strength_02": stack_43_config[1]["strength"],
+                        "lora_03": stack_43_config[2]["name"],
+                        "strength_03": stack_43_config[2]["strength"],
+                        "lora_04": stack_43_config[3]["name"],
+                        "strength_04": stack_43_config[3]["strength"],
+                        "model": ["39", 0],
+                        "clip": ["39", 1],
+                    },
+                    "class_type": "Lora Loader Stack (rgthree)",
+                    "_meta": {"title": "Lora Loader Stack (Styles)"},
+                },
+                # Save Image (Node 9) - Connected to VAE Decode (8)
+                "9": {
+                    "inputs": {"filename_prefix": "Lumina", "images": ["8", 0]},
+                    "class_type": "SaveImage",
+                    "_meta": {"title": "Save Image"},
                 },
             },
         }
@@ -303,6 +452,7 @@ class ImageGenerationService:
                                 outputs = history[prompt_id].get("outputs", {})
 
                                 # Find SaveImage output (node 9)
+                                # Note: If using multiple save nodes, check specific ID
                                 if "9" in outputs:
                                     images = outputs["9"].get("images", [])
                                     if images:
@@ -409,7 +559,7 @@ class ImageGenerationService:
             return result
         finally:
             # Always clean up VRAM
-            self.cleanup_vram()
+            await self.cleanup_vram()
 
 
 # Singleton instance

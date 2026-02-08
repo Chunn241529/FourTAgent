@@ -306,6 +306,9 @@ from app.services.music_queue_service import music_queue_service
 # ... (imports)
 
 
+from app.services.canvas_service import canvas_service
+
+
 class ToolService:
     def __init__(self, max_workers: int = 4):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -325,7 +328,68 @@ class ToolService:
             "search_file": search_file_server,
             "create_file": create_file_server,
             "generate_image": self._generate_image_sync,
+            "create_canvas": self._create_canvas_wrapper,
+            "update_canvas": self._update_canvas_wrapper,
+            "read_canvas": self._read_canvas_wrapper,
         }
+
+    def _create_canvas_wrapper(
+        self, title: str, content: str, type: str = "markdown", user_id: int = None
+    ):
+        if user_id is None:
+            return json.dumps(
+                {"error": "User ID required for canvas operations"}, ensure_ascii=False
+            )
+        result = canvas_service.create_canvas(user_id, title, content, type)
+        if result:
+            return json.dumps(
+                {"success": True, "canvas": {"id": result.id, "title": result.title}},
+                ensure_ascii=False,
+            )
+        return json.dumps({"error": "Failed to create canvas"}, ensure_ascii=False)
+
+    def _update_canvas_wrapper(
+        self,
+        canvas_id: int,
+        content: str = None,
+        title: str = None,
+        user_id: int = None,
+    ):
+        if user_id is None:
+            return json.dumps(
+                {"error": "User ID required for canvas operations"}, ensure_ascii=False
+            )
+        result = canvas_service.update_canvas(canvas_id, user_id, content, title)
+        if result:
+            return json.dumps(
+                {
+                    "success": True,
+                    "message": "Canvas updated",
+                    "canvas": {"id": result.id, "title": result.title},
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps(
+            {"error": "Failed to update canvas or not found"}, ensure_ascii=False
+        )
+
+    def _read_canvas_wrapper(self, canvas_id: int, user_id: int = None):
+        if user_id is None:
+            return json.dumps(
+                {"error": "User ID required for canvas operations"}, ensure_ascii=False
+            )
+        result = canvas_service.get_canvas(canvas_id, user_id)
+        if result:
+            return json.dumps(
+                {
+                    "id": result.id,
+                    "title": result.title,
+                    "content": result.content,
+                    "type": result.type,
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps({"error": "Canvas not found"}, ensure_ascii=False)
 
     def _generate_image_sync(
         self,
@@ -607,42 +671,122 @@ class ToolService:
                         "properties": {
                             "prompt": {
                                 "type": "string",
-                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1girl', '1boy', '1cat', '2dogs', etc. Example: '1girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1girl/1cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
+                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1 girl', '1 boy', '1 cat', '2 dogs', etc. Example: '1 girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1 girl/1 boy/1 cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
                             },
                             "size": {
                                 "type": "string",
-                                "description": "Image size. Use '512x512' for small, '768x768' for medium/default, '1024x1024' for large. If user says 'lớn'/'big'/'high quality' use 1024x1024.",
+                                "description": "Image size. Options: 'square' (768x768, default), 'landscape' (768x512), 'portrait' (512x768). Use 'square' for general purpose, 'landscape' for scenery, 'portrait' for people/characters. If user asks for 1024 or 'large', you can also specific '1024x1024'.",
                             },
                             "seed": {
                                 "type": "integer",
-                                "description": "Optional seed for reproducibility. System uses this automatically for edits.",
+                                "description": "Optional seed number. To EDIT an image, use the SAME SEED from the previous result and modify the prompt.",
                             },
                         },
                         "required": ["prompt"],
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_canvas",
+                    "description": "Create a new canvas for code or markdown validation. Use this when you want to write a long piece of code, a document, or a report that the user might want to edit or view separately.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Title of the canvas",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The full content (Markdown or Code).",
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "Type of content: 'markdown' or 'code' (default: markdown)",
+                                "enum": ["markdown", "code"],
+                            },
+                        },
+                        "required": ["title", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "update_canvas",
+                    "description": "Update an existing canvas content.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "canvas_id": {
+                                "type": "integer",
+                                "description": "ID of the canvas to update",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "New content (optional)",
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "New title (optional)",
+                            },
+                        },
+                        "required": ["canvas_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_canvas",
+                    "description": "Read content of a canvas.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "canvas_id": {
+                                "type": "integer",
+                                "description": "ID of the canvas to read",
+                            },
+                        },
+                        "required": ["canvas_id"],
+                    },
+                },
+            },
         ]
 
     def execute_tool(
-        self, tool_name: str, args: Union[str, Dict[str, Any]]
+        self,
+        tool_name: str,
+        args: Union[str, Dict[str, Any]],
+        context: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
-        """Execute a tool by name with arguments"""
+        """Execute a tool by name with arguments and optional context"""
         try:
             if isinstance(args, str):
                 try:
                     tool_args = json.loads(args)
                 except json.JSONDecodeError:
-                    # If args is a string but not JSON, it might be a direct string argument (unlikely for these tools but good for safety)
-                    # However, web_search and web_fetch expect kwargs.
-                    # Let's assume it's a malformed JSON or just pass as is if the tool supports it?
-                    # For now, let's stick to the logic in chat_service which tries to load JSON.
                     tool_args = args
             else:
                 tool_args = args
 
             if tool_name not in self.tools_map:
                 return {"error": f"Tool {tool_name} not found", "result": None}
+
+            # Inject context into args if needed (e.g. user_id for canvas tools)
+            if context and isinstance(tool_args, dict):
+                if "user_id" in context:
+                    # Check if tool needs user_id (simple check by name for now)
+                    if tool_name in [
+                        "create_canvas",
+                        "update_canvas",
+                        "read_canvas",
+                        "list_canvases",
+                        "delete_canvas",
+                    ]:
+                        tool_args["user_id"] = context["user_id"]
 
             tool_func = self.tools_map[tool_name]
 
@@ -662,7 +806,10 @@ class ToolService:
             return {"error": str(e), "result": None, "tool_name": tool_name}
 
     async def execute_tool_async(
-        self, tool_name: str, args: Union[str, Dict[str, Any]]
+        self,
+        tool_name: str,
+        args: Union[str, Dict[str, Any]],
+        context: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         """Execute a tool asynchronously (using thread pool for sync underlying tools)"""
         try:
@@ -676,6 +823,18 @@ class ToolService:
 
             if tool_name not in self.tools_map:
                 return {"error": f"Tool {tool_name} not found", "result": None}
+
+            # Inject context into args if needed
+            if context and isinstance(tool_args, dict):
+                if "user_id" in context:
+                    if tool_name in [
+                        "create_canvas",
+                        "update_canvas",
+                        "read_canvas",
+                        "list_canvases",
+                        "delete_canvas",
+                    ]:
+                        tool_args["user_id"] = context["user_id"]
 
             tool_func = self.tools_map[tool_name]
 

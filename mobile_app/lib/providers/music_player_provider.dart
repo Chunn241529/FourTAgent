@@ -65,6 +65,9 @@ class MusicPlayerProvider extends ChangeNotifier {
       configuration: const PlayerConfiguration(
         vo: 'null', // Disable video output on Linux/mpv
         title: 'Lumina AI Music',
+        // Add better network handling
+        protocolWhitelist: ['http', 'https', 'tls', 'tcp', 'file'],
+        logLevel: MPVLogLevel.warn, // Reduce noise from FFmpeg
       ),
     );
     _desktopPlayer!.setVolume(100.0);
@@ -102,15 +105,30 @@ class MusicPlayerProvider extends ChangeNotifier {
     
     _subs.add(_desktopPlayer!.stream.error.listen((error) {
       debugPrint('Desktop Player Error: $error');
-      // Attempt to recover or show error?
+      // Attempt to recover from network errors
+      if (_currentUrl != null && _title.isNotEmpty) {
+        debugPrint('Attempting to recover from network error...');
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_isPlaying && _currentUrl != null) {
+            playFromUrl(
+              url: _currentUrl!,
+              title: _title,
+              thumbnail: _thumbnail.isEmpty ? null : _thumbnail,
+              isQueueItem: true,
+            );
+          }
+        });
+      }
       _isLoading = false;
-      _isPlaying = false;
       notifyListeners();
     }));
     
     _subs.add(_desktopPlayer!.stream.log.listen((log) {
-       // Filter out noisy logs if needed, but useful for debugging
-       debugPrint('Desktop Player Log: $log');
+       // Filter out TLS noise
+       final logText = log.text.toLowerCase();
+       if (!logText.contains('tls') && !logText.contains('pull function')) {
+         debugPrint('Desktop Player Log: $log');
+       }
     }));
   }
 

@@ -23,5 +23,10 @@
     "message_id": 4,
     "query": "Giải thích ngắn về microservice",
     "response": "Microservices là kiến trúc phần mềm chia ứng dụng thành nhiều dịch vụ nhỏ, độc lập, mỗi dịch vụ xử lý một chức năng cụ thể và giao tiếp qua API. Ưu điểm chính là dễ mở rộng, bảo trì, và tích hợp linh hoạt, nhưng đòi hỏi quản lý hệ thống phức tạp hơn so với kiến trúc đơn nhất. 😊"
+  },
+  {
+    "message_id": 11,
+    "query": "kể truyện ma với canvas",
+    "response": "Lumin sẽ kể một câu chuyện ma thật kinh dị và hấp dẫn cho anh nghe nhé! Nhưng trước tiên, Lumin muốn tạo một \"canvas\" để lưu lại câu chuyện này, như một cuốn nhật ký ma ám. Hãy cùng bắt đầu nhé!\n\n\nLumin đã tạo xong \"canvas\" với tiêu đề \"Câu chuyện ma ám\" để lưu lại câu chuyện ma mà chúng ta sẽ kể. Bây giờ, hãy cùng nhau bắt đầu câu chuyện nhé!\n\nLumin kể: Một đêm mưa gió, một người đàn ông tên là Anh Tú đang đi dạo gần khu rừng cổ xưa. Anh Tú nghe thấy tiếng gọi tên mình từ trong bóng tối..."
   }
 ]

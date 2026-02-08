@@ -20,6 +20,8 @@ class MessageInput extends StatefulWidget {
   final bool isLoading;
   final VoidCallback? onStop;
   final VoidCallback? onMusicTap;
+  final VoidCallback? onCanvasTap;
+  final bool forceCanvasTool;
   final bool voiceModeEnabled;
   final ValueChanged<bool>? onVoiceModeChanged;
 
@@ -30,6 +32,8 @@ class MessageInput extends StatefulWidget {
     this.isLoading = false,
     this.onStop,
     this.onMusicTap,
+    this.onCanvasTap,
+    this.forceCanvasTool = false,
     this.voiceModeEnabled = false,
     this.onVoiceModeChanged,
   });
@@ -328,26 +332,50 @@ class _MessageInputState extends State<MessageInput> {
                     enabled: !widget.isLoading,
                   ),
                 ),
-            // Icons row
+            // Gemini-style icons row
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 8, 6),
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
               child: Row(
                 children: [
-                  _IconBtn(
-                    icon: Icons.add_circle_outline,
-                    onTap: _pickFile,
-                    color: _selectedFileName != null ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
+                  // + Attachment menu (consolidated)
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.add,
+                      color: (_selectedFileName != null || _selectedImagePath != null)
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                    tooltip: 'Đính kèm',
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onSelected: (value) {
+                      if (value == 'image') _pickImage();
+                      if (value == 'file') _pickFile();
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'image',
+                        child: Row(
+                          children: [
+                            Icon(Icons.image_outlined, color: theme.colorScheme.onSurface.withOpacity(0.7)),
+                            const SizedBox(width: 12),
+                            const Text('Hình ảnh'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'file',
+                        child: Row(
+                          children: [
+                            Icon(Icons.attach_file, color: theme.colorScheme.onSurface.withOpacity(0.7)),
+                            const SizedBox(width: 12),
+                            const Text('Tệp'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  _IconBtn(
-                    icon: Icons.image_outlined,
-                    onTap: _pickImage,
-                    color: _selectedImagePath != null ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                  // _IconBtn(
-                  //   icon: _isListening ? Icons.mic : Icons.mic_none_outlined,
-                  //   onTap: _toggleRecording,
-                  //   color: (_isListening || _recordedAudioPath != null) ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5),
-                  // ),
+                  const SizedBox(width: 4),
+                  // Music toggle
                   if (widget.onMusicTap != null)
                     _IconBtn(
                       icon: isMusicActive ? Icons.music_note : Icons.music_note_outlined,
@@ -356,17 +384,27 @@ class _MessageInputState extends State<MessageInput> {
                           ? theme.colorScheme.primary 
                           : theme.colorScheme.onSurface.withOpacity(0.5),
                     ),
-                  // Voice Mode Toggle
+                  // Canvas toggle button (icon only for narrow widths)
+                  if (widget.onCanvasTap != null)
+                    _IconBtn(
+                      icon: widget.forceCanvasTool ? Icons.edit_document : Icons.article_outlined,
+                      onTap: widget.onCanvasTap!,
+                      color: widget.forceCanvasTool 
+                          ? theme.colorScheme.primary 
+                          : theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                  const Spacer(),
+                  // Voice Mode Toggle (microphone)
                   _IconBtn(
                     icon: widget.voiceModeEnabled 
-                        ? Icons.record_voice_over 
-                        : Icons.voice_over_off_outlined,
+                        ? Icons.mic
+                        : Icons.mic_none_outlined,
                     onTap: () => widget.onVoiceModeChanged?.call(!widget.voiceModeEnabled),
                     color: widget.voiceModeEnabled 
                         ? theme.colorScheme.primary 
                         : theme.colorScheme.onSurface.withOpacity(0.5),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   widget.isLoading
                       ? _buildStopButton(theme)
                       : _buildSendButton(theme),
@@ -556,8 +594,8 @@ class _IconBtn extends StatelessWidget {
       onPressed: onTap,
       icon: Icon(icon, color: color, size: 22),
       visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     );
   }
 }

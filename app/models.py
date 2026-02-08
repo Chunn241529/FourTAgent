@@ -63,3 +63,14 @@ class MessageFeedback(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     feedback_type = Column(String, nullable=False)  # "like" or "dislike"
     created_at = Column(DateTime, default=func.now())
+
+
+class Canvas(Base):
+    __tablename__ = "canvas"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=True)
+    content = Column(String, nullable=True)  # Markdown or Code content
+    type = Column(String, default="markdown")  # "markdown" or "code"
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

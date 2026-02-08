@@ -32,6 +32,7 @@ async def queued_chat_stream(
     db: Session,
     voice_enabled: bool = False,
     voice_id: Optional[str] = None,
+    force_canvas_tool: bool = False,
 ):
     """
     Wrapper that manages queue for chat requests.
@@ -68,11 +69,16 @@ async def queued_chat_stream(
             db=db,
             voice_enabled=voice_enabled,
             voice_id=voice_id,
+            force_canvas_tool=force_canvas_tool,
         )
 
         # Stream the response directly - no double-wrapping
-        async for chunk in stream:
-            yield chunk
+        try:
+            async for chunk in stream:
+                yield chunk
+        except Exception as e:
+            logger.error(f"Error in chat stream: {e}", exc_info=True)
+            yield f"data: {json.dumps({'error': f'Server Error: {str(e)}'}, separators=(',', ':'))}\n\n"
 
     finally:
         queue_service._semaphore.release()
@@ -86,6 +92,7 @@ async def chat(
     conversation_id: Optional[int] = None,
     voice_enabled: bool = Body(False),  # Accept from JSON Body
     voice_id: Optional[str] = Body(None),
+    force_canvas_tool: bool = Body(False),  # Force LLM to use canvas tool
     # Also accept from Query for backward compatibility/flexibility
     q_voice_enabled: bool = Query(False, alias="voice_enabled"),
     q_voice_id: Optional[str] = Query(None, alias="voice_id"),
@@ -99,7 +106,7 @@ async def chat(
     final_voice_id = voice_id or q_voice_id
 
     logger.info(
-        f"Chat request: voice_enabled={final_voice_enabled} (Body={voice_enabled}, Query={q_voice_enabled})"
+        f"Chat request: voice_enabled={final_voice_enabled} (Body={voice_enabled}, Query={q_voice_enabled}), force_canvas={force_canvas_tool}"
     )
 
     # Wrap message in ChatMessageIn for service compatibility
@@ -118,6 +125,7 @@ async def chat(
             db=db,
             voice_enabled=final_voice_enabled,
             voice_id=final_voice_id,
+            force_canvas_tool=force_canvas_tool,
         ),
         media_type="text/event-stream",
     )

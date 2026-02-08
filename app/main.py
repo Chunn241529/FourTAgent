@@ -15,6 +15,7 @@ from app.routers.tts import router as tts_router
 from app.routers.voice import router as voice_router
 from app.routers.generate import router as generate_router
 from app.routers.updates import router as updates_router
+from app.routers.canvas import router as canvas_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,9 +36,15 @@ os.makedirs("storage", exist_ok=True)
 # === LOGGING CONFIGURATION ===
 # Get root logger
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)  # Root phải accept tất cả
 
-# File Handler (logs/server.log) - ghi TẤT CẢ log
+# Clear existing handlers to prevent duplicates (Uvicorn adds its own)
+if root_logger.handlers:
+    for handler in root_logger.handlers:
+        root_logger.removeHandler(handler)
+
+root_logger.setLevel(logging.DEBUG)  # Root accepts all
+
+# File Handler (logs/server.log) - Save EVERYTHING (DEBUG level)
 file_handler = RotatingFileHandler(
     "logs/server.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
@@ -47,17 +54,18 @@ file_handler.setFormatter(
 file_handler.setLevel(logging.DEBUG)
 root_logger.addHandler(file_handler)
 
-# Console Handler - chỉ hiện INFO trở lên
+# Console Handler - Show only INFO+, minimal format for clean terminal
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(levelname)s: %(message)s")
+    logging.Formatter("%(message)s")  # Just the message, no timestamp/level clutter
 )
 console_handler.setLevel(logging.INFO)
 root_logger.addHandler(console_handler)
 
-# Tắt bớt log ồn ào từ các thư viện bên thứ 3 (cả file và console)
+# Silence noisy third-party loggers
 for noisy_logger in [
     "uvicorn.access",
+    "uvicorn.error",
     "httpcore",
     "watchfiles.main",
     "httpx",
@@ -70,7 +78,7 @@ for noisy_logger in [
 ]:
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-# Logger riêng cho ứng dụng
+# Application Logger
 logger = logging.getLogger("fourt_ai")
 
 # Tạo tất cả bảng trong database
@@ -138,7 +146,8 @@ async def log_requests(request: Request, call_next):
         process_time = (time.time() - start_time) * 1000
         formatted_process_time = "{0:.2f}".format(process_time)
 
-        logger.info(
+        # Log to file only (DEBUG level), not console (INFO level)
+        logger.debug(
             f"{request.method} {request.url.path} "
             f"- {response.status_code} - {formatted_process_time}ms"
         )
@@ -185,6 +194,7 @@ app.include_router(tts_router)
 app.include_router(voice_router)
 app.include_router(generate_router)
 app.include_router(updates_router)
+app.include_router(canvas_router)
 
 
 def main():

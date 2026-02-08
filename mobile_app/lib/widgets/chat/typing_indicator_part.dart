@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 
 class _TypingIndicator extends StatefulWidget {
   const _TypingIndicator();
@@ -49,7 +50,7 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
                 height: 8,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(opacity),
+                  color: color.withValues(alpha: opacity),
                   shape: BoxShape.circle,
                 ),
               );

@@ -88,7 +88,11 @@ stop_server() {
     fi
 }
 
-# Trap để cleanup khi script bị kill
+# Hàm dừng server
+clean_terminal() {
+    clear
+}
+
 # Trap để cleanup khi script bị kill
 trap 'stop_server; stop_tunnel; exit 0' SIGINT SIGTERM
 
@@ -117,15 +121,16 @@ while true; do
             stop_server
             cleanup_cache
             run_server
-            echo ""
+            clean_terminal
+            echo "Starting..."
             echo "Nhấn R để restart, Q để quit..."
             ;;
         q|Q)
             echo ""
             echo "👋 Đang thoát..."
-            echo "👋 Đang thoát..."
             stop_server
             stop_tunnel
+            clean_terminal
             echo "Goodbye!"
             exit 0
             ;;

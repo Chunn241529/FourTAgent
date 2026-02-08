@@ -7,6 +7,7 @@ import 'providers/chat_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/music_player_provider.dart';
+import 'providers/canvas_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/desktop_home_screen.dart';
@@ -80,6 +81,7 @@ class _FourTChatAppState extends State<FourTChatApp> with WidgetsBindingObserver
         // provided we don't dispose it twice accidentally (MultiProvider usually disposes).
         // Better: Use ChangeNotifierProvider.value
         ChangeNotifierProvider.value(value: _musicPlayerProvider),
+        ChangeNotifierProvider(create: (_) => CanvasProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

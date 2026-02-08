@@ -2,6 +2,7 @@ import base64
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import ollama
+import aiohttp
 
 # NOTE: We don't use ollama's web_search/web_fetch anymore
 # ToolService provides custom implementations
@@ -124,6 +125,38 @@ class ChatService:
             logger.error(f"Warmup process failed: {e}")
 
     @staticmethod
+    async def cleanup_vram(model_name: str):
+        """Clean up VRAM (ComfyUI + Ollama) after chat turn"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 1. ComfyUI Cleanup (Vision/Image Gen models)
+                try:
+                    comfy_host = os.getenv("COMFYUI_HOST", "http://localhost:8188")
+                    async with session.post(
+                        f"{comfy_host}/api/easyuse/cleangpu", timeout=2
+                    ) as resp:
+                        if resp.status == 200:
+                            logger.info("ComfyUI VRAM cleanup requested")
+                except Exception as e:
+                    logger.debug(f"ComfyUI cleanup skipped: {e}")
+
+                # 2. Ollama Cleanup (Unload LLM)
+                try:
+                    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                    # Use /api/generate with keep_alive=0 to unload
+                    # Use bare model name (remove tags if needed, but usually full name is fine)
+                    payload = {"model": model_name, "keep_alive": 0}
+                    async with session.post(
+                        f"{ollama_host}/api/generate", json=payload, timeout=2
+                    ) as resp:
+                        if resp.status == 200:
+                            logger.info(f"Ollama model {model_name} unload requested")
+                except Exception as e:
+                    logger.debug(f"Ollama cleanup skipped: {e}")
+        except Exception as e:
+            logger.warning(f"VRAM cleanup failed: {e}")
+
+    @staticmethod
     async def chat_with_rag(
         message: ChatMessageIn,
         file: Optional[Union[UploadFile, str]],
@@ -132,6 +165,7 @@ class ChatService:
         db: Session,
         voice_enabled: bool = False,
         voice_id: Optional[str] = None,
+        force_canvas_tool: bool = False,
     ):
         """Xử lý chat chính với RAG integration - với debug chi tiết"""
 
@@ -177,6 +211,17 @@ class ChatService:
         system_prompt = ChatService._build_system_prompt(
             xung_ho, current_time, voice_enabled
         )
+
+        # Detect canvas mode from message content (frontend appends " dùng canvas")
+        canvas_keywords = ["dùng canvas", "sử dụng canvas", "tạo canvas"]
+        message_lower = message.message.lower()
+        if any(kw in message_lower for kw in canvas_keywords):
+            force_canvas_tool = True
+            logger.info("Canvas mode detected from message content")
+
+        # Force canvas tool usage if requested
+        if force_canvas_tool:
+            system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
 
         # Xử lý file và context
         file_context = FileService.process_file_for_chat(file, user_id, conversation.id)
@@ -277,40 +322,56 @@ class ChatService:
         
         Thời gian hiện tại: {current_time}
 
-        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ:**
-        Bạn có các công cụ mạnh. **TỰ QUYẾT ĐỊNH** khi dùng - KHÔNG hỏi trước.
+        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ (FLEXIBLE MODE):**
+        Bạn có toàn quyền sử dụng tất cả công cụ. Hãy dùng chúng **BẤT CỨ KHI NÀO** bạn thấy cần thiết để trả lời tốt hơn, không cần chờ trigger cứng nhắc.
         
         **1. Web Search (`web_search`)** - TÌM KIẾM:
-           **TRIGGER**: Người dùng hỏi tin tức, giá cả, review, hoặc info bạn không chắc
+           **KHI NÀO DÙNG**: Khi cần thông tin mới nhất, fact check, review, giá cả, hoặc bất kỳ thứ gì bạn không chắc chắn.
            **VD**: "iPhone 16 giá bao nhiêu?" → `web_search("iPhone 16 price Vietnam")`
-           **ACTION**: Thấy cần info → Gọi ngay, dùng English keywords
+           **ACTION**: Tìm kiếm ngay, ưu tiên tiếng Anh cho các vấn đề kỹ thuật.
 
-        2. **Music Player (`search_music`, `play_music`, `get_current_playing`)**:
-           - **KHI NÀO DÙNG**:
-             - Khi người dùng muốn nghe nhạc (ví dụ: "Mở nhạc chill đi", "Nghe bài Lạc Trôi").
-             - Khi người dùng buồn và bạn muốn tặng một bài hát.
-             - Khi người dùng hỏi đang phát bài gì → dùng `get_current_playing()`.
-           - **CÁCH DÙNG**:
-             - Luôn gọi `search_music(query="...")` trước để tìm bài.
-             - **LUÔN LUÔN** tự động chọn bài phù hợp nhất (thường là bài đầu tiên) và gọi `play_music(url="...")` NGAY LẬP TỨC.
-             - **KHÔNG BAO GIỜ** đưa danh sách hỏi user chọn bài nào - hãy tự quyết định và phát luôn.
+        **2. Music Player (`search_music`, `play_music`)**:
+           - Tự động tìm và phát nhạc khi người dùng yêu cầu hoặc khi ngữ cảnh phù hợp (user buồn, chill, làm việc).
+           - Luôn tự tin chọn bài hát hay nhất và phát ngay lập tức.
 
-        **3. Image Generation (`generate_image`)** - TẠO ẢNH:
-           **TRIGGER**: Người dùng muốn thấy/tạo/vẽ hình ảnh, hoặc mô tả visual
-           **VD**: 
+        **3. Image Generation (`generate_image`)** - TẠO & SỬA ẢNH:
+           **TẠO ẢNH MỚI**:
            - "Vẽ con mèo" → `generate_image(prompt="cute cat, digital art", size="1024x1024")`
-           - "Tạo ảnh cô gái" → `generate_image(prompt="1girl, cute smile", size="768x768")`
-           - "Làm hình nền" → `generate_image(prompt="beautiful landscape", size="1024x1024")`
+           
+           **SỬA ẢNH (QUAN TRỌNG)**:
+           - Model không thể sửa pixel trực tiếp, nhưng bạn có thể **GIẢ LẬP SỬA ẢNH** bằng cách tái sử dụng **SEED**.
+           - Khi người dùng nói "thêm kính cho cô gái đó", "đổi màu tóc thành đỏ"...
+           - **BƯỚC 1**: Nhìn lại kết quả tool `generate_image` trước đó để lấy số `seed`.
+           - **BƯỚC 2**: Gọi lại `generate_image` với `prompt` mới + `seed` cũ.
+           - **VD**:
+             - Cũ: `prompt="1 girl, white hair", seed=12345`
+             - User: "Cho cô ấy đeo kính"
+             - Mới: `generate_image(prompt="1 girl, white hair, wearing glasses", seed=12345)`
+             
+           **PARAMS**:
+           - `prompt`: English tags, start with quantity (1girl/1boy), quality tags (masterpiece, best quality).
+           - `size`: "512x512", "768x768" (standard), "1024x1024" (detail).
+           - `seed`: Số nguyên. Re-use seed cũ để giữ bố cục khi sửa ảnh.
            **PARAMS**:
            - `prompt`: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
              - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
              - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
            - `size`: "512x512", "768x768" (default), "1024x1024" (tốt nhất cho chi tiết), ...
-           - VD: "1girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
+           - VD: "1 girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
 
         4. **Deep Search (`deep_search`)**:
            - **KHI NÀO DÙNG**: Khi người dùng yêu cầu "nghiên cứu", "tìm hiểu sâu", hoặc hỏi một vấn đề rất phức tạp cần báo cáo chi tiết.
         
+        **5. Canvas (`create_canvas`, `update_canvas`, `read_canvas`)** - TẠO & QUẢN LÝ NỘI DUNG DÀI:
+           **KHI NÀO DÙNG**:
+           - Khi cần viết code dài, bài viết, tài liệu kỹ thuật, hoặc bất kỳ nội dung nào người dùng muốn lưu lại và xem riêng.
+           - Khi người dùng yêu cầu "tạo canvas", "viết vào canvas", "lưu code này lại".
+           
+           **ACTIONS**:
+           - `create_canvas(title="Tên Canvas", content="Nội dung...", type="markdown" | "code")`: Tạo mới.
+           - `update_canvas(canvas_id=..., content="...")`: Cập nhật nội dung. Lưu ý: update sẽ ghi đè toàn bộ nội dung cũ.
+           - `read_canvas(canvas_id=...)`: Đọc nội dung.
+
         **QUY TẮC TRẢ LỜI:**
         - Nếu bạn dùng tool, hãy dùng thông tin từ tool để trả lời thật đầy đủ và chi tiết.
         - Nếu không dùng tool, hãy trả lời bằng kiến thức của bạn.
@@ -738,15 +799,6 @@ class ChatService:
                             logger.warning(f"Failed to generate filler TTS: {e}")
                             return None
 
-                    # Start generation task
-                    # We await it later or do we want to emit it AS SOON AS POSSIBLE?
-                    # Ideally we want to emit it ASAP.
-                    # Let's simple await it here since it's "parallel" to memory retrieval
-                    # But wait! run_in_executor starts immediately.
-                    # We can await the specific filler generation here concurrently with memory.
-
-                    # Refinement: We want to emit the filler audio ASAP to the client.
-                    # So we shouldn't wait for memory to finish before emitting filler.
                     pass
 
             # handle filler emission logic immediately if cached, otherwise parallelize
@@ -865,8 +917,7 @@ class ChatService:
                 client = ChatService.get_client()
 
                 options = {
-                    "temperature": 0.6,
-                    "repeat_penalty": 1.2,
+                    "temperature": 0.2,
                 }
 
                 max_iterations = 10
@@ -1253,7 +1304,9 @@ class ChatService:
 
                                 tasks.append(
                                     tool_service.execute_tool_async(
-                                        function_name, args_str
+                                        function_name,
+                                        args_str,
+                                        context={"user_id": user_id},
                                     )
                                 )
                                 tool_call_to_task_mapping.append(tool_call)
@@ -1291,6 +1344,25 @@ class ChatService:
                             tool_content = (
                                 str(result)[:8000] if not error else f"Error: {error}"
                             )
+
+                            # Handle Canvas updates - notify frontend immediately
+                            if (
+                                function_name in ["create_canvas", "update_canvas"]
+                                and not error
+                            ):
+                                try:
+                                    res_json = (
+                                        json.loads(result)
+                                        if isinstance(result, str)
+                                        else result
+                                    )
+                                    if res_json.get("success") and res_json.get(
+                                        "canvas"
+                                    ):
+                                        yield f"data: {json.dumps({'canvas_update': res_json['canvas']}, ensure_ascii=False)}\n\n"
+                                except Exception as e:
+                                    logger.error(f"Error yielding canvas update: {e}")
+
                             if function_name == "generate_image" and not error:
                                 try:
                                     result_data = (
@@ -1609,6 +1681,9 @@ class ChatService:
                         logger.error(f"[VoiceAgent] Audio streaming error: {e}")
 
                 yield "data: [DONE]\n\n"
+
+                # Cleanup VRAM after stream completes
+                await ChatService.cleanup_vram(model_name)
 
         # Return the generator directly for the caller to wrap
         # This avoids double-wrapping in StreamingResponse which causes buffering

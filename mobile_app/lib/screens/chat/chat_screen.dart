@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
 import '../../widgets/settings/settings_dialog.dart';
 import '../../widgets/voice/voice_agent_overlay.dart';
+import '../../providers/canvas_provider.dart';
+import '../../widgets/canvas/canvas_panel.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -20,6 +21,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   bool _isUserScrolling = false;
   bool _isNearBottom = true;
+  bool _showCanvasPanel = false;
+  bool _forceCanvasTool = false; // Forces LLM to use canvas tool
+  bool _sidebarCollapsed = false; // Sidebar collapse state
 
   @override
   void initState() {
@@ -65,6 +69,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Add listener for pending tool calls
     context.read<ChatProvider>().addListener(_handleProviderUpdate);
+    // Add listener for canvas updates
+    context.read<CanvasProvider>().addListener(_handleCanvasUpdate);
+    
+    // Register callback for socket events
+    context.read<ChatProvider>().setOnCanvasUpdate((canvasId) {
+       if (mounted) {
+         print('>>> ChatScreen: Received canvas update $canvasId');
+         // Open panel immediately
+         setState(() {
+           _showCanvasPanel = true;
+         });
+         // Only fetch and select if this is a real canvas ID (not a placeholder)
+         if (canvasId > 0) {
+           context.read<CanvasProvider>().fetchAndSelectCanvas(canvasId);
+         }
+       }
+    });
   }
 
   @override
@@ -72,7 +93,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     context.read<ChatProvider>().removeListener(_handleProviderUpdate);
+    context.read<CanvasProvider>().removeListener(_handleCanvasUpdate);
     super.dispose();
+  }
+
+  void _handleCanvasUpdate() {
+    if (!mounted) return;
+    final canvasProvider = context.read<CanvasProvider>();
+    // Auto-open panel if a canvas is selected and panel is closed
+    if (canvasProvider.currentCanvas != null && !_showCanvasPanel) {
+      setState(() {
+        _showCanvasPanel = true;
+      });
+    }
   }
 
   void _handleProviderUpdate() {
@@ -150,15 +183,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
         return Row(
           children: [
-            // Left sidebar - Conversation list (use Selector for conversations)
-            SizedBox(
-              width: 280,
-              child: _buildConversationSidebar(context, theme, chatProvider),
+            // Left sidebar - Collapsible conversation list
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: _sidebarCollapsed ? 60 : 280,
+              clipBehavior: Clip.hardEdge,
+              decoration: const BoxDecoration(),
+              child: _sidebarCollapsed 
+                  ? _buildCollapsedSidebar(context, theme, chatProvider)
+                  : _buildConversationSidebar(context, theme, chatProvider),
             ),
             const VerticalDivider(width: 1, thickness: 1),
-            // Right side - Chat area
+            // Main content area
             Expanded(
-              child: _buildChatArea(context, theme, chatProvider),
+              child: Consumer<CanvasProvider>(
+                builder: (context, canvasProvider, _) {
+                  final showCanvas = _showCanvasPanel;
+                  if (showCanvas) {
+                     print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
+                  }
+                  
+                  return Column(
+                    children: [
+                      // Header - always full width above canvas
+                      _buildChatHeader(context, theme, chatProvider),
+                      // Chat + Canvas row below header
+                      Expanded(
+                        child: Row(
+                          children: [
+                            // Chat messages area
+                            Expanded(
+                              flex: showCanvas ? 2 : 1,
+                              child: _buildChatContent(context, theme, chatProvider),
+                            ),
+                            // Canvas Panel (List or Content)
+                            if (showCanvas)
+                              const Expanded(
+                                flex: 3,
+                                child: CanvasPanel(),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ],
         );
@@ -421,40 +491,90 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildChatArea(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
-    return PopScope(
-      canPop: !chatProvider.voiceModeEnabled,
-      onPopInvoked: (didPop) {
-        if (didPop) return;
-        if (chatProvider.voiceModeEnabled) {
-          chatProvider.setVoiceMode(false);
-        }
-      },
-      child: Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.0, 0.2),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              ),
-            );
-          },
-          child: Text(
-            chatProvider.currentConversation?.title ?? 'Lumina AI',
-            key: ValueKey<String>(chatProvider.currentConversation?.title ?? 'default'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+  // Collapsed sidebar - only icons
+  Widget _buildCollapsedSidebar(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+    final isDark = theme.brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          // Expand button
+          IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Mở rộng',
+            onPressed: () => setState(() => _sidebarCollapsed = false),
           ),
-        ),
-        actions: [
+          const SizedBox(height: 8),
+          // New conversation
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Cuộc trò chuyện mới',
+            onPressed: () => chatProvider.createConversation(),
+          ),
+          const Spacer(),
+          // Settings
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Cài đặt',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const SettingsDialog(),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  // Chat header - always full width above canvas
+  Widget _buildChatHeader(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
+      ),
+      child: Row(
+        children: [
+          // Toggle sidebar (only show when expanded, collapsed sidebar has its own toggle)
+          if (!_sidebarCollapsed)
+            IconButton(
+              icon: const Icon(Icons.menu_open),
+              tooltip: 'Thu gọn sidebar',
+              onPressed: () => setState(() => _sidebarCollapsed = true),
+            ),
+          const SizedBox(width: 8),
+          // Title with animation
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(
+                chatProvider.currentConversation?.title ?? 'Lumina AI',
+                key: ValueKey<String>(chatProvider.currentConversation?.title ?? 'default'),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          // Canvas toggle in header
+          IconButton(
+            icon: Icon(
+              Icons.article_outlined,
+              color: _showCanvasPanel ? theme.colorScheme.primary : null,
+            ),
+            tooltip: 'Canvas',
+            onPressed: () => setState(() => _showCanvasPanel = !_showCanvasPanel),
+          ),
+          // More options
           if (chatProvider.currentConversation != null)
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -477,7 +597,24 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
         ],
       ),
-      body: Stack(
+    );
+  }
+
+  // Chat content area (messages + input) - no header
+  Widget _buildChatContent(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+    return _buildChatArea(context, theme, chatProvider);
+  }
+
+  Widget _buildChatArea(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+    return PopScope(
+      canPop: !chatProvider.voiceModeEnabled,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (chatProvider.voiceModeEnabled) {
+          chatProvider.setVoiceMode(false);
+        }
+      },
+      child: Stack(
         children: [
           // Voice Agent Overlay (covers everything when voice mode active)
           // Voice Agent Overlay (covers everything when voice mode active)
@@ -638,9 +775,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     if (chatProvider.currentConversation == null) {
                       await chatProvider.createConversation();
                     }
+                    if (!mounted) return;
+                    
                     final musicPlayer = context.read<MusicPlayerProvider>();
+                    
+                    // Append " dùng canvas" to message for API only, not shown in UI
+                    final messageToSend = _forceCanvasTool 
+                        ? '$message dùng canvas' 
+                        : message;
+                    
                     chatProvider.sendMessage(
-                      message,
+                      messageToSend,
+                      displayContent: message, // Show original message to user
                       onMusicPlay: (url, title, thumbnail, duration) {
                         musicPlayer.playFromUrl(
                           url: url,
@@ -650,6 +796,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         );
                       },
                     );
+                    
                     // Scroll to bottom after user sends
                     _isUserScrolling = false;
                     Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
@@ -659,9 +806,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     if (chatProvider.currentConversation == null) {
                       await chatProvider.createConversation();
                     }
+                    if (!mounted) return;
+                    
                     final musicPlayer = context.read<MusicPlayerProvider>();
+
+                    // Append " dùng canvas" to message for API only, not shown in UI
+                    final messageToSend = _forceCanvasTool 
+                        ? '$message dùng canvas' 
+                        : message;
+
                     chatProvider.sendMessage(
-                      message,
+                      messageToSend,
+                      displayContent: message, // Show original message to user
                       file: file,
                       onMusicPlay: (url, title, thumbnail, duration) {
                         musicPlayer.playFromUrl(
@@ -672,6 +828,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         );
                       },
                     );
+
                     // Scroll to bottom after user sends
                     _isUserScrolling = false;
                     Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
@@ -686,13 +843,19 @@ class _ChatScreenState extends State<ChatScreen> {
                       musicPlayer.show();
                     }
                   },
+                  onCanvasTap: () {
+                    // Only toggle forceCanvasTool mode - canvas panel shows when LLM creates canvas
+                    setState(() {
+                      _forceCanvasTool = !_forceCanvasTool;
+                    });
+                  },
+                  forceCanvasTool: _forceCanvasTool,
                 ),
               ),
             ),
           ),
           ],  // End of spread operator for normal chat UI
         ],
-      ),
       ),
     );
   }
@@ -745,14 +908,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   Icons.help_outline,
                   theme,
                 ),
-                // _buildSuggestionChip(
-                //   'Viết code Python tính tổng',
-                //   Icons.code,
-                //   theme,
-                // ),
                 _buildSuggestionChip(
-                  'Giải thích ngắn khái niệm Micro Services',
-                  Icons.lightbulb_outline,
+                  'Tạo ảnh 1 con mèo',
+                  Icons.image,
+                  theme,
+                ),
+                _buildSuggestionChip(
+                  'Mở 1 bài nhạc RnB',
+                  Icons.music_note,
                   theme,
                 ),
               ],

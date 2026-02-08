@@ -42,6 +42,29 @@ if os.path.exists(DB_PATH):
         else:
             print("deep_search_updates column exists.")
 
+        # Check for Canvas table
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='canvas'"
+        )
+        if not cursor.fetchone():
+            print("Creating canvas table...")
+            cursor.execute(
+                """
+                CREATE TABLE canvas (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    title VARCHAR,
+                    content VARCHAR,
+                    type VARCHAR DEFAULT 'markdown',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """
+            )
+        else:
+            print("Canvas table exists.")
+
         conn.commit()
     except Exception as e:
         print(f"Error during migration: {e}")

@@ -3,8 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -46,6 +44,9 @@ class ChatProvider extends ChangeNotifier {
   void Function(String url, String title, String? thumbnail, int? duration)? _musicPlayCallback;
   void Function(Map<String, dynamic> item)? _musicQueueAddCallback;
   void Function(String action)? _musicControlCallback;
+  
+  // Canvas callback
+  void Function(int canvasId)? _onCanvasUpdate;
 
   // New getter for 'Processing' state (Thinking/Transcribing but not yet Speaking)
   bool get isVoiceProcessing => _isTranscribing || (_isStreaming && !_isPlayingVoice);
@@ -84,6 +85,10 @@ class ChatProvider extends ChangeNotifier {
     if (onPlay != null) _musicPlayCallback = onPlay;
     if (onQueueAdd != null) _musicQueueAddCallback = onQueueAdd;
     if (onControl != null) _musicControlCallback = onControl;
+  }
+
+  void setOnCanvasUpdate(void Function(int) callback) {
+    _onCanvasUpdate = callback;
   }
 
   void setVoice(String voiceId) {
@@ -483,8 +488,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Send message and handle streaming response
+  /// If [displayContent] is provided, it will be shown in chat while [content] is sent to server
   Future<void> sendMessage(
     String content, {
+    String? displayContent,
     String? file,
     void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
     bool? voiceEnabled,
@@ -503,11 +510,11 @@ class ChatProvider extends ChangeNotifier {
     
     final userId = await StorageService.getUserId() ?? 0;
 
-    // Add user message
+    // Add user message - show displayContent if provided, else content
     final userMessage = Message(
       userId: userId,
       conversationId: _currentConversation!.id,
-      content: content,
+      content: displayContent ?? content,
       role: 'user',
       timestamp: DateTime.now(),
       imageBase64: file, // Store image for display
@@ -753,6 +760,12 @@ class ChatProvider extends ChangeNotifier {
                          }
                       }
                   }
+                  // Handle Canvas Tools - open panel early
+                  else if (name == 'create_canvas' || name == 'update_canvas') {
+                      print('>>> Canvas tool detected: $name, opening panel early');
+                      // Signal to open panel (with id=0 meaning "pending")
+                      _onCanvasUpdate?.call(0);
+                  }
                 }
               }
             }
@@ -849,6 +862,16 @@ class ChatProvider extends ChangeNotifier {
                if (action != null && _musicControlCallback != null) {
                  _musicControlCallback!(action);
                }
+            }
+
+            // Handle canvas_update (NEW)
+            if (data['canvas_update'] != null) {
+              final canvasData = data['canvas_update'];
+              print('>>> ChatProvider received canvas_update: $canvasData');
+              final canvasId = canvasData['id'] as int?;
+              if (canvasId != null) {
+                 _onCanvasUpdate?.call(canvasId);
+              }
             }
 
             // Handle message content & thinking
