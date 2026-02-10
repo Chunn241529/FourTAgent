@@ -54,9 +54,9 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
   }
 
   final List<Widget> _screens = const [
-    TtsScreen(), // 0: TTS (Primary - default)
-    AiSubtitleScreen(), // 1: Studio
-    ChatScreen(), // 2: Chat
+    ChatScreen(), // 0: Chat
+    TtsScreen(), // 1: TTS
+    AiSubtitleScreen(), // 2: Studio
   ];
 
   @override
@@ -84,22 +84,22 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 icon: Icons.chat_bubble_outline,
                 selectedIcon: Icons.chat_bubble,
                 label: 'Chat',
-                isSelected: _selectedIndex == 2,
-                onTap: () => setState(() => _selectedIndex = 2),
+                isSelected: _selectedIndex == 0,
+                onTap: () => setState(() => _selectedIndex = 0),
               ),
               DockItem(
                 icon: Icons.record_voice_over_outlined,
                 selectedIcon: Icons.record_voice_over,
                 label: 'TTS',
-                isSelected: _selectedIndex == 0,
-                onTap: () => setState(() => _selectedIndex = 0),
+                isSelected: _selectedIndex == 1,
+                onTap: () => setState(() => _selectedIndex = 1),
               ),
               DockItem(
                 icon: Icons.subtitles_outlined,
                 selectedIcon: Icons.subtitles,
                 label: 'Studio',
-                isSelected: _selectedIndex == 1,
-                onTap: () => setState(() => _selectedIndex = 1),
+                isSelected: _selectedIndex == 2,
+                onTap: () => setState(() => _selectedIndex = 2),
               ),
             ],
             actionItems: [

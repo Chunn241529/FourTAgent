@@ -76,13 +76,19 @@ class _ChatScreenState extends State<ChatScreen> {
     context.read<ChatProvider>().setOnCanvasUpdate((canvasId) {
        if (mounted) {
          print('>>> ChatScreen: Received canvas update $canvasId');
+         final canvasProvider = context.read<CanvasProvider>();
+         
          // Open panel immediately
          setState(() {
            _showCanvasPanel = true;
          });
-         // Only fetch and select if this is a real canvas ID (not a placeholder)
+         
          if (canvasId > 0) {
-           context.read<CanvasProvider>().fetchAndSelectCanvas(canvasId);
+           // Real canvas ID - fetch and select
+           canvasProvider.fetchAndSelectCanvas(canvasId);
+         } else {
+           // Pending canvas (canvasId=0) - set loading state
+           canvasProvider.setPendingCanvas(true);
          }
        }
     });

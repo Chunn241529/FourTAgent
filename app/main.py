@@ -39,7 +39,7 @@ root_logger = logging.getLogger()
 
 # Clear existing handlers to prevent duplicates (Uvicorn adds its own)
 if root_logger.handlers:
-    for handler in root_logger.handlers:
+    for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
 root_logger.setLevel(logging.DEBUG)  # Root accepts all

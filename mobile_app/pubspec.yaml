@@ -47,6 +47,7 @@ dependencies:
   package_info_plus: ^8.1.2
   archive: ^3.6.1
   markdown: ^7.3.0
+  flutter_widget_from_html: ^0.17.1
 
 dev_dependencies:
   flutter_test:

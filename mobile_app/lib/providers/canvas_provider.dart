@@ -7,11 +7,19 @@ class CanvasProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   CanvasModel? _currentCanvas;
+  bool _isPendingCanvas = false; // True when LLM is creating canvas but not finished
 
   List<CanvasModel> get canvases => _canvases;
   bool get isLoading => _isLoading;
   String? get error => _error;
   CanvasModel? get currentCanvas => _currentCanvas;
+  bool get isPendingCanvas => _isPendingCanvas;
+  
+  /// Set pending state when LLM starts creating canvas (canvasId=0)
+  void setPendingCanvas(bool pending) {
+    _isPendingCanvas = pending;
+    notifyListeners();
+  }
 
   Future<void> loadCanvases() async {
     _isLoading = true;
@@ -124,9 +132,12 @@ class CanvasProvider extends ChangeNotifier {
       }
       
       _currentCanvas = canvas;
+      _isPendingCanvas = false; // Clear pending state
       notifyListeners();
     } catch (e) {
       print('Error fetching canvas $id: $e');
+      _isPendingCanvas = false;
+      notifyListeners();
     }
   }
 }

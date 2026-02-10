@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 COMFYUI_HOST = os.getenv("COMFYUI_HOST", "http://localhost:8188")
 COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output")
 
-# Default negative prompt (Updated from new workflow)
+# Default negative prompt
 DEFAULT_NEGATIVE_PROMPT = "text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck"
 
 # Keywords that suggest 2D/3D style
@@ -45,14 +45,13 @@ KEYWORDS_2D_3D = [
     "render",
     "blender",
     "cgi",
-    # Vietnamese keywords
     "hoạt hình",
     "vẽ",
     "tranh vẽ",
     "minh họa",
 ]
 
-# Keywords that indicate realistic image (override 2D/3D detection)
+# Keywords that indicate realistic image
 KEYWORDS_REALISTIC = [
     "realistic",
     "photorealistic",
@@ -62,7 +61,7 @@ KEYWORDS_REALISTIC = [
     "lifelike",
 ]
 
-# Keywords that should be blocked
+# Keywords for blocking
 KEYWORDS_BLACKLIST = [
     "nsfw",
     "nude",
@@ -77,7 +76,6 @@ KEYWORDS_BLACKLIST = [
     "kill",
     "suicide",
     "drug",
-    # Add more keywords here
 ]
 
 
@@ -88,8 +86,7 @@ class ImageGenerationService:
         self.client_id = "lumina_ai_" + str(random.randint(10000, 99999))
 
     async def cleanup_vram(self):
-        """Clean up VRAM after generation (Local + ComfyUI)."""
-        # 1. Local cleanup
+        """Clean up VRAM after generation."""
         import gc
 
         gc.collect()
@@ -105,18 +102,12 @@ class ImageGenerationService:
         except Exception as e:
             logger.warning(f"Local VRAM cleanup failed: {e}")
 
-        # 2. Remote cleanup (ComfyUI)
         try:
             async with aiohttp.ClientSession() as session:
                 url = f"{COMFYUI_HOST}/api/easyuse/cleangpu"
                 async with session.post(url, timeout=5) as response:
                     if response.status == 200:
                         logger.info("ComfyUI VRAM cleanup requested successfully")
-                    else:
-                        text = await response.text()
-                        logger.warning(
-                            f"ComfyUI cleanup failed: {response.status} - {text}"
-                        )
         except Exception as e:
             logger.warning(f"Failed to request ComfyUI VRAM cleanup: {e}")
 
@@ -125,67 +116,34 @@ class ImageGenerationService:
         prompt_lower = prompt.lower()
         for keyword in KEYWORDS_BLACKLIST:
             if keyword in prompt_lower:
-                logger.warning(
-                    f"Blocked blacklisted keyword: {keyword} in prompt: {prompt}"
-                )
+                logger.warning(f"Blocked blacklisted keyword: {keyword}")
                 return False
         return True
 
     def is_2d_3d_content(self, prompt: str) -> bool:
-        """
-        Detect if the prompt is related to 2D/3D style content.
-
-        Args:
-            prompt: The generated or user prompt
-
-        Returns:
-            True if 2D/3D style detected (and not realistic)
-        """
+        """Detect 2D/3D content."""
         prompt_lower = prompt.lower()
-
-        # If realistic keywords found, use default model (not 2D/3D)
         for keyword in KEYWORDS_REALISTIC:
             if keyword in prompt_lower:
-                logger.info(
-                    f"Detected realistic keyword: {keyword}, using default model"
-                )
                 return False
-
-        # Check for 2D/3D keywords
         for keyword in KEYWORDS_2D_3D:
             if keyword in prompt_lower:
-                logger.info(f"Detected 2D/3D keyword: {keyword}")
                 return True
         return False
 
     def parse_size(self, size: str) -> Tuple[int, int]:
-        """
-        Parse size string like '512x512' into (width, height).
-
-        Args:
-            size: Size string in format 'WIDTHxHEIGHT'
-
-        Returns:
-            Tuple of (width, height)
-        """
+        """Parse size string."""
         try:
             size_lower = size.lower().strip()
-
-            # Keyword mapping
             if size_lower == "square":
                 return 768, 768
-            elif size_lower == "landscape":
+            if size_lower == "landscape":
                 return 768, 512
-            elif size_lower == "portrait":
+            if size_lower == "portrait":
                 return 512, 768
-
-            # Classic format "WxH"
             parts = size_lower.split("x")
-            width = int(parts[0])
-            height = int(parts[1]) if len(parts) > 1 else width
-            # Clamp to reasonable values
-            width = max(256, min(1024, width))
-            height = max(256, min(1024, height))
+            width = max(256, min(1024, int(parts[0])))
+            height = max(256, min(1024, int(parts[1]))) if len(parts) > 1 else width
             return width, height
         except Exception:
             return 512, 512
@@ -197,24 +155,13 @@ class ImageGenerationService:
         height: int = 512,
         seed: Optional[int] = None,
     ) -> Tuple[dict, int]:
-        """
-        Build ComfyUI workflow JSON.
-        Using optimized workflow with Lumina_Gen and LoRA stack.
-        """
+        """Build ComfyUI workflow JSON v2.0."""
         if seed is None:
             seed = random.randint(1, 2**53)
 
-        # Inject positive anatomy prompt
-        prompt += ", (perfect hands, perfect fingers, correct anatomy:1.2), masterpiece, best quality"
-
-        # Checkpoint: DreamShaper LCM
-        ckpt_name = "dreamshaper_8LCM.safetensors"
-        logger.info(f"Building workflow with checkpoint: {ckpt_name}")
-
-        # Analyze prompt for dynamic LoRA selection
         prompt_lower = prompt.lower()
 
-        # Keywords
+        # Keywords for detection
         keywords_animal = [
             "cat",
             "dog",
@@ -227,22 +174,45 @@ class ImageGenerationService:
             "wolf",
             "bear",
             "pet",
+            "dragon",
+            "horse",
+            "cow",
+            "pig",
+            "sheep",
+            "monkey",
+            "elephant",
             "mèo",
             "chó",
             "thú",
+            "động vật",
         ]
-        keywords_female = [
+        keywords_1girl = ["1girl", "1 girl"]
+        keywords_person = [
             "girl",
             "woman",
             "female",
             "lady",
-            "1girl",
             "sister",
             "mother",
             "aunt",
             "gái",
             "nữ",
             "cô",
+            "boy",
+            "man",
+            "male",
+            "brother",
+            "father",
+            "uncle",
+            "trai",
+            "nam",
+            "anh",
+            "ông",
+            "bà",
+            "person",
+            "human",
+            "people",
+            "người",
         ]
         keywords_anime = [
             "anime",
@@ -256,63 +226,48 @@ class ImageGenerationService:
         keywords_3d = ["3d", "render", "blender", "c4d", "unreal", "cgi"]
 
         is_animal = any(k in prompt_lower for k in keywords_animal)
+        has_person = any(k in prompt_lower for k in keywords_person) or any(
+            k in prompt_lower for k in keywords_1girl
+        )
+        is_1girl = any(k in prompt_lower for k in keywords_1girl)
+        is_anime_style = any(k in prompt_lower for k in keywords_anime) or any(
+            k in prompt_lower for k in keywords_3d
+        )
 
-        # Default LoRA config for Stacks
-        # Stack 39: Enhancers
-        stack_39_config = [
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-        ]
-        # Stack 43: Styles
-        stack_43_config = [
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-            {"name": "None", "strength": 0.0},
-        ]
+        # Determine Checkpoint (Switch model for 2D/3D)
+        ckpt_name = (
+            "Lumina_gen_2d3d.safetensors"
+            if is_anime_style
+            else "Lumina_genv2.safetensors"
+        )
+        logger.info(f"Building workflow with checkpoint: {ckpt_name}")
 
-        if is_animal:
-            logger.info("Detected animal content - Disabling all LoRAs")
-            # All remain None/0.0
-        else:
-            # Base enhancers for non-animals (Stack 39)
-            stack_39_config[0] = {"name": "betterhands.safetensors", "strength": 0.8}
-            stack_39_config[1] = {"name": "betterfeets.safetensors", "strength": 0.8}
+        # Inject positive anatomy prompt (masterpiece addition)
+        current_prompt = (
+            prompt
+            + ", (perfect hands, perfect fingers, correct anatomy:1.2), masterpiece, best quality"
+        )
 
-            # Contextual enhancers
-            slot_idx_39 = 2
-
-            # Female enhancer
-            if any(k in prompt_lower for k in keywords_female):
-                if slot_idx_39 < 4:
-                    stack_39_config[slot_idx_39] = {
+        # LoRA stack logic
+        stack_39_config = [{"name": "None", "strength": 0.0}] * 4
+        if not is_animal:
+            slot_idx = 0
+            if has_person:
+                stack_39_config[0] = {
+                    "name": "betterhands.safetensors",
+                    "strength": 0.8,
+                }
+                stack_39_config[1] = {
+                    "name": "betterfeets.safetensors",
+                    "strength": 0.8,
+                }
+                slot_idx = 2
+                if is_1girl:
+                    stack_39_config[slot_idx] = {
                         "name": "girl_face.safetensors",
                         "strength": 0.8,
                     }
-                    slot_idx_39 += 1
 
-            # Style enhancers (Stack 43)
-            slot_idx_43 = 0
-            if any(k in prompt_lower for k in keywords_anime):
-                if slot_idx_43 < 4:
-                    stack_43_config[slot_idx_43] = {
-                        "name": "anime.safetensors",
-                        "strength": 0.8,
-                    }
-                    slot_idx_43 += 1
-            elif any(
-                k in prompt_lower for k in keywords_3d
-            ):  # Elif because usually mutable exclusive or specialized
-                if slot_idx_43 < 4:
-                    stack_43_config[slot_idx_43] = {
-                        "name": "3d.safetensors",
-                        "strength": 0.8,
-                    }
-                    slot_idx_43 += 1
-
-        # Updated Negative Prompt
         negative_prompt = "embedding:easynegative, (nude, naked, nsfw, sexy:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands"
 
         workflow = {
@@ -321,12 +276,12 @@ class ImageGenerationService:
                 "3": {
                     "inputs": {
                         "seed": seed,
-                        "steps": 8,
-                        "cfg": 1.5,
-                        "sampler_name": "lcm",
+                        "steps": 30,
+                        "cfg": 7,
+                        "sampler_name": "dpmpp_sde",
                         "scheduler": "karras",
                         "denoise": 1,
-                        "model": ["43", 0],  # Connects to Lora Stack 43
+                        "model": ["39", 0],
                         "positive": ["6", 0],
                         "negative": ["7", 0],
                         "latent_image": ["5", 0],
@@ -346,16 +301,16 @@ class ImageGenerationService:
                 },
                 "6": {
                     "inputs": {
-                        "text": prompt,
-                        "clip": ["43", 1],
-                    },  # Connects to Lora Stack 43 CLIP
+                        "text": current_prompt,
+                        "clip": ["39", 1],
+                    },
                     "class_type": "CLIPTextEncode",
                     "_meta": {"title": "CLIP Text Encode (Prompt)"},
                 },
                 "7": {
                     "inputs": {
                         "text": negative_prompt,
-                        "clip": ["43", 1],  # Connects to Lora Stack 43 CLIP
+                        "clip": ["39", 1],
                     },
                     "class_type": "CLIPTextEncode",
                     "_meta": {"title": "CLIP Text Encode (Negative)"},
@@ -365,64 +320,50 @@ class ImageGenerationService:
                     "class_type": "VAEDecode",
                     "_meta": {"title": "VAE Decode"},
                 },
-                # Stack 1: Enhancers (Node 39)
                 "39": {
                     "inputs": {
                         "lora_01": stack_39_config[0]["name"],
-                        "strength_01": stack_39_config[0]["strength"],
+                        "strength_01": stack_39_config[0].get("strength", 0.0),
                         "lora_02": stack_39_config[1]["name"],
-                        "strength_02": stack_39_config[1]["strength"],
+                        "strength_02": stack_39_config[1].get("strength", 0.0),
                         "lora_03": stack_39_config[2]["name"],
-                        "strength_03": stack_39_config[2]["strength"],
+                        "strength_03": stack_39_config[2].get("strength", 0.0),
                         "lora_04": stack_39_config[3]["name"],
-                        "strength_04": stack_39_config[3]["strength"],
+                        "strength_04": stack_39_config[3].get("strength", 0.0),
                         "model": ["4", 0],
                         "clip": ["4", 1],
                     },
                     "class_type": "Lora Loader Stack (rgthree)",
-                    "_meta": {"title": "Lora Loader Stack (Enhancers)"},
+                    "_meta": {"title": "Lora Loader Stack (rgthree)"},
                 },
-                # Stack 2: Styles (Node 43) - Takes input from 39
-                "43": {
+                "40": {
+                    "inputs": {"upscale_model": ["41", 0], "image": ["8", 0]},
+                    "class_type": "ImageUpscaleWithModel",
+                    "_meta": {"title": "Upscale Image (using Model)"},
+                },
+                "41": {
+                    "inputs": {"model_name": "RealESRGAN_x2.pth"},
+                    "class_type": "UpscaleModelLoader",
+                    "_meta": {"title": "Load Upscale Model"},
+                },
+                "42": {
                     "inputs": {
-                        "lora_01": stack_43_config[0]["name"],
-                        "strength_01": stack_43_config[0]["strength"],
-                        "lora_02": stack_43_config[1]["name"],
-                        "strength_02": stack_43_config[1]["strength"],
-                        "lora_03": stack_43_config[2]["name"],
-                        "strength_03": stack_43_config[2]["strength"],
-                        "lora_04": stack_43_config[3]["name"],
-                        "strength_04": stack_43_config[3]["strength"],
-                        "model": ["39", 0],
-                        "clip": ["39", 1],
+                        "filename_prefix": "ComfyUI",
+                        "with_workflow": True,
+                        "metadata_extra": '{\n  "Title": "Image generated by Lumina AI",\n  "Software": "Lumina AI App",\n  "Category": "StableDiffusion",\n}',
+                        "image": ["40", 0],
                     },
-                    "class_type": "Lora Loader Stack (rgthree)",
-                    "_meta": {"title": "Lora Loader Stack (Styles)"},
-                },
-                # Save Image (Node 9) - Connected to VAE Decode (8)
-                "9": {
-                    "inputs": {"filename_prefix": "Lumina", "images": ["8", 0]},
-                    "class_type": "SaveImage",
-                    "_meta": {"title": "Save Image"},
+                    "class_type": "Save image with extra metadata [Crystools]",
+                    "_meta": {"title": "🪛 Save image with extra metadata"},
                 },
             },
         }
-
         return workflow, seed
 
     async def submit_to_comfyui(self, workflow: dict) -> dict:
-        """
-        Submit workflow to ComfyUI and wait for result.
-
-        Args:
-            workflow: ComfyUI workflow dictionary
-
-        Returns:
-            Dictionary with image info or error
-        """
+        """Submit workflow and wait for result."""
         try:
             async with aiohttp.ClientSession() as session:
-                # Submit prompt
                 async with session.post(
                     f"{COMFYUI_HOST}/prompt",
                     json=workflow,
@@ -430,137 +371,66 @@ class ImageGenerationService:
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"ComfyUI error: {error_text}")
                         return {"error": f"ComfyUI rejected request: {error_text}"}
-
                     result = await response.json()
                     prompt_id = result.get("prompt_id")
-                    logger.info(f"Submitted to ComfyUI, prompt_id: {prompt_id}")
 
-                # Poll for completion
-                max_attempts = 60  # 60 seconds timeout
-                for attempt in range(max_attempts):
+                for _ in range(60):
                     await asyncio.sleep(1)
-
-                    async with session.get(
-                        f"{COMFYUI_HOST}/history/{prompt_id}"
-                    ) as hist_response:
-                        if hist_response.status == 200:
-                            history = await hist_response.json()
-
+                    async with session.get(f"{COMFYUI_HOST}/history/{prompt_id}") as hr:
+                        if hr.status == 200:
+                            history = await hr.json()
                             if prompt_id in history:
                                 outputs = history[prompt_id].get("outputs", {})
+                                if "42" in outputs:
+                                    img = outputs["42"]["images"][0]
+                                    img_path = os.path.join(
+                                        COMFYUI_OUTPUT_DIR,
+                                        img.get("subfolder", ""),
+                                        img["filename"],
+                                    )
 
-                                # Find SaveImage output (node 9)
-                                # Note: If using multiple save nodes, check specific ID
-                                if "9" in outputs:
-                                    images = outputs["9"].get("images", [])
-                                    if images:
-                                        image_info = images[0]
-                                        filename = image_info.get("filename", "")
-                                        subfolder = image_info.get("subfolder", "")
+                                    with open(img_path, "rb") as f:
+                                        import base64
 
-                                        # Build full path
-                                        if subfolder:
-                                            image_path = os.path.join(
-                                                COMFYUI_OUTPUT_DIR, subfolder, filename
-                                            )
-                                        else:
-                                            image_path = os.path.join(
-                                                COMFYUI_OUTPUT_DIR, filename
-                                            )
+                                        encoded = base64.b64encode(f.read()).decode(
+                                            "utf-8"
+                                        )
 
-                                        logger.info(f"Image generated: {image_path}")
-
-                                        # Read image and convert to base64
-                                        image_base64 = None
-                                        try:
-                                            with open(image_path, "rb") as img_file:
-                                                import base64
-
-                                                image_base64 = base64.b64encode(
-                                                    img_file.read()
-                                                ).decode("utf-8")
-                                                logger.info(
-                                                    f"Image encoded to base64, size: {len(image_base64)} chars"
-                                                )
-                                        except Exception as e:
-                                            logger.error(
-                                                f"Failed to read image file: {e}"
-                                            )
-
-                                        return {
-                                            "success": True,
-                                            "image_path": image_path,
-                                            "filename": filename,
-                                            "prompt_id": prompt_id,
-                                            "image_base64": image_base64,
-                                        }
-
-                return {"error": "Timeout waiting for image generation"}
-
-        except aiohttp.ClientError as e:
-            logger.error(f"ComfyUI connection error: {e}")
-            return {"error": f"Cannot connect to ComfyUI: {str(e)}"}
+                                    return {
+                                        "success": True,
+                                        "image_path": img_path,
+                                        "image_base64": encoded,
+                                        "prompt_id": prompt_id,
+                                    }
+            return {"error": "Timeout"}
         except Exception as e:
-            logger.error(f"Image generation error: {e}")
             return {"error": str(e)}
 
     async def generate_image(self, description: str, size: str = "768x768") -> dict:
-        """
-        Legacy entry point using direct generation.
-        Argument is named 'description' but acts as prompt if called by updated logic,
-        or raw text if called by legacy code (though quality might suffer without Main LLM processing).
-        """
-        logger.info(f"Generate image (legacy wrapper): {description[:50]}...")
         return await self.generate_image_direct(description, size)
 
     async def generate_image_direct(
         self, prompt: str, size: str = "768x768", seed: Optional[int] = None
     ) -> dict:
-        """
-        Generate image using prompt directly (no LLM prompt generation).
-        Used when main chat LLM already generates English SD prompt.
-
-        Args:
-            prompt: English comma-separated tags from main LLM
-            size: Image size (e.g., "512x512")
-            seed: Optional seed for reproducibility
-
-        Returns:
-            Dictionary with generation result
-        """
-        logger.info(
-            f"Generate image direct: prompt={prompt[:100]}..., size={size}, seed={seed}"
-        )
-
         if not self.validate_prompt(prompt):
-            return {"success": False, "error": "Prompt contains restricted keywords"}
-
+            return {"success": False, "error": "Restricted keywords"}
         try:
-            # Step 1: Parse size
             width, height = self.parse_size(size)
-
-            # Step 2: Build workflow (returns workflow AND the seed used)
             workflow, used_seed = self.build_workflow(prompt, width, height, seed=seed)
-
-            # Step 3: Submit to ComfyUI
             result = await self.submit_to_comfyui(workflow)
-
-            # Add info to result
             if result.get("success"):
-                result["generated_prompt"] = prompt
-                result["size"] = f"{width}x{height}"
-                result["seed"] = used_seed
-                result["message"] = (
-                    f"Đã tạo xong ảnh! (size: {width}x{height}, seed: {used_seed})"
+                result.update(
+                    {
+                        "generated_prompt": prompt,
+                        "size": f"{width}x{height}",
+                        "seed": used_seed,
+                        "message": f"Đã tạo xong ảnh! ({width}x{height}, seed: {used_seed})",
+                    }
                 )
-
             return result
         finally:
-            # Always clean up VRAM
             await self.cleanup_vram()
 
 
-# Singleton instance
 image_generation_service = ImageGenerationService()

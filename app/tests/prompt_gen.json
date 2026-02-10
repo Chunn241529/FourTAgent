@@ -1,16 +1,16 @@
 {
-  "client_id": "e1234a1478774fdb877faa4646cd2e55",
+  "client_id": "41d5419dee984d65a78c29ac7f5f6785",
   "prompt": {
     "3": {
       "inputs": {
-        "seed": 352758392390607,
-        "steps": 8,
-        "cfg": 1.5,
-        "sampler_name": "lcm",
+        "seed": 174797789927442,
+        "steps": 30,
+        "cfg": 7,
+        "sampler_name": "dpmpp_sde",
         "scheduler": "karras",
         "denoise": 1,
         "model": [
-          "43",
+          "39",
           0
         ],
         "positive": [
@@ -33,7 +33,7 @@
     },
     "4": {
       "inputs": {
-        "ckpt_name": "dreamshaper_8LCM.safetensors"
+        "ckpt_name": "Lumina_genv2.safetensors"
       },
       "class_type": "CheckpointLoaderSimple",
       "_meta": {
@@ -53,9 +53,9 @@
     },
     "6": {
       "inputs": {
-        "text": "",
+        "text": "1cat, cute",
         "clip": [
-          "43",
+          "39",
           1
         ]
       },
@@ -68,7 +68,7 @@
       "inputs": {
         "text": "embedding:easynegative, (nude, naked, nsfw, sexy:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands",
         "clip": [
-          "43",
+          "39",
           1
         ]
       },
@@ -97,9 +97,9 @@
       "inputs": {
         "lora_01": "betterhands.safetensors",
         "strength_01": 0.8,
-        "lora_02": "girl_face.safetensors",
+        "lora_02": "betterfeets.safetensors",
         "strength_02": 0.8,
-        "lora_03": "betterfeets.safetensors",
+        "lora_03": "girl_face.safetensors",
         "strength_03": 0.8,
         "lora_04": "None",
         "strength_04": 0.8,
@@ -155,30 +155,6 @@
       "class_type": "Save image with extra metadata [Crystools]",
       "_meta": {
         "title": "🪛 Save image with extra metadata"
-      }
-    },
-    "43": {
-      "inputs": {
-        "lora_01": "anime.safetensors",
-        "strength_01": 0.8,
-        "lora_02": "3d.safetensors",
-        "strength_02": 0.8,
-        "lora_03": "girl_face.safetensors",
-        "strength_03": 0.8,
-        "lora_04": "None",
-        "strength_04": 0.8,
-        "model": [
-          "39",
-          0
-        ],
-        "clip": [
-          "39",
-          1
-        ]
-      },
-      "class_type": "Lora Loader Stack (rgthree)",
-      "_meta": {
-        "title": "Lora Loader Stack (rgthree)"
       }
     }
   }

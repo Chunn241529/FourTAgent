@@ -366,11 +366,12 @@ class ChatService:
            **KHI NÀO DÙNG**:
            - Khi cần viết code dài, bài viết, tài liệu kỹ thuật, hoặc bất kỳ nội dung nào người dùng muốn lưu lại và xem riêng.
            - Khi người dùng yêu cầu "tạo canvas", "viết vào canvas", "lưu code này lại".
+           - Khi viết HTML/CSS/JS để preview.
            
            **ACTIONS**:
-           - `create_canvas(title="Tên Canvas", content="Nội dung...", type="markdown" | "code")`: Tạo mới.
-           - `update_canvas(canvas_id=..., content="...")`: Cập nhật nội dung. Lưu ý: update sẽ ghi đè toàn bộ nội dung cũ.
-           - `read_canvas(canvas_id=...)`: Đọc nội dung.
+           - `create_canvas(title="Tên Canvas", content="Nội dung đầy đủ...", type="markdown" | "code" | "html")`: Tạo canvas mới với nội dung.
+           - `update_canvas(canvas_id=..., content="...")`: Cập nhật canvas đã có.
+           - `read_canvas(canvas_id=...)`: Đọc nội dung canvas.
 
         **QUY TẮC TRẢ LỜI:**
         - Nếu bạn dùng tool, hãy dùng thông tin từ tool để trả lời thật đầy đủ và chi tiết.
@@ -510,7 +511,7 @@ class ChatService:
         tools = tool_service.get_tools()
 
         if needs_logic:
-            return "qwen3-coder", tools, False
+            return "Lumina", tools, False
         elif needs_reasoning:
             return "Lumina", tools, True
         else:

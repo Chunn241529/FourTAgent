@@ -26,6 +26,24 @@ class CanvasPanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           child: Consumer<CanvasProvider>(
             builder: (context, provider, child) {
+              // Show loading state when LLM is creating canvas
+              if (provider.isPendingCanvas) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Đang tạo Canvas...',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
               if (provider.currentCanvas != null) {
                 return CanvasView(
                   canvas: provider.currentCanvas!,

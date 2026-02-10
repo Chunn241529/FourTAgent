@@ -6,7 +6,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/canvas_model.dart';
 import '../../providers/canvas_provider.dart';
+import '../../utils/html_detector.dart';
 import '../chat/code_block_builder.dart'; // Reuse code block builder
+import 'html_preview_widget.dart';
+
+/// View modes for canvas content
+enum CanvasViewMode { markdown, html, source }
 
 class CanvasView extends StatefulWidget {
   final CanvasModel canvas;
@@ -26,7 +31,8 @@ class _CanvasViewState extends State<CanvasView> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
   bool _isEditing = false;
-  bool _isPreview = true; // Default to preview mode for Markdown
+  CanvasViewMode _viewMode = CanvasViewMode.markdown; // Current view mode
+  bool _hasFrontendCode = false; // Whether content has HTML/CSS/JS
   
   // Undo/Redo stacks
   final List<String> _undoStack = [];
@@ -43,6 +49,12 @@ class _CanvasViewState extends State<CanvasView> {
     _contentController = TextEditingController(text: widget.canvas.content);
     _lastSavedContent = widget.canvas.content;
     _contentController.addListener(_onContentChanged);
+    _checkFrontendCode();
+  }
+  
+  /// Check if content contains frontend code (HTML/CSS/JS)
+  void _checkFrontendCode() {
+    _hasFrontendCode = HtmlDetector.isFrontendCode(widget.canvas.content);
   }
 
   @override
@@ -55,7 +67,8 @@ class _CanvasViewState extends State<CanvasView> {
       _undoStack.clear();
       _redoStack.clear();
       _isEditing = false;
-      _isPreview = true;
+      _viewMode = CanvasViewMode.markdown;
+      _checkFrontendCode();
     }
   }
 
@@ -442,23 +455,48 @@ class _CanvasViewState extends State<CanvasView> {
               ),
               child: Row(
                 children: [
-                  _buildViewModeChip('Xem trước', _isPreview, () => setState(() => _isPreview = true), theme),
+                  _buildViewModeChip(
+                    'Xem trước', 
+                    _viewMode == CanvasViewMode.markdown, 
+                    () => setState(() => _viewMode = CanvasViewMode.markdown), 
+                    theme,
+                  ),
                   const SizedBox(width: 8),
-                  _buildViewModeChip('Mã nguồn', !_isPreview, () => setState(() => _isPreview = false), theme),
+                  // Show HTML preview tab when frontend code detected
+                  if (_hasFrontendCode) ...[
+                    _buildViewModeChip(
+                      'HTML Preview', 
+                      _viewMode == CanvasViewMode.html, 
+                      () => setState(() => _viewMode = CanvasViewMode.html), 
+                      theme,
+                      icon: Icons.web,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _buildViewModeChip(
+                    'Mã nguồn', 
+                    _viewMode == CanvasViewMode.source, 
+                    () => setState(() => _viewMode = CanvasViewMode.source), 
+                    theme,
+                  ),
                   const Spacer(),
                   // Type badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (widget.canvas.type == 'code' ? Colors.blue : Colors.orange).withOpacity(0.1),
+                      color: _hasFrontendCode 
+                          ? Colors.green.withOpacity(0.1)
+                          : (widget.canvas.type == 'code' ? Colors.blue : Colors.orange).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      widget.canvas.type.toUpperCase(),
+                      _hasFrontendCode ? 'HTML' : widget.canvas.type.toUpperCase(),
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: widget.canvas.type == 'code' ? Colors.blue : Colors.orange,
+                        color: _hasFrontendCode 
+                            ? Colors.green 
+                            : (widget.canvas.type == 'code' ? Colors.blue : Colors.orange),
                       ),
                     ),
                   ),
@@ -495,7 +533,7 @@ class _CanvasViewState extends State<CanvasView> {
                         _isEditing = false;
                         _titleController.text = widget.canvas.title;
                         _contentController.text = widget.canvas.content;
-                        _isPreview = true;
+                        _viewMode = CanvasViewMode.markdown;
                       });
                     },
                   ),
@@ -506,9 +544,7 @@ class _CanvasViewState extends State<CanvasView> {
           Expanded(
             child: _isEditing
                 ? _buildEditor(theme)
-                : _isPreview
-                    ? _buildPreview(theme, isDark)
-                    : _buildRawView(theme),
+                : _buildContentView(theme, isDark),
           ),
         ],
       );
@@ -567,6 +603,26 @@ class _CanvasViewState extends State<CanvasView> {
     );
   }
 
+  /// Switch between view modes (markdown, html, source)
+  Widget _buildContentView(ThemeData theme, bool isDark) {
+    switch (_viewMode) {
+      case CanvasViewMode.markdown:
+        return _buildPreview(theme, isDark);
+      case CanvasViewMode.html:
+        return _buildHtmlPreview(isDark);
+      case CanvasViewMode.source:
+        return _buildRawView(theme);
+    }
+  }
+
+  /// Build HTML preview using flutter_widget_from_html
+  Widget _buildHtmlPreview(bool isDark) {
+    return HtmlPreviewWidget(
+      content: widget.canvas.content,
+      isDark: isDark,
+    );
+  }
+
   Widget _buildToggleIcon({
     required IconData icon,
     required bool isSelected,
@@ -604,7 +660,7 @@ class _CanvasViewState extends State<CanvasView> {
     );
   }
 
-  Widget _buildViewModeChip(String label, bool isSelected, VoidCallback onTap, ThemeData theme) {
+  Widget _buildViewModeChip(String label, bool isSelected, VoidCallback onTap, ThemeData theme, {IconData? icon}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -621,15 +677,30 @@ class _CanvasViewState extends State<CanvasView> {
                 : Colors.transparent,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: isSelected 
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.6),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon, 
+                size: 14, 
+                color: isSelected 
+                    ? theme.colorScheme.primary 
+                    : theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected 
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+          ],
         ),
       ),
     );
