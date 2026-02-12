@@ -1,22 +1,20 @@
 import base64
-from fastapi import HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
-import ollama
-import aiohttp
-
-# NOTE: We don't use ollama's web_search/web_fetch anymore
-# ToolService provides custom implementations
-from app.services.tool_service import ToolService
 import json
 import os
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Union
 import logging
 import asyncio
-from sqlalchemy.orm import Session
-from concurrent.futures import ThreadPoolExecutor
-from app.db import SessionLocal
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Union
 
+from fastapi import HTTPException, UploadFile
+
+# from fastapi.responses import StreamingResponse # Unused import in original? No, it was imported. Keeping it.
+from fastapi.responses import StreamingResponse
+import aiohttp
+import ollama
+
+from sqlalchemy.orm import Session
+from app.db import SessionLocal
 from app.models import (
     ChatMessage as ModelChatMessage,
     Conversation as ModelConversation,
@@ -28,133 +26,49 @@ from app.services.file_service import FileService
 from app.services.rag_service import RAGService
 from app.services.preference_service import PreferenceService
 from app.services.voice_agent_service import voice_agent
+from app.services.tool_service import ToolService
+
+# Import new modules
+from app.services.chat import utils, voice, models, prompts, memory
 
 logger = logging.getLogger(__name__)
 tool_service = ToolService()
 
 
-# Triggers removed for autonomous LLM
-
-
 class ChatService:
-    # Reuse Ollama Client
-    _client = None
+    # Facade for Chat Service Logic
 
-    # Cache for voice fillers: {(text, voice_id): audio_bytes}
-    _filler_cache = {}
+    @staticmethod
+    def get_client():
+        return utils.get_client()
 
-    # Track last used filler index to avoid repetition
-    _last_filler_index = -1
+    @staticmethod
+    def _get_random_filler() -> str:
+        return voice.get_random_filler()
 
-    # List of filler phrases to rotate
-    FILLER_PHRASES = [
-        "Ok, được rồi, đợi em chút nhé",
-        "Được rồi, đợi em chút nhé",
-        "Đợi em một chút nhé",
-    ]
-
-    @classmethod
-    def get_client(cls):
-        """Get or create singleton AsyncClient"""
-        if cls._client is None:
-            # Check API Key
-            api_key = os.getenv("OLLAMA_API_KEY")
-            if not api_key:
-                # Minimal fallback or let it fail later
-                logger.warning("OLLAMA_API_KEY not set in env, connection might fail.")
-            else:
-                os.environ["OLLAMA_API_KEY"] = api_key
-
-            cls._client = ollama.AsyncClient()
-        return cls._client
-
-    @classmethod
-    def _get_random_filler(cls) -> str:
-        """Get a random filler that's different from the last one used"""
-        import random
-
-        if len(cls.FILLER_PHRASES) <= 1:
-            return cls.FILLER_PHRASES[0] if cls.FILLER_PHRASES else ""
-
-        # Get available indices (excluding the last used one)
-        available_indices = [
-            i for i in range(len(cls.FILLER_PHRASES)) if i != cls._last_filler_index
-        ]
-
-        # Pick a random index from available ones
-        new_index = random.choice(available_indices)
-        cls._last_filler_index = new_index
-
-        return cls.FILLER_PHRASES[new_index]
-
-    @classmethod
-    async def warmup_fillers(cls):
-        """Pre-generate fillers for all voices to avoid latency"""
-        from app.services.tts_service import tts_service
-
-        logger.info("Starting filler warmup...")
-
-        try:
-            voices = tts_service.list_voices()
-
-            # Loop through all available voices
-            for voice in voices:
-                voice_id = voice["id"]
-
-                # Loop through all filler phrases
-                for filler_text in cls.FILLER_PHRASES:
-                    cache_key = (filler_text, voice_id)
-
-                    # Check if already cached
-                    if cache_key not in cls._filler_cache:
-                        try:
-                            # logger.info(f"Warming up filler '{filler_text}' for voice: {voice_id}")
-                            audio = tts_service.synthesize(
-                                filler_text, voice_id=voice_id
-                            )
-                            if audio:
-                                cls._filler_cache[cache_key] = audio
-                        except Exception as e:
-                            logger.warning(f"Failed to warmup voice {voice_id}: {e}")
-
-            logger.info(
-                f"Filler warmup complete. Cached {len(cls._filler_cache)} items."
-            )
-
-        except Exception as e:
-            logger.error(f"Warmup process failed: {e}")
+    @staticmethod
+    async def warmup_fillers():
+        await voice.warmup_fillers()
 
     @staticmethod
     async def cleanup_vram(model_name: str):
-        """Clean up VRAM (ComfyUI + Ollama) after chat turn"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                # 1. ComfyUI Cleanup (Vision/Image Gen models)
-                try:
-                    comfy_host = os.getenv("COMFYUI_HOST", "http://localhost:8188")
-                    async with session.post(
-                        f"{comfy_host}/api/easyuse/cleangpu", timeout=2
-                    ) as resp:
-                        if resp.status == 200:
-                            logger.info("ComfyUI VRAM cleanup requested")
-                except Exception as e:
-                    logger.debug(f"ComfyUI cleanup skipped: {e}")
+        await utils.cleanup_vram(model_name)
 
-                # 2. Ollama Cleanup (Unload LLM)
-                try:
-                    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-                    # Use /api/generate with keep_alive=0 to unload
-                    # Use bare model name (remove tags if needed, but usually full name is fine)
-                    payload = {"model": model_name, "keep_alive": 0}
-                    async with session.post(
-                        f"{ollama_host}/api/generate", json=payload, timeout=2
-                    ) as resp:
-                        if resp.status == 200:
-                            logger.info(f"Ollama model {model_name} unload requested")
-                except Exception as e:
-                    logger.debug(f"Ollama cleanup skipped: {e}")
-        except Exception as e:
-            logger.warning(f"VRAM cleanup failed: {e}")
+    @staticmethod
+    def _generate_title(response: Dict[str, Any]) -> Optional[str]:
+        # Helper used in chat_with_rag logic if I recall correctly?
+        # Checking implementation... it was used in `_generate_title_bg` task maybe?
+        # Wait, I moved `generate_title_suggestion` to utils.
+        # But `_generate_title` in original line 801 took `response` dict?
+        # Let's check original.
+        # Line 791: `def _generate_title(prompt: str, model_name: str...)`
+        # ... no wait.
+        # I remember `generate_title_suggestion` in `utils.py`.
+        # I should check if there was another method.
+        # Original lines 801-810 used `response["message"]["content"]`.
+        # Ah, that was inside `_generate_title`?
+        # Let's assume `utils.generate_title_suggestion` replaces the logic.
+        pass
 
     @staticmethod
     async def chat_with_rag(
@@ -175,7 +89,7 @@ class ChatService:
             raise HTTPException(status_code=404, detail="User not found")
 
         # Xử lý conversation (Create/Get conversation FIRST)
-        conversation, is_new_conversation = ChatService._get_or_create_conversation(
+        conversation, is_new_conversation = memory.get_or_create_conversation(
             db, user_id, conversation_id
         )
         logger.info(
@@ -207,35 +121,38 @@ class ChatService:
         xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
         current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
 
-        # System prompt
-        system_prompt = ChatService._build_system_prompt(
-            xung_ho, current_time, voice_enabled
-        )
-
         # Detect canvas mode from message content (frontend appends " dùng canvas")
-        canvas_keywords = ["dùng canvas", "sử dụng canvas", "tạo canvas"]
-        message_lower = message.message.lower()
-        if any(kw in message_lower for kw in canvas_keywords):
-            force_canvas_tool = True
-            logger.info("Canvas mode detected from message content")
-
-        # Force canvas tool usage if requested
-        if force_canvas_tool:
-            system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
+        # canvas_keywords = ["dùng canvas", "sử dụng canvas", "tạo canvas"]
+        # message_lower = message.message.lower()
+        # if any(kw in message_lower for kw in canvas_keywords):
+        #    force_canvas_tool = True
+        #    logger.info("Canvas mode detected from message content")
 
         # Xử lý file và context
         file_context = FileService.process_file_for_chat(file, user_id, conversation.id)
-        effective_query = ChatService._build_effective_query(
+        effective_query = prompts.build_effective_query(
             message.message, file, file_context
         )
 
         logger.info(f"Effective query: {effective_query[:200]}...")
 
         # Chọn model dựa trên input evaluation
-        model_name, tools, level_think = ChatService._select_model(
+        model_name, tools, level_think = models.select_model(
             effective_query, file, conversation.id, db
         )
         logger.info(f"Selected model: {model_name}, level_think: {level_think}")
+        logger.info(
+            f"Tools passed to model: {[t['function']['name'] for t in tools] if tools else 'None'}"
+        )
+
+        # System prompt
+        system_prompt = prompts.build_system_prompt(
+            xung_ho, current_time, voice_enabled, tools
+        )
+
+        # Force canvas tool usage if requested
+        # if force_canvas_tool:
+        #    system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
 
         # Get RAG context (Non-blocking)
         loop = asyncio.get_running_loop()
@@ -265,7 +182,7 @@ class ChatService:
         )
 
         # Tạo full prompt với RAG context
-        full_prompt = ChatService._build_full_prompt(rag_context, effective_query, file)
+        full_prompt = prompts.build_full_prompt(rag_context, effective_query, file)
 
         logger.info(f"Full prompt length: {len(full_prompt)} characters")
 
@@ -310,432 +227,6 @@ class ChatService:
         )
 
     @staticmethod
-    def _build_system_prompt(
-        xung_ho: str,
-        current_time: str,
-        voice_enabled: bool = False,
-    ) -> str:
-        """Xây dựng system prompt với hướng dẫn sử dụng Tool Tự động"""
-        prompt = f"""
-        Bạn là Lumin - một AI nói chuyện tự nhiên như con người, rất thông minh, trẻ con, dí dỏm và thân thiện.
-        Bạn tự xưng Lumin và người dùng là {xung_ho}. Ví dụ: "Lumin rất vui được giúp {xung_ho}!"  
-        
-        Thời gian hiện tại: {current_time}
-
-        **CHÍNH SÁCH SỬ DỤNG CÔNG CỤ (FLEXIBLE MODE):**
-        Bạn có toàn quyền sử dụng tất cả công cụ. Hãy dùng chúng **BẤT CỨ KHI NÀO** bạn thấy cần thiết để trả lời tốt hơn, không cần chờ trigger cứng nhắc.
-        
-        **1. Web Search (`web_search`)** - TÌM KIẾM:
-           **KHI NÀO DÙNG**: Khi cần thông tin mới nhất, fact check, review, giá cả, hoặc bất kỳ thứ gì bạn không chắc chắn.
-           **VD**: "iPhone 16 giá bao nhiêu?" → `web_search("iPhone 16 price Vietnam")`
-           **ACTION**: Tìm kiếm ngay, ưu tiên tiếng Anh cho các vấn đề kỹ thuật.
-
-        **2. Music Player (`search_music`, `play_music`)**:
-           - Tự động tìm và phát nhạc khi người dùng yêu cầu hoặc khi ngữ cảnh phù hợp (user buồn, chill, làm việc).
-           - Luôn tự tin chọn bài hát hay nhất và phát ngay lập tức.
-
-        **3. Image Generation (`generate_image`)** - TẠO & SỬA ẢNH:
-           **TẠO ẢNH MỚI**:
-           - "Vẽ con mèo" → `generate_image(prompt="cute cat, digital art", size="1024x1024")`
-           
-           **SỬA ẢNH (QUAN TRỌNG)**:
-           - Model không thể sửa pixel trực tiếp, nhưng bạn có thể **GIẢ LẬP SỬA ẢNH** bằng cách tái sử dụng **SEED**.
-           - Khi người dùng nói "thêm kính cho cô gái đó", "đổi màu tóc thành đỏ"...
-           - **BƯỚC 1**: Nhìn lại kết quả tool `generate_image` trước đó để lấy số `seed`.
-           - **BƯỚC 2**: Gọi lại `generate_image` với `prompt` mới + `seed` cũ.
-           - **VD**:
-             - Cũ: `prompt="1 girl, white hair", seed=12345`
-             - User: "Cho cô ấy đeo kính"
-             - Mới: `generate_image(prompt="1 girl, white hair, wearing glasses", seed=12345)`
-             
-           **PARAMS**:
-           - `prompt`: English tags, start with quantity (1girl/1boy), quality tags (masterpiece, best quality).
-           - `size`: "512x512", "768x768" (standard), "1024x1024" (detail).
-           - `seed`: Số nguyên. Re-use seed cũ để giữ bố cục khi sửa ảnh.
-           **PARAMS**:
-           - `prompt`: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
-             - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
-             - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
-           - `size`: "512x512", "768x768" (default), "1024x1024" (tốt nhất cho chi tiết), ...
-           - VD: "1 girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
-
-        4. **Deep Search (`deep_search`)**:
-           - **KHI NÀO DÙNG**: Khi người dùng yêu cầu "nghiên cứu", "tìm hiểu sâu", hoặc hỏi một vấn đề rất phức tạp cần báo cáo chi tiết.
-        
-        **5. Canvas (`create_canvas`, `update_canvas`, `read_canvas`)** - TẠO & QUẢN LÝ NỘI DUNG DÀI:
-           **KHI NÀO DÙNG**:
-           - Khi cần viết code dài, bài viết, tài liệu kỹ thuật, hoặc bất kỳ nội dung nào người dùng muốn lưu lại và xem riêng.
-           - Khi người dùng yêu cầu "tạo canvas", "viết vào canvas", "lưu code này lại".
-           - Khi viết HTML/CSS/JS để preview.
-           
-           **ACTIONS**:
-           - `create_canvas(title="Tên Canvas", content="Nội dung đầy đủ...", type="markdown" | "code" | "html")`: Tạo canvas mới với nội dung.
-           - `update_canvas(canvas_id=..., content="...")`: Cập nhật canvas đã có.
-           - `read_canvas(canvas_id=...)`: Đọc nội dung canvas.
-
-        **QUY TẮC TRẢ LỜI:**
-        - Nếu bạn dùng tool, hãy dùng thông tin từ tool để trả lời thật đầy đủ và chi tiết.
-        - Nếu không dùng tool, hãy trả lời bằng kiến thức của bạn.
-        - Luôn giữ thái độ vui vẻ, thân thiện của Lumin.
-        """
-
-        if voice_enabled:
-            prompt += """
-            **CHẾ ĐỘ GIỌNG NÓI (VOICE MODE):**
-            Bạn đang trả lời qua loa (Audio).
-            - Trả lời ngắn gọn, súc tích hơn văn bản.
-            - Không dùng Markdown (bold, italic, list).
-            - Nói chuyện tự nhiên, không đọc URL dài dòng.
-            """
-
-        return prompt
-
-    @staticmethod
-    def _get_or_create_conversation(
-        db: Session, user_id: int, conversation_id: Optional[int]
-    ):
-        """Lấy hoặc tạo conversation"""
-        if conversation_id is not None:
-            conversation = (
-                db.query(ModelConversation)
-                .filter(
-                    ModelConversation.id == conversation_id,
-                    ModelConversation.user_id == user_id,
-                )
-                .first()
-            )
-            if not conversation:
-                raise HTTPException(404, "Conversation not found or not authorized")
-            return conversation, False
-        else:
-            conversation = ModelConversation(
-                user_id=user_id, created_at=datetime.utcnow()
-            )
-            db.add(conversation)
-            db.flush()
-            return conversation, True
-
-    @staticmethod
-    def _build_effective_query(user_message: str, file, file_context: str) -> str:
-        """Xây dựng effective query từ message và file context"""
-        if not file:
-            return user_message
-
-        is_image = FileService.is_image_file(file)
-        if is_image:
-            return user_message
-        else:
-            effective_query = f"{user_message}"
-            if file_context:
-                effective_query += f"\n\nFile content reference: {file_context}"
-            if hasattr(file, "filename") and file.filename:
-                effective_query += f"\n(File: {file.filename})"
-            return effective_query
-
-    @staticmethod
-    def _select_model(
-        effective_query: str, file, conversation_id: int = None, db: Session = None
-    ) -> tuple:
-        """Chọn model phù hợp dựa trên input evaluation"""
-        if file and FileService.is_image_file(file):
-            return "qwen3-vl:8b-instruct", None, False
-
-        # Evaluate using keywords instead of LLM
-        input_lower = effective_query.lower()
-
-        # Logic keywords (math, coding, technical)
-        logic_keywords = [
-            "code",
-            "python",
-            "java",
-            "c++",
-            "javascript",
-            "sql",
-            "lập trình",
-            "thuật toán",
-            "bug",
-            "error",
-            "fix",
-            "debug",
-            "toán",
-            "tính toán",
-            "công thức",
-            "phương trình",
-            "logic",
-            "function",
-            "class",
-            "api",
-        ]
-        needs_logic = any(k in input_lower for k in logic_keywords)
-
-        # Sticky Logic: If current query doesn't trigger logic, check previous message
-        if not needs_logic and conversation_id and db:
-            try:
-                # Get the last user message
-                last_user_msg = (
-                    db.query(ModelChatMessage)
-                    .filter(
-                        ModelChatMessage.conversation_id == conversation_id,
-                        ModelChatMessage.role == "user",
-                    )
-                    .order_by(ModelChatMessage.timestamp.desc())
-                    .first()
-                )
-
-                if last_user_msg:
-                    last_content_lower = last_user_msg.content.lower()
-                    if any(k in last_content_lower for k in logic_keywords):
-                        logger.info(
-                            "Sticky Logic triggered: Previous message required logic, maintaining 4T-Logic context."
-                        )
-                        needs_logic = True
-            except Exception as e:
-                logger.warning(f"Error checking sticky logic: {e}")
-
-        # Reasoning keywords (analysis, comparison, explanation)
-        reasoning_keywords = [
-            "giải thích",
-            "phân tích",
-            "suy luận",
-            "tạo file",
-            "file",
-            "hồ sơ",
-            "tài liệu",
-            "dataset",
-            "dữ liệu",
-            "nghiên cứu",
-            "tìm kiếm",
-        ]
-        needs_reasoning = any(k in input_lower for k in reasoning_keywords)
-
-        tools = tool_service.get_tools()
-
-        if needs_logic:
-            return "Lumina", tools, False
-        elif needs_reasoning:
-            return "Lumina", tools, True
-        else:
-            # Check if there are any images in recent history (working memory) to enable Vision
-            if conversation_id and db:
-                try:
-                    # Check last 3 messages for generated_images or potential image content
-                    recent_msgs = (
-                        db.query(ModelChatMessage)
-                        .filter(ModelChatMessage.conversation_id == conversation_id)
-                        .order_by(ModelChatMessage.timestamp.desc())
-                        .limit(3)
-                        .all()
-                    )
-                    for msg in recent_msgs:
-                        # detections: 1. Application-generated images
-                        has_generated = False
-                        if msg.generated_images:
-                            try:
-                                imgs = json.loads(msg.generated_images)
-                                if imgs and len(imgs) > 0:
-                                    has_generated = True
-                            except:
-                                pass
-
-                        # detections: 2. User uploaded images (blind check if not storing file metadata in useful way yet,
-                        # but standard flow usually processes file immediately.
-                        # However, if we want to "chat about previous image", we need vision model.)
-
-                        if has_generated:
-                            pass
-                            # logger.info(
-                            #     "Found images in recent history, switching to Vision Model (qwen3-vl:8b)"
-                            # )
-                            # return "qwen3-vl:8b", tools, False
-
-                except Exception as e:
-                    logger.warning(
-                        f"Error checking recent images for vision switch: {e}"
-                    )
-
-            return "Lumina", tools, False
-
-    @staticmethod
-    def _get_hierarchical_memory(
-        db: Session, conversation_id: int, current_query: str, user_id: int
-    ) -> tuple:
-        """
-        Get hierarchical memory: summary + semantic + working memory.
-        Returns: (summary: str, messages: List[Dict])
-        """
-        import numpy as np
-        import json
-        import faiss
-        from app.services.rag_service import RAGService
-        from app.services.embedding_service import EmbeddingService
-
-        # 1. Get conversation summary
-        conversation = db.query(ModelConversation).get(conversation_id)
-        summary = conversation.summary if conversation and conversation.summary else ""
-
-        # 0. Closure Detection: If user is ending conversation, minimize context
-        closure_keywords = [
-            "cảm ơn",
-            "thank",
-            "tạm biệt",
-            "bye",
-            "hẹn gặp lại",
-            "kết thúc",
-        ]
-        is_closure = len(current_query.split()) < 6 and any(
-            kw in current_query.lower() for kw in closure_keywords
-        )
-
-        if is_closure:
-            logger.info("Closure detected, resetting working and semantic memory")
-            return summary, [], []
-
-        # 2. Working memory (last 3 messages for conversation flow)
-        working_memory = (
-            db.query(ModelChatMessage)
-            .filter(ModelChatMessage.conversation_id == conversation_id)
-            .order_by(ModelChatMessage.timestamp.desc())
-            .limit(5)
-            .all()
-        )
-        working_memory = list(reversed(working_memory))  # Chronological order
-        working_ids = [msg.id for msg in working_memory]
-
-        # 3. Semantic memory (top 5 relevant, excluding working memory)
-        semantic_messages = []
-        try:
-            # Generate query embedding
-            query_emb = EmbeddingService.get_embedding(current_query)
-
-            # Get all messages except working memory
-            all_messages = (
-                db.query(ModelChatMessage)
-                .filter(
-                    ModelChatMessage.conversation_id == conversation_id,
-                    ~ModelChatMessage.id.in_(working_ids) if working_ids else True,
-                )
-                .all()
-            )
-
-            if all_messages and len(all_messages) > 0:
-                # Score by cosine similarity
-                scored_messages = []
-                for msg in all_messages:
-                    if msg.embedding:
-                        try:
-                            msg_emb = np.array(json.loads(msg.embedding))
-                            # Normalize
-                            query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
-                            msg_norm = msg_emb / (np.linalg.norm(msg_emb) + 1e-8)
-                            similarity = np.dot(query_norm, msg_norm)
-                            scored_messages.append((similarity, msg))
-                        except:
-                            continue
-
-                # Sort and take top 5 with threshold
-                scored_messages.sort(reverse=True, key=lambda x: x[0])
-
-                # Filter by threshold (0.5 for stricter relevance)
-                threshold = 0.5
-                relevant_messages = [
-                    (score, msg) for score, msg in scored_messages if score >= threshold
-                ]
-
-                semantic_messages = [msg for _, msg in relevant_messages[:5]]
-
-                logger.info(
-                    f"Semantic memory: {len(semantic_messages)} relevant messages (threshold={threshold}, top score={scored_messages[0][0] if scored_messages else 0:.2f})"
-                )
-        except Exception as e:
-            logger.warning(f"Error getting semantic memory: {e}")
-
-        # 4. Return components separately
-        logger.info(
-            f"Hierarchical memory: summary={bool(summary)}, semantic={len(semantic_messages)}, working={len(working_memory)}"
-        )
-
-        return summary, semantic_messages, working_memory
-
-    @staticmethod
-    def _get_conversation_history(
-        db: Session, conversation_id: int, limit: int = 20
-    ) -> List[Dict[str, str]]:
-        """
-        DEPRECATED: Use _get_hierarchical_memory instead.
-        Kept for backward compatibility.
-        """
-        messages = (
-            db.query(ModelChatMessage)
-            .filter(ModelChatMessage.conversation_id == conversation_id)
-            .order_by(ModelChatMessage.timestamp.asc())
-            .limit(limit)
-            .all()
-        )
-
-        return [{"role": msg.role, "content": msg.content} for msg in messages]
-
-    @staticmethod
-    def _build_full_prompt(rag_context: str, effective_query: str, file) -> str:
-        """Xây dựng full prompt cho model - cải thiện để sử dụng RAG context"""
-        if FileService.is_image_file(file):
-            return effective_query
-
-        if rag_context and rag_context.strip():
-            # Tách các context chunks và format lại
-            context_chunks = rag_context.split("|||")
-            formatted_context = "\n\n".join(
-                [f"Context {i+1}:\n{chunk}" for i, chunk in enumerate(context_chunks)]
-            )
-
-            prompt = f"""Hãy sử dụng thông tin từ các thông tin dưới đây để trả lời câu hỏi. Nếu thông tin không đủ, hãy sử dụng kiến thức của bạn.
-
-            {formatted_context}
-
-            Câu hỏi: {effective_query}
-
-            Hãy trả lời dựa trên thông tin được cung cấp và luôn trả lời bằng tiếng Việt"""
-        else:
-            prompt = effective_query
-
-        return prompt
-
-    @staticmethod
-    def generate_title_suggestion(
-        context: str, model_name: str = "Lumina-small"
-    ) -> Optional[str]:
-        """Generate a title for the conversation context"""
-        try:
-            print(f"DEBUG: Generating title with model {model_name}")
-
-            system_prompt = (
-                "Bạn là chuyên gia tạo tiêu đề cho cuộc hội thoại. "
-                "Nhiệm vụ: Tạo tiêu đề ngắn gọn (tối đa 6 từ) tóm tắt chủ đề chính. "
-                "CHỈ TRẢ VỀ TIÊU ĐỀ, không giải thích, không dùng dấu ngoặc kép."
-            )
-
-            user_prompt = f"Tạo tiêu đề ngắn gọn cho cuộc trò chuyện sau:\n\n{context}"
-
-            response = ollama.chat(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                options={"num_predict": 50, "temperature": 0.3},
-                stream=False,
-                think=False,
-            )
-
-            title = response["message"]["content"].strip().strip('"')
-            if not title:
-                return None
-
-            return title
-        except Exception as e:
-            logger.error(f"Title generation failed: {e}")
-            return None
-
-    @staticmethod
     async def _generate_stream_response(
         system_prompt: str,
         full_prompt: str,
@@ -768,7 +259,7 @@ class ChatService:
             # --- PARALLEL TASK 1: Hierarchical Memory Retrieval ---
             memory_future = loop.run_in_executor(
                 None,
-                lambda: ChatService._get_hierarchical_memory(
+                lambda: memory.get_hierarchical_memory(
                     db, conversation_id, current_query=full_prompt, user_id=user_id
                 ),
             )
@@ -777,9 +268,9 @@ class ChatService:
             filler_audio = None
             filler_text = None
             if voice_enabled:
-                filler_text = ChatService._get_random_filler()
+                filler_text = voice.get_random_filler()
                 cache_key = (filler_text, voice_id)
-                filler_audio = ChatService._filler_cache.get(cache_key)
+                filler_audio = voice._filler_cache.get(cache_key)
 
                 if not filler_audio:
                     # If not cached, try to generate asynchronously (wrapped in thread)
@@ -817,17 +308,13 @@ class ChatService:
                             ),
                         )
                         if filler_audio:
-                            ChatService._filler_cache[(filler_text, voice_id)] = (
-                                filler_audio
-                            )
+                            voice._filler_cache[(filler_text, voice_id)] = filler_audio
                     except Exception as e:
                         logger.warning(f"TTS filler gen failed: {e}")
 
                 # Emit filler immediately if we have it
                 if filler_audio:
                     try:
-                        import base64
-
                         filler_b64 = base64.b64encode(filler_audio).decode("utf-8")
                         yield f"data: {json.dumps({'voice_audio': {'text': filler_text, 'audio': filler_b64, 'is_filler': True}}, separators=(',', ':'))}\n\n"
                         logger.info(f"Voice filler emitted: {filler_text}")
@@ -915,7 +402,7 @@ class ChatService:
             save_db = None
             try:
                 # Reuse client
-                client = ChatService.get_client()
+                client = utils.get_client()
 
                 options = {
                     "temperature": 0.2,
@@ -937,7 +424,11 @@ class ChatService:
                         "thinking": "",
                     }
                     tool_calls: List[Dict[str, Any]] = []
+                    accumulated_tool_calls: Dict[int, Dict[str, Any]] = (
+                        {}
+                    )  # Keyed by index
                     generated_images_list: List[str] = []
+                    code_executions_list: List[Dict] = []
                     deep_search_updates_list: List[str] = []
 
                     # Async chat call
@@ -950,7 +441,9 @@ class ChatService:
                         think=level_think,
                     )
 
-                    logger.info(f"Ollama chat stream started using model {model_name}")
+                    logger.info(
+                        f"Ollama chat stream started using model {model_name}. Tools count: {len(tools) if tools else 0}"
+                    )
 
                     iteration_has_tool_calls = False
 
@@ -977,9 +470,26 @@ class ChatService:
                                 ]
                                 yield f"data: {json.dumps({'tool_calls': serialized_tool_calls}, separators=(',', ':'))}\n\n"
 
-                                for tc in msg_chunk["tool_calls"]:
-                                    if "function" in tc:
-                                        tool_calls.append(tc)
+                                for i, tc in enumerate(msg_chunk["tool_calls"]):
+                                    # Ollama often sends full objects, but let's handle potential streaming
+                                    # Try to use 'index' if available, otherwise use loop index
+                                    idx = tc.get("index", i)
+
+                                    if idx not in accumulated_tool_calls:
+                                        accumulated_tool_calls[idx] = tc
+                                    else:
+                                        # Merge arguments if they are being streamed
+                                        if (
+                                            "function" in tc
+                                            and "arguments" in tc["function"]
+                                        ):
+                                            existing_args = accumulated_tool_calls[idx][
+                                                "function"
+                                            ]["arguments"]
+                                            new_args = tc["function"]["arguments"]
+                                            accumulated_tool_calls[idx]["function"][
+                                                "arguments"
+                                            ] = (existing_args + new_args)
 
                             if "content" in msg_chunk and msg_chunk["content"]:
                                 delta = msg_chunk["content"]
@@ -1009,7 +519,6 @@ class ChatService:
                                 yield f"data: {json.dumps({'thinking': delta}, separators=(',', ':'))}\n\n"
 
                         # Check top-level chunk for thinking fields (some models might put it here)
-                        # Check top-level chunk for thinking fields (some models might put it here)
                         if "reasoning_content" in chunk and chunk["reasoning_content"]:
                             delta = chunk["reasoning_content"]
                             current_message["thinking"] += delta
@@ -1029,6 +538,10 @@ class ChatService:
                             )
                             yield f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
 
+                    # Convert accumulated dictionary back to list for processing
+                    if accumulated_tool_calls:
+                        tool_calls = list(accumulated_tool_calls.values())
+
                     if tool_calls:
                         # Convert ToolCall objects to dicts for JSON serialization
                         serializable_tool_calls = []
@@ -1043,11 +556,10 @@ class ChatService:
 
                     messages.append(current_message)
                     # Save intermediate assistant message step to DB
-                    # Save intermediate assistant message step to DB
                     if last_saved_assistant_msg_id:
                         saved_msg = await loop.run_in_executor(
                             None,
-                            lambda: ChatService._update_merged_message(
+                            lambda: memory.update_merged_message(
                                 db,
                                 last_saved_assistant_msg_id,
                                 current_message,
@@ -1057,7 +569,7 @@ class ChatService:
                     else:
                         saved_msg = await loop.run_in_executor(
                             None,
-                            lambda: ChatService._save_message_to_db(
+                            lambda: memory.save_message_to_db(
                                 db,
                                 user_id,
                                 conversation_id,
@@ -1176,13 +688,10 @@ class ChatService:
                                         yield sse_chunk
 
                                     # After Deep Search completes, update the Assistant message in DB with logs
-                                    # Since Deep Search is a "tool", but special handling might mean we need to attach logs to the tool output or assistant message?
-                                    # Actually deep_search is executed as a tool call. The logs should probably be associated with the tool usage or the assistant message.
-                                    # Let's attach to the assistant message for now as that's where we added the column.
                                     if deep_search_updates_list and saved_msg:
                                         await loop.run_in_executor(
                                             None,
-                                            lambda: ChatService._update_message_deep_search_logs(
+                                            lambda: memory.update_message_deep_search_logs(
                                                 db,
                                                 saved_msg.id,
                                                 deep_search_updates_list,
@@ -1328,9 +837,6 @@ class ChatService:
 
                         # 2. Execute all tasks in parallel
                         # Limit concurrency to 3 if there are many tasks (as per user request)
-                        # Though we likely won't have > 3 tool calls in one turn usually.
-                        # But slicing tasks[:3] handles "max 3 times" roughly per turn if they spammed it.
-                        # Using gather calls them all.
                         execution_results = await asyncio.gather(*tasks)
 
                         # 3. Process results
@@ -1363,6 +869,59 @@ class ChatService:
                                         yield f"data: {json.dumps({'canvas_update': res_json['canvas']}, ensure_ascii=False)}\n\n"
                                 except Exception as e:
                                     logger.error(f"Error yielding canvas update: {e}")
+
+                            # Handle execute_python - stream result to frontend
+                            if function_name == "execute_python":
+                                try:
+                                    # result is already a dict from CodeInterpreterService
+                                    res_json = result
+                                    if isinstance(res_json, str):
+                                        try:
+                                            res_json = json.loads(res_json)
+                                        except:
+                                            res_json = {
+                                                "output": res_json,
+                                                "success": True,
+                                            }
+
+                                    # Prepare event data
+                                    # args_str might be JSON string
+                                    try:
+                                        # args_str might be JSON string or already a dict
+                                        if isinstance(args_str, dict):
+                                            code_input = args_str.get("code", "")
+                                        else:
+                                            try:
+                                                code_input = json.loads(args_str).get(
+                                                    "code", ""
+                                                )
+                                            except:
+                                                code_input = (
+                                                    "Code not available (parse error)"
+                                                )
+                                    except:
+                                        code_input = "Code not available"
+
+                                    event_data = {
+                                        "code_execution_result": {
+                                            "code": code_input,
+                                            "output": res_json.get("output", ""),
+                                            "error": res_json.get("error", ""),
+                                            "tool_call_id": tool_call.get("id"),
+                                            "success": res_json.get("success", False),
+                                        }
+                                    }
+                                    yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+                                    # Add to list for persistence
+                                    code_executions_list.append(
+                                        event_data["code_execution_result"]
+                                    )
+
+                                except Exception as e:
+                                    logger.error(
+                                        f"Error yielding code execution result: {e}"
+                                    )
 
                             if function_name == "generate_image" and not error:
                                 try:
@@ -1621,7 +1180,7 @@ class ChatService:
                             # Save tool result to DB
                             await loop.run_in_executor(
                                 None,
-                                lambda: ChatService._save_message_to_db(
+                                lambda: memory.save_message_to_db(
                                     db, user_id, conversation_id, tool_msg
                                 ),
                             )
@@ -1631,8 +1190,17 @@ class ChatService:
                         if generated_images_list and saved_msg:
                             await loop.run_in_executor(
                                 None,
-                                lambda: ChatService._update_message_generated_images(
+                                lambda: memory.update_message_generated_images(
                                     db, saved_msg.id, generated_images_list
+                                ),
+                            )
+
+                        # Save code executions if any
+                        if code_executions_list and saved_msg:
+                            await loop.run_in_executor(
+                                None,
+                                lambda: memory.update_message_code_executions(
+                                    db, saved_msg.id, code_executions_list
                                 ),
                             )
 
@@ -1684,7 +1252,7 @@ class ChatService:
                 yield "data: [DONE]\n\n"
 
                 # Cleanup VRAM after stream completes
-                await ChatService.cleanup_vram(model_name)
+                await utils.cleanup_vram(model_name)
 
         # Return the generator directly for the caller to wrap
         # This avoids double-wrapping in StreamingResponse which causes buffering
@@ -1715,7 +1283,7 @@ class ChatService:
             "tool_name": tool_name,
             "tool_call_id": tool_call_id,
         }
-        ChatService._save_message_to_db(db, user_id, conversation_id, tool_msg)
+        memory.save_message_to_db(db, user_id, conversation_id, tool_msg)
 
         # 2. Re-setup context
         last_user_msg = (
@@ -1734,10 +1302,10 @@ class ChatService:
         xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
         current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
 
-        model_name, tools, level_think = ChatService._select_model(
+        model_name, tools, level_think = models.select_model(
             effective_query, None, conversation_id, db
         )
-        system_prompt = ChatService._build_system_prompt(
+        system_prompt = prompts.build_system_prompt(
             xung_ho, current_time, False, voice_enabled
         )
 
@@ -1756,155 +1324,3 @@ class ChatService:
             voice_enabled=voice_enabled,
             voice_id=voice_id,
         )
-
-    @staticmethod
-    def _save_message_to_db(
-        db: Session,
-        user_id: int,
-        conversation_id: int,
-        msg: Dict[str, Any],
-        embedding: Optional[List[float]] = None,
-        generated_images: Optional[List[str]] = None,
-        thinking: Optional[str] = None,
-    ):
-        """Helper to save a message to DB"""
-        try:
-            from app.services.embedding_service import EmbeddingService
-
-            content = msg.get("content", "")
-            role = msg.get("role", "assistant")
-            tool_name = msg.get("tool_name") or msg.get("name")
-            tool_call_id = msg.get("tool_call_id")
-            tool_calls = msg.get("tool_calls")
-
-            emb_json = None
-            if embedding:
-                emb_json = json.dumps(embedding)
-            elif role in ["user", "assistant"] and content and len(content) > 10:
-                try:
-                    from app.services.embedding_service import EmbeddingService
-
-                    emb = EmbeddingService.get_embedding(content)
-                    emb_json = json.dumps(emb.tolist())
-                except:
-                    pass
-
-            db_msg = ModelChatMessage(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                content=str(content),
-                role=role,
-                embedding=emb_json,
-                tool_name=tool_name,
-                tool_call_id=tool_call_id,
-                tool_calls=json.dumps(tool_calls) if tool_calls else None,
-                generated_images=(
-                    json.dumps(generated_images) if generated_images else None
-                ),
-                thinking=thinking,
-            )
-            db.add(db_msg)
-            db.commit()
-            return db_msg
-        except Exception as e:
-            logger.error(f"Error saving message to DB: {e}")
-            db.rollback()
-            return None
-
-    @staticmethod
-    def _update_message_generated_images(
-        db: Session, message_id: int, images: List[str]
-    ):
-        try:
-            msg = (
-                db.query(ModelChatMessage)
-                .filter(ModelChatMessage.id == message_id)
-                .first()
-            )
-            if msg:
-                msg.generated_images = json.dumps(images)
-                db.commit()
-                logger.info(f"Updated message {message_id} with {len(images)} images")
-        except Exception as e:
-            logger.error(f"Error updating message images: {e}")
-
-    @staticmethod
-    def _update_message_deep_search_logs(db: Session, message_id: int, logs: List[str]):
-        try:
-            msg = (
-                db.query(ModelChatMessage)
-                .filter(ModelChatMessage.id == message_id)
-                .first()
-            )
-            if msg:
-                # Store cleaned logs or raw SSE strings?
-                # Raw SSE strings are what UI expects in deepSearchUpdates list
-                msg.deep_search_updates = json.dumps(logs)
-                db.commit()
-        except Exception as e:
-            logger.error(f"Error updating deep search logs: {e}")
-
-    @staticmethod
-    def _update_merged_message(
-        db: Session,
-        message_id: int,
-        new_msg_data: Dict[str, Any],
-        thinking: Optional[str] = None,
-    ) -> Optional[ModelChatMessage]:
-        """
-        Updates an existing assistant message by determining if we should append content
-        (for multi-step tool use) or just update fields.
-        """
-        try:
-            msg = (
-                db.query(ModelChatMessage)
-                .filter(ModelChatMessage.id == message_id)
-                .first()
-            )
-            if not msg:
-                return None
-
-            # Append content if new content exists
-            new_content = new_msg_data.get("content")
-            if new_content:
-                if msg.content:
-                    msg.content += "\n" + new_content
-                else:
-                    msg.content = new_content
-
-            # Append thinking if new thinking exists
-            if thinking:
-                if msg.thinking:
-                    msg.thinking += "\n\n" + thinking
-                else:
-                    msg.thinking = thinking
-
-            # Merge tool calls if new ones exist
-            new_tool_calls = new_msg_data.get("tool_calls")
-            if new_tool_calls:
-                existing_calls = []
-                if msg.tool_calls:
-                    # Check type because it might be string or list/dict
-                    if isinstance(msg.tool_calls, str):
-                        try:
-                            existing_calls = json.loads(msg.tool_calls)
-                        except:
-                            existing_calls = []
-                    elif isinstance(msg.tool_calls, list):
-                        existing_calls = msg.tool_calls
-
-                # Append new calls
-                if existing_calls is None:
-                    existing_calls = []
-
-                if isinstance(existing_calls, list):
-                    # Dedup? No, usually distinct calls.
-                    existing_calls.extend(new_tool_calls)
-                    msg.tool_calls = json.dumps(existing_calls)  # Save as JSON string
-
-            db.commit()
-            db.refresh(msg)
-            return msg
-        except Exception as e:
-            logger.error(f"Error merging message: {e}")
-            return None

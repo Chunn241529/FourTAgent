@@ -13,6 +13,7 @@ import os
 import glob
 from pathlib import Path
 from app.services.image_generation_service import image_generation_service
+from app.services.code_interpreter_service import CodeInterpreterService
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +332,7 @@ class ToolService:
             "create_canvas": self._create_canvas_wrapper,
             "update_canvas": self._update_canvas_wrapper,
             "read_canvas": self._read_canvas_wrapper,
+            "execute_python": CodeInterpreterService.execute_python,
         }
 
     def _create_canvas_wrapper(
@@ -671,7 +673,7 @@ class ToolService:
                         "properties": {
                             "prompt": {
                                 "type": "string",
-                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1 girl', '1 boy', '1 cat', '2 dogs', etc. Example: '1 girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1 girl/1 boy/1 cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
+                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1girl', '1boy', '1cat', '2dogs', etc. Example: '1girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1girl/1boy/1cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
                             },
                             "size": {
                                 "type": "string",
@@ -751,6 +753,23 @@ class ToolService:
                             },
                         },
                         "required": ["canvas_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "execute_python",
+                    "description": "Execute Python code. Use this for calculations, data processing, date/time logic, or any task where code is more accurate than LLM generation. The code runs in a temporary file. STDOUT and STDERR are captured.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "code": {
+                                "type": "string",
+                                "description": "Valid Python code to execute.",
+                            }
+                        },
+                        "required": ["code"],
                     },
                 },
             },

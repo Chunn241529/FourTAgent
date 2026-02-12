@@ -42,6 +42,12 @@ if os.path.exists(DB_PATH):
         else:
             print("deep_search_updates column exists.")
 
+        if "code_executions" not in columns:
+            print("Adding code_executions column...")
+            cursor.execute("ALTER TABLE chat_messages ADD COLUMN code_executions JSON")
+        else:
+            print("code_executions column exists.")
+
         # Check for Canvas table
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='canvas'"

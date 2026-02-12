@@ -55,6 +55,9 @@ class _CanvasViewState extends State<CanvasView> {
   /// Check if content contains frontend code (HTML/CSS/JS)
   void _checkFrontendCode() {
     _hasFrontendCode = HtmlDetector.isFrontendCode(widget.canvas.content);
+    if (_hasFrontendCode && !_isEditing) {
+      _viewMode = CanvasViewMode.html;
+    }
   }
 
   @override
@@ -68,6 +71,9 @@ class _CanvasViewState extends State<CanvasView> {
       _redoStack.clear();
       _isEditing = false;
       _viewMode = CanvasViewMode.markdown;
+      _checkFrontendCode();
+    } else if (widget.canvas.content != oldWidget.canvas.content) {
+      // Refresh checks if content changed
       _checkFrontendCode();
     }
   }
@@ -260,6 +266,37 @@ class _CanvasViewState extends State<CanvasView> {
     }
   }
 
+  Future<void> _deleteCanvas() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: Text('Bạn có chắc muốn xóa canvas "${widget.canvas.title}"? Hành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await context.read<CanvasProvider>().deleteCanvas(widget.canvas.id);
+      // Provider automatically handles setting currentCanvas to null, but we can double check or just let the parent rebuild
+      // actually CanvasPanel listens to provider and if currentCanvas is null it shows list.
+      // But we need to ensure this view is disposed or parent rebuilds. 
+      // trigger close just in case, though deleteCanvas usually updates the selected state too.
+      // Checking provider... usually deleteCanvas in provider should set currentCanvas = null if it was selected.
+      widget.onClose(); 
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -431,6 +468,14 @@ class _CanvasViewState extends State<CanvasView> {
                       }
                     },
                   ),
+                  const SizedBox(width: 4),
+                  // Delete button
+                  _ToolbarIconButton(
+                    icon: Icons.delete_outline,
+                    tooltip: 'Xóa Canvas',
+                    onTap: _deleteCanvas,
+                    theme: theme,
+                  ),
                   const SizedBox(width: 8),
                   // Close button
                   IconButton(
@@ -455,17 +500,19 @@ class _CanvasViewState extends State<CanvasView> {
               ),
               child: Row(
                 children: [
-                  _buildViewModeChip(
-                    'Xem trước', 
-                    _viewMode == CanvasViewMode.markdown, 
-                    () => setState(() => _viewMode = CanvasViewMode.markdown), 
-                    theme,
-                  ),
-                  const SizedBox(width: 8),
+                  if (!_hasFrontendCode)
+                    _buildViewModeChip(
+                      'Xem trước', 
+                      _viewMode == CanvasViewMode.markdown, 
+                      () => setState(() => _viewMode = CanvasViewMode.markdown), 
+                      theme,
+                    ),
+                  if (!_hasFrontendCode) const SizedBox(width: 8),
+
                   // Show HTML preview tab when frontend code detected
                   if (_hasFrontendCode) ...[
                     _buildViewModeChip(
-                      'HTML Preview', 
+                      'Xem trước (HTML)', 
                       _viewMode == CanvasViewMode.html, 
                       () => setState(() => _viewMode = CanvasViewMode.html), 
                       theme,

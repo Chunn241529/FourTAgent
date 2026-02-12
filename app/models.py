@@ -50,6 +50,7 @@ class ChatMessage(Base):
     generated_images = Column(JSON, nullable=True)  # List of base64 images from ComfyUI
     thinking = Column(String, nullable=True)  # AI reasoning/thinking content
     deep_search_updates = Column(JSON, nullable=True)  # Logs of deep search process
+    code_executions = Column(JSON, nullable=True)  # List of code execution results
 
 
 class MessageFeedback(Base):

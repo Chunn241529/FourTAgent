@@ -96,7 +96,13 @@ class HtmlDetector {
 
   /// Wrap content in HTML template if needed
   static String wrapAsHtml(String content) {
-    // Already has HTML structure
+    // Check if it's a full HTML document wrapped in markdown
+    // We strip the markdown wrapper first to get the raw HTML
+    if (content.trim().startsWith('```') && (content.contains('<html') || content.contains('<!DOCTYPE'))) {
+      return stripMarkdownWrapper(content);
+    }
+
+    // Already has HTML structure (and wasn't wrapped, or wrapper was stripped above)
     if (content.contains('<html') || content.contains('<!DOCTYPE')) {
       return content;
     }
@@ -140,7 +146,34 @@ $content
     }
     
     // Wrap as body content
-    return _buildHtmlDocument(body: content);
+    // Try to strip markdown wrapper if present, as fallback
+    final strippedContent = stripMarkdownWrapper(content);
+    return _buildHtmlDocument(body: strippedContent);
+  }
+
+  /// Strip markdown code block markers if the content is wrapped in them
+  static String stripMarkdownWrapper(String content) {
+    content = content.trim();
+    
+    // Check and remove starting ```tag
+    if (content.startsWith('```')) {
+      // Find the end of the first line or first whitespace group to determine lang tag end
+      final newlineIndex = content.indexOf('\n');
+      if (newlineIndex != -1) {
+        // Remove everything up to the first newline
+        content = content.substring(newlineIndex + 1);
+      } else {
+        // Single line? Just remove the ``` and optional word
+        content = content.replaceFirst(RegExp(r'^```\w*\s*'), '');
+      }
+    }
+    
+    // Check and remove ending ```
+    if (content.endsWith('```')) {
+       content = content.substring(0, content.length - 3);
+    }
+    
+    return content.trim();
   }
 
   /// Build a complete HTML document

@@ -16,6 +16,7 @@ import 'plan_indicator.dart';
 import 'code_block_builder.dart';
 import 'file_action_indicator.dart';
 import 'simple_tool_indicator.dart';
+import 'code_execution_widget.dart';
 
 class MessageBubble extends StatefulWidget {
   final Message message;
@@ -374,14 +375,35 @@ class _MessageBubbleState extends State<MessageBubble> {
                     ),
                     const SizedBox(height: 6),
 
-                    // 1. Deep Search Indicator (status updates)
+                    // 1. Pre-Search Thinking (if any)
+                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty) ...[
+                      Builder(builder: (context) {
+                         final thinking = widget.message.thinking!;
+                         final splitIndex = widget.message.deepSearchStartIndex;
+                         
+                         String preThinking = thinking;
+                         if (splitIndex != null && splitIndex < thinking.length) {
+                           preThinking = thinking.substring(0, splitIndex);
+                         }
+                         
+                         if (preThinking.isNotEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _buildReasoningChain(context, theme, widget.message, contentOverride: preThinking),
+                            );
+                         }
+                         return const SizedBox.shrink();
+                      }),
+                    ],
+
+                    // 2. Deep Search Indicator (status updates)
                     if (widget.message.deepSearchUpdates.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: _buildDeepSearchIndicator(widget.message),
                       ),
 
-                    // 2. Plan Indicator (collapsible)
+                    // 3. Plan Indicator (collapsible)
                     if (widget.message.plan != null && widget.message.plan!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -390,17 +412,46 @@ class _MessageBubbleState extends State<MessageBubble> {
                           isStreaming: widget.message.isStreaming,
                         ),
                       ),
+                      
+                    // 4. Post-Search Thinking (if any)
+                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty) ...[
+                      Builder(builder: (context) {
+                         final thinking = widget.message.thinking!;
+                         final splitIndex = widget.message.deepSearchStartIndex;
+                         
+                         if (splitIndex != null && splitIndex < thinking.length) {
+                           final postThinking = thinking.substring(splitIndex);
+                           if (postThinking.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildReasoningChain(context, theme, widget.message, contentOverride: postThinking),
+                              );
+                           }
+                         }
+                         return const SizedBox.shrink();
+                      }),
+                    ],
 
-                    // 3. Interleaved Thinking and Tool Indicators
-                    // Replaces old Thinking Indicator
-                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildReasoningChain(context, theme, widget.message),
-                      ),
+                    // Code Executions Results (Above content to avoid jumping)
+                    if (widget.message.codeExecutions.isNotEmpty) ...[
+                       ...widget.message.codeExecutions.map((exec) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: CodeExecutionWidget(
+                              code: exec['code'] ?? '',
+                              output: exec['output'] ?? '',
+                              error: exec['error'] ?? '',
+                              isDark: isDark,
+                            ),
+                          );
+                       }),
+                       const SizedBox(height: 8),
+                    ],
 
                     // 2. Content with interleaved indicators (using imageBuilder)
                     _buildMarkdownContent(theme, isDark),
+
+
 
                     // Generated Images from ComfyUI (base64 encoded)
                     if (widget.message.generatedImages.isNotEmpty)
@@ -847,13 +898,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       completedSteps: completedSteps,
     );
   }
-  Widget _buildReasoningChain(BuildContext context, ThemeData theme, Message message) {
-    if (message.thinking == null) return const SizedBox.shrink();
+  Widget _buildReasoningChain(BuildContext context, ThemeData theme, Message message, {String? contentOverride}) {
+    if (message.thinking == null && contentOverride == null) return const SizedBox.shrink();
 
     final List<Widget> children = [];
     final splitPattern = RegExp(r'\n\n<<<TOOL:(.*?):(.*?)>>>\n\n');
     
-    final thinkingContent = message.thinking!;
+    final thinkingContent = contentOverride ?? message.thinking!;
     final matches = splitPattern.allMatches(thinkingContent);
     
     int lastIndex = 0;

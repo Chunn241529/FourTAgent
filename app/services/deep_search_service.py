@@ -43,7 +43,7 @@ class DeepSearchService:
         # 1. Get History Context
         # ChatService._get_hierarchical_memory is static but we need to run it in executor if it's blocking
         loop = asyncio.get_running_loop()
-        summary, _, working_memory = await loop.run_in_executor(
+        summary, semantic_messages, working_memory = await loop.run_in_executor(
             None,
             lambda: ChatService._get_hierarchical_memory(
                 db, conversation_id, current_query=topic, user_id=user_id
@@ -53,17 +53,34 @@ class DeepSearchService:
         history_context = ""
         if summary:
             history_context += f"Conversation Summary:\n{summary}\n\n"
+
+        # Add Semantic Memory to context
+        if semantic_messages:
+            history_context += "Relevant Past Details:\n"
+            for msg in semantic_messages:
+                history_context += f"- {msg.role}: {msg.content}\n"
+            history_context += "\n"
+
         if working_memory:
             history_context += "Recent Messages:\n"
             for msg in working_memory:
                 history_context += f"- {msg.role}: {msg.content}\n"
 
+        # Track artifacts for saving history
+        collected_plan = ""
+        collected_thinking = ""
+        collected_updates = []
+
         # 2. Generate Broad Queries
-        yield f"data: {json.dumps({'deep_search_update': {'status': 'planning', 'message': 'Generating search strategy...'}}, separators=(',', ':'))}\n\n"
+        update_msg = "Generating search strategy..."
+        collected_updates.append(update_msg)
+        yield f"data: {json.dumps({'deep_search_update': {'status': 'planning', 'message': update_msg}}, separators=(',', ':'))}\n\n"
         queries = await self._generate_multi_queries(topic, history_context, client)
 
         # 3. Execute Broad Search
-        yield f"data: {json.dumps({'deep_search_update': {'status': 'searching', 'message': f'Researching...'}}, separators=(',', ':'))}\n\n"
+        update_msg = "Researching..."
+        collected_updates.append(update_msg)
+        yield f"data: {json.dumps({'deep_search_update': {'status': 'searching', 'message': update_msg}}, separators=(',', ':'))}\n\n"
 
         all_results = []
         for i, query in enumerate(queries):
@@ -73,7 +90,9 @@ class DeepSearchService:
             all_results.extend(results)
 
         # 4. RAG Reranking
-        yield f"data: {json.dumps({'deep_search_update': {'status': 'reflecting', 'message': 'Analyzing and verifying specific details...'}}, separators=(',', ':'))}\n\n"
+        update_msg = "Analyzing and verifying specific details..."
+        collected_updates.append(update_msg)
+        yield f"data: {json.dumps({'deep_search_update': {'status': 'reflecting', 'message': update_msg}}, separators=(',', ':'))}\n\n"
         # Offload FAISS/BM25 rerank to thread
         top_results = await loop.run_in_executor(
             None, lambda: self._rerank_results(topic, all_results, top_k=6)
@@ -83,16 +102,21 @@ class DeepSearchService:
         gc.collect()
 
         # 5. Plan Report
-        yield f"data: {json.dumps({'deep_search_update': {'status': 'planning', 'message': 'Creating research plan...'}}, separators=(',', ':'))}\n\n"
+        update_msg = "Creating research plan..."
+        collected_updates.append(update_msg)
+        yield f"data: {json.dumps({'deep_search_update': {'status': 'planning', 'message': update_msg}}, separators=(',', ':'))}\n\n"
         combined_context = "\n\n".join(top_results)
         report_plan = await self._generate_report_plan(topic, combined_context, client)
+        collected_plan = report_plan
 
         yield f"data: {json.dumps({'plan': report_plan}, separators=(',', ':'))}\n\n"
 
         gc.collect()
 
         # 6. Final Synthesis
-        yield f"data: {json.dumps({'deep_search_update': {'status': 'synthesizing', 'message': 'Synthesizing answer...'}}, separators=(',', ':'))}\n\n"
+        update_msg = "Synthesizing answer..."
+        collected_updates.append(update_msg)
+        yield f"data: {json.dumps({'deep_search_update': {'status': 'synthesizing', 'message': update_msg}}, separators=(',', ':'))}\n\n"
 
         final_report = ""
         async for sse_chunk in self._final_synthesis(
@@ -102,6 +126,11 @@ class DeepSearchService:
             try:
                 if sse_chunk.startswith("data: "):
                     chunk_json = json.loads(sse_chunk[6:].strip())
+
+                    # Collect thinking
+                    if "thinking" in chunk_json:
+                        collected_thinking += chunk_json["thinking"]
+
                     if "message" in chunk_json and "content" in chunk_json["message"]:
                         content_delta = chunk_json["message"].get("content", "")
                         if content_delta:
@@ -131,13 +160,49 @@ class DeepSearchService:
 
                 # Save Assistant Message (Report)
                 ass_emb = EmbeddingService.get_embedding(final_report)
+
+                # Check for existing deep search updates to assume start index
+                # Ideally, if we have thinking, we should check when deep search started?
+                # For now, let's just save the raw data.
+
                 ass_msg = ModelChatMessage(
                     user_id=user_id,
                     conversation_id=conversation_id,
                     content=final_report,
                     role="assistant",
                     embedding=json.dumps(ass_emb.tolist()),
+                    thinking=collected_thinking if collected_thinking else None,
+                    deep_search_updates=(
+                        json.dumps(collected_updates) if collected_updates else None
+                    ),
+                    # We can store plan in 'deep_search_updates' or maybe specific field if we migrate DB
+                    # But ChatMessage doesn't have 'plan' field yet in `app/models.py`?
+                    # Let's check `app/models.py`. It does NOT have 'plan'.
+                    # So we should append plan to thinking or content?
+                    # Or serialize it into deep_search_updates?
+                    # Re-checking model: It supports `deep_search_updates`.
+                    # Let's stash the plan as a special entry in updates or just pre-pend to content?
+                    # Better: The frontend expects 'plan' field in Message model, but backend ModelChatMessage might not have it.
+                    # Wait, looking at `app/models.py` in previous turn:
+                    # `deep_search_updates = Column(JSON, nullable=True)`
+                    # `thinking = Column(String, nullable=True)`
+                    # It DOES NOT have `plan`.
+                    # We should probably add `plan` column OR store it in `deep_search_updates` as a special object?
+                    # But `deep_search_updates` is usually List[String].
+                    # Let's just append plan to the beginning of thinking with a marker? OR rely on frontend to parse it?
+                    # Actually, let's just add it to `thinking` with a marker if we can't change schema.
+                    # OR, we format `thinking` nicely: "PLAN:\n...\n\nTHINKING:\n..."
                 )
+
+                # Adding plan to thinking for now since schema mod is risky in hotfix
+                if collected_plan:
+                    if ass_msg.thinking:
+                        ass_msg.thinking = (
+                            f"PLAN:\n{collected_plan}\n\n{ass_msg.thinking}"
+                        )
+                    else:
+                        ass_msg.thinking = f"PLAN:\n{collected_plan}"
+
                 db.add(ass_msg)
                 db.commit()
 

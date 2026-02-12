@@ -1,11 +1,11 @@
 {
-  "client_id": "41d5419dee984d65a78c29ac7f5f6785",
+  "client_id": "f0533dddbcfa41218164f768a00f2b58",
   "prompt": {
     "3": {
       "inputs": {
-        "seed": 174797789927442,
-        "steps": 30,
-        "cfg": 7,
+        "seed": 190694894107625,
+        "steps": 6,
+        "cfg": 1.5,
         "sampler_name": "dpmpp_sde",
         "scheduler": "karras",
         "denoise": 1,
@@ -33,7 +33,7 @@
     },
     "4": {
       "inputs": {
-        "ckpt_name": "Lumina_genv2.safetensors"
+        "ckpt_name": "Lumina_Real.safetensors"
       },
       "class_type": "CheckpointLoaderSimple",
       "_meta": {
@@ -42,8 +42,8 @@
     },
     "5": {
       "inputs": {
-        "width": 512,
-        "height": 768,
+        "width": 600,
+        "height": 848,
         "batch_size": 1
       },
       "class_type": "EmptyLatentImage",
@@ -53,7 +53,7 @@
     },
     "6": {
       "inputs": {
-        "text": "1cat, cute",
+        "text": "123",
         "clip": [
           "39",
           1
@@ -66,7 +66,7 @@
     },
     "7": {
       "inputs": {
-        "text": "embedding:easynegative, (nude, naked, nsfw, sexy:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands",
+        "text": "embedding:easynegative, (worst quality, low quality:1.4),(nude, naked, nsfw, sexy:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands",
         "clip": [
           "39",
           1
@@ -95,11 +95,11 @@
     },
     "39": {
       "inputs": {
-        "lora_01": "betterhands.safetensors",
+        "lora_01": "None",
         "strength_01": 0.8,
-        "lora_02": "betterfeets.safetensors",
+        "lora_02": "None",
         "strength_02": 0.8,
-        "lora_03": "girl_face.safetensors",
+        "lora_03": "None",
         "strength_03": 0.8,
         "lora_04": "None",
         "strength_04": 0.8,

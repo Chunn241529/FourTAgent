@@ -24,6 +24,167 @@ os.makedirs(RAG_FILES_DIR, exist_ok=True)
 class RAGService:
     rag_files_dir = RAG_FILES_DIR
 
+    # Global File Index (In-Memory)
+    _global_index = None
+    _global_files: List[Dict[str, Any]] = []
+    _global_index_lock = False
+
+    @staticmethod
+    def _build_global_index():
+        """Build global index of all available RAG files for quick retrieval"""
+        if RAGService._global_index_lock:
+            return
+
+        RAGService._global_index_lock = True
+        try:
+            logger.info("Building global RAG file index...")
+            rag_files = []
+
+            # Supported patterns (same as before)
+            supported_patterns = [
+                os.path.join(RAG_FILES_DIR, "*.pdf"),
+                os.path.join(RAG_FILES_DIR, "*.txt"),
+                os.path.join(RAG_FILES_DIR, "*.docx"),
+                os.path.join(RAG_FILES_DIR, "*.xlsx"),
+                os.path.join(RAG_FILES_DIR, "*.xls"),
+                os.path.join(RAG_FILES_DIR, "*.csv"),
+                os.path.join(RAG_FILES_DIR, "*.parquet"),
+                os.path.join(RAG_FILES_DIR, "*.md"),
+                os.path.join(RAG_FILES_DIR, "*.py"),
+                os.path.join(RAG_FILES_DIR, "*.js"),
+                os.path.join(RAG_FILES_DIR, "*.java"),
+                os.path.join(RAG_FILES_DIR, "*.cpp"),
+                os.path.join(RAG_FILES_DIR, "*.h"),
+                os.path.join(RAG_FILES_DIR, "*.c"),
+                os.path.join(RAG_FILES_DIR, "*.cs"),
+                os.path.join(RAG_FILES_DIR, "*.go"),
+                os.path.join(RAG_FILES_DIR, "*.rs"),
+                os.path.join(RAG_FILES_DIR, "*.php"),
+                os.path.join(RAG_FILES_DIR, "*.rb"),
+                os.path.join(RAG_FILES_DIR, "*.swift"),
+                os.path.join(RAG_FILES_DIR, "*.kt"),
+                os.path.join(RAG_FILES_DIR, "*.ts"),
+                os.path.join(RAG_FILES_DIR, "*.tsx"),
+                os.path.join(RAG_FILES_DIR, "*.jsx"),
+                os.path.join(RAG_FILES_DIR, "*.vue"),
+                os.path.join(RAG_FILES_DIR, "*.html"),
+                os.path.join(RAG_FILES_DIR, "*.css"),
+                os.path.join(RAG_FILES_DIR, "*.json"),
+                os.path.join(RAG_FILES_DIR, "*.yaml"),
+                os.path.join(RAG_FILES_DIR, "*.yml"),
+                os.path.join(RAG_FILES_DIR, "*.sh"),
+                os.path.join(RAG_FILES_DIR, "*.sql"),
+            ]
+
+            for pattern in supported_patterns:
+                rag_files.extend(glob.glob(pattern))
+
+            if not rag_files:
+                logger.info("No files found to index.")
+                RAGService._global_files = []
+                RAGService._global_index = None
+                return
+
+            embeddings = []
+            valid_files = []
+
+            for file_path in rag_files:
+                try:
+                    filename = os.path.basename(file_path)
+
+                    # Read first 1000 chars for summary
+                    summary = ""
+                    with open(file_path, "rb") as f:
+                        # Try to read a bit to get context
+                        content = f.read(2048)
+
+                    text_content = FileService.extract_text_from_file(content)
+                    if text_content:
+                        summary = text_content[:500]
+
+                    # Create embedding for "Filename: ... Content: ..."
+                    # Weight filename heavily
+                    index_text = f"Filename: {filename}\nContent: {summary}"
+                    emb = EmbeddingService.get_embedding(index_text, max_length=512)
+
+                    if np.any(emb):
+                        embeddings.append(emb)
+                        valid_files.append(
+                            {
+                                "filename": filename,
+                                "path": file_path,
+                                "summary": summary,
+                            }
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to index file {file_path}: {e}")
+
+            if embeddings:
+                emb_array = np.array(embeddings).astype("float32")
+                faiss.normalize_L2(emb_array)
+
+                index = faiss.IndexFlatIP(EmbeddingService.DIM)
+                index.add(emb_array)
+
+                RAGService._global_index = index
+                RAGService._global_files = valid_files
+                logger.info(f"Built global index with {len(valid_files)} files.")
+            else:
+                RAGService._global_index = None
+                RAGService._global_files = []
+
+        except Exception as e:
+            logger.error(f"Error building global index: {e}")
+        finally:
+            RAGService._global_index_lock = False
+
+    @staticmethod
+    def find_relevant_files(query: str, top_k: int = 5) -> List[str]:
+        """Find relevant files from global index based on query"""
+        # Ensure index exists
+        if RAGService._global_index is None:
+            RAGService._build_global_index()
+
+        if RAGService._global_index is None or not RAGService._global_files:
+            return []
+
+        try:
+            query_emb = EmbeddingService.get_embedding(query, max_length=512)
+            if np.all(query_emb == 0):
+                return []
+
+            query_emb = query_emb.astype("float32").reshape(1, -1)
+            faiss.normalize_L2(query_emb)
+
+            D, I = RAGService._global_index.search(
+                query_emb, k=min(top_k, len(RAGService._global_files))
+            )
+
+            relevant_files = []
+            scores = D[0]
+            indices = I[0]
+
+            for i, idx in enumerate(indices):
+                if idx != -1 and 0 <= idx < len(RAGService._global_files):
+                    score = scores[i]
+                    file_info = RAGService._global_files[idx]
+                    logger.info(
+                        f"Checking file: {file_info['filename']} (score: {score:.3f})"
+                    )
+                    if (
+                        score > 0.40
+                    ):  # Threshold for file relevance - Increased from 0.15
+                        relevant_files.append(file_info["path"])
+                        logger.info(
+                            f"Found relevant file: {file_info['filename']} (score: {score:.3f})"
+                        )
+
+            return relevant_files
+
+        except Exception as e:
+            logger.error(f"Error searching relevant files: {e}")
+            return []
+
     @staticmethod
     def chunk_text(text: str, chunk_size: int = 600, overlap: int = 80) -> List[str]:
         """Chunk text thành các đoạn nhỏ với overlap - improved version"""
@@ -202,26 +363,60 @@ class RAGService:
 
     @staticmethod
     def load_rag_files_to_conversation(
-        user_id: int, conversation_id: int
+        user_id: int, conversation_id: int, target_files: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Tự động load tất cả file trong thư mục rag_files vào conversation"""
+        """
+        Load RAG files vào conversation.
+        Nếu target_files is None, load tất cả (behavior cũ - deprecated logic but kept for fallback).
+        Nếu target_files list provided, chỉ load những file đó.
+        """
         rag_files = []
 
-        supported_patterns = [
-            os.path.join(RAG_FILES_DIR, "*.pdf"),
-            os.path.join(RAG_FILES_DIR, "*.txt"),
-            os.path.join(RAG_FILES_DIR, "*.docx"),
-            os.path.join(RAG_FILES_DIR, "*.xlsx"),
-            os.path.join(RAG_FILES_DIR, "*.xls"),
-            os.path.join(RAG_FILES_DIR, "*.csv"),
-            os.path.join(RAG_FILES_DIR, "*.parquet"),
-        ]
+        if target_files is not None:
+            # Validate existing files
+            rag_files = [f for f in target_files if os.path.exists(f)]
+        else:
+            # Fallback: Load all supported patterns
+            supported_patterns = [
+                os.path.join(RAG_FILES_DIR, "*.pdf"),
+                os.path.join(RAG_FILES_DIR, "*.txt"),
+                os.path.join(RAG_FILES_DIR, "*.docx"),
+                os.path.join(RAG_FILES_DIR, "*.xlsx"),
+                os.path.join(RAG_FILES_DIR, "*.xls"),
+                os.path.join(RAG_FILES_DIR, "*.csv"),
+                os.path.join(RAG_FILES_DIR, "*.parquet"),
+                os.path.join(RAG_FILES_DIR, "*.md"),
+                os.path.join(RAG_FILES_DIR, "*.py"),
+                os.path.join(RAG_FILES_DIR, "*.js"),
+                os.path.join(RAG_FILES_DIR, "*.java"),
+                os.path.join(RAG_FILES_DIR, "*.cpp"),
+                os.path.join(RAG_FILES_DIR, "*.h"),
+                os.path.join(RAG_FILES_DIR, "*.c"),
+                os.path.join(RAG_FILES_DIR, "*.cs"),
+                os.path.join(RAG_FILES_DIR, "*.go"),
+                os.path.join(RAG_FILES_DIR, "*.rs"),
+                os.path.join(RAG_FILES_DIR, "*.php"),
+                os.path.join(RAG_FILES_DIR, "*.rb"),
+                os.path.join(RAG_FILES_DIR, "*.swift"),
+                os.path.join(RAG_FILES_DIR, "*.kt"),
+                os.path.join(RAG_FILES_DIR, "*.ts"),
+                os.path.join(RAG_FILES_DIR, "*.tsx"),
+                os.path.join(RAG_FILES_DIR, "*.jsx"),
+                os.path.join(RAG_FILES_DIR, "*.vue"),
+                os.path.join(RAG_FILES_DIR, "*.html"),
+                os.path.join(RAG_FILES_DIR, "*.css"),
+                os.path.join(RAG_FILES_DIR, "*.json"),
+                os.path.join(RAG_FILES_DIR, "*.yaml"),
+                os.path.join(RAG_FILES_DIR, "*.yml"),
+                os.path.join(RAG_FILES_DIR, "*.sh"),
+                os.path.join(RAG_FILES_DIR, "*.sql"),
+            ]
 
-        for pattern in supported_patterns:
-            rag_files.extend(glob.glob(pattern))
+            for pattern in supported_patterns:
+                rag_files.extend(glob.glob(pattern))
 
         if not rag_files:
-            logger.info(f"No RAG files found in {RAG_FILES_DIR}")
+            # logger.info(f"No RAG files found in {RAG_FILES_DIR}")
             return []
 
         logger.info(
@@ -367,14 +562,43 @@ class RAGService:
             # Load FAISS index directly
             index, exists = RAGService.load_faiss(user_id, conversation_id)
 
-            # If index doesn't exist or is empty, try to load RAG files
-            if not exists or index.ntotal == 0:
-                logger.info("Index missing or empty, attempting to load RAG files...")
-                RAGService.load_rag_files_to_conversation(user_id, conversation_id)
+            # IDENTIFY RELEVANT FILES
+            relevant_files = RAGService.find_relevant_files(effective_query, top_k=5)
+
+            if relevant_files:
+                logger.info(f"Found {len(relevant_files)} relevant files for query")
+
+                # Check which files are NOT yet loaded in the current metadata
+                # Note: This is a bit coarse. Metadata stores chunks, not filenames directly in a clean way in current implementation.
+                # But we can reconstruct it or simply try to load them.
+                # Better approach: load_rag_files_to_conversation handles logic of "adding" to index.
+
+                # For now, we just call load for these files.
+                # Ideally we should check if they are already in index to avoid duplicate work,
+                # but process_file_for_rag creates embeddings every time currently.
+                # Optimization: We should have a way to know what's loaded.
+
+                # Let's load the relevant files.
+                # Note: This might re-index files if they are already there.
+                # Ideally we should modify load_metadata to return list of loaded filenames to skip.
+
+                RAGService.load_rag_files_to_conversation(
+                    user_id, conversation_id, target_files=relevant_files
+                )
+
+                # Reload index after potential updates
                 index, exists = RAGService.load_faiss(user_id, conversation_id)
+            else:
+                logger.info(
+                    "No particular relevant files found from global index for this query."
+                )
 
             if not exists or index.ntotal == 0:
-                logger.warning("FAISS index is empty after loading attempt")
+                # If still empty (no relevant files found or first run), maybe fallback to nothing or check?
+                # If no relevant files, we shouldn't return anything unless there's previous history.
+                logger.warning(
+                    "FAISS index is empty and no relevant files found to load."
+                )
                 return ""
 
             # Load metadata

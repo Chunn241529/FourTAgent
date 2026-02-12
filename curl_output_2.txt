@@ -1,0 +1,120 @@
+data: {"queue_status":{"position":0,"message":"\u0110ang x\u1eed l\u00fd..."}}
+
+data: {"conversation_id":1}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.698045046Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"L","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.724206943Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"umin","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.749132906Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" kh\u00f4ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.772249614Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u00f3","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.796018308Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" th\u00f4ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.820688485Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" tin","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.844956816Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" v\u1ec1","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.867982941Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" th\u1eddi","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.891894409Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" ti\u1ebft","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.915848221Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" Tokyo","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.939013824Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" trong","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.963499402Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u00e1c","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:41.98745565Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" t\u00e0i","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.011709046Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" li\u1ec7u","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.037211792Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" \u0111\u01b0\u1ee3c","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.062083991Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.086004758Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"ung","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.109394996Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u1ea5p","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.132743877Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":".","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.156571633Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" T","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.180382074Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"uy","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.203494972Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" nhi\u00ean","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.228502604Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":",","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.25301702Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" L","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.277500981Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"umin","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.300699094Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u00f3","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.324505903Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" th\u1ec3","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.348426748Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" gi\u00fap","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.373209413Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" an","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.39591169Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"h","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.419763285Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" t\u00ecm","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.443365271Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" ki\u1ebfm","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.466502933Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" th\u00f4ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.490332452Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" tin","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.514375682Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" th\u1eddi","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.538431423Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" ti\u1ebft","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.562326955Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" Tokyo","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.586193883Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" b\u1eb1ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.609846391Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u00e1ch","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.633099943Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" s\u1eed","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.656933989Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" d\u1ee5ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.680719757Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u00f4ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.703939252Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" c\u1ee5","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.72783937Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" t\u00ecm","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.751716554Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" ki\u1ebfm","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.77510738Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":".","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.798461399Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" An","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.822390021Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"h","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.846762015Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" mu\u1ed1n","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.869891349Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" L","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.893685626Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"umin","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.917554776Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" t\u00ecm","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.940888875Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" gi\u00fap","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.964226285Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":" kh\u00f4ng","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:42.988002793Z","done":false,"done_reason":null,"total_duration":null,"load_duration":null,"prompt_eval_count":null,"prompt_eval_duration":null,"eval_count":null,"eval_duration":null,"message":{"role":"assistant","content":"?","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"model":"Lumina","created_at":"2026-02-12T12:46:43.012190487Z","done":true,"done_reason":"stop","total_duration":4999899016,"load_duration":1965519753,"prompt_eval_count":3826,"prompt_eval_duration":1682018114,"eval_count":56,"eval_duration":1298339317,"message":{"role":"assistant","content":"","thinking":null,"images":null,"tool_name":null,"tool_calls":null},"logprobs":null}
+
+data: {"message_saved":{"id":2}}
+
+data: [DONE]
+

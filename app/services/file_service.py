@@ -31,16 +31,38 @@ class FileService:
     def get_file_bytes(file) -> bytes:
         """Lấy bytes từ file object"""
         if hasattr(file, "file"):
+            # UploadFile object
             return file.file.read()
         elif isinstance(file, str):
+            # Log the start of string to see format
+            prefix = file[:50] if len(file) > 50 else file
+            logger.info(f"Processing string file input. Prefix: {prefix}")
+
             if file.startswith("data:"):
-                return (
-                    base64.b64decode(file.split(",")[1])
-                    if "," in file
-                    else base64.b64decode(file)
-                )
+                try:
+                    header, data = file.split(",", 1)
+                    logger.info(f"Decoding base64 file with header: {header}")
+                    decoded = base64.b64decode(data)
+                    logger.info(f"Decoded {len(decoded)} bytes from base64 string")
+                    return decoded
+                except Exception as e:
+                    logger.error(f"Base64 decoding failed: {e}")
+                    # Try direct decode if split fails
+                    return base64.b64decode(file)
             else:
-                return file.encode("utf-8")
+                # Maybe it's raw base64 without prefix?
+                try:
+                    logger.info(
+                        "String does not start with data:, attempting direct base64 decode..."
+                    )
+                    decoded = base64.b64decode(file)
+                    logger.info(f"Direct base64 decode success: {len(decoded)} bytes")
+                    return decoded
+                except:
+                    logger.info(
+                        "Direct base64 failed, treating as utf-8 string path/content"
+                    )
+                    return file.encode("utf-8")
         return file
 
     @staticmethod

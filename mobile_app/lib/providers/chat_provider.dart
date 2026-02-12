@@ -789,6 +789,29 @@ class ChatProvider extends ChangeNotifier {
             }
 
             
+            // Handle code_execution_result
+            if (data['code_execution_result'] != null) {
+               final result = data['code_execution_result'];
+               final code = result['code'] as String?;
+               final output = result['output'] as String?;
+               final error = result['error'] as String?;
+               
+               if (code != null) {
+                  final lastIndex = _messages.length - 1;
+                  if (lastIndex >= 0) {
+                     final currentExecutions = List<Map<String, String>>.from(_messages[lastIndex].codeExecutions);
+                     currentExecutions.add({
+                        'code': code.toString(),
+                        'output': (output ?? '').toString(),
+                        'error': (error ?? '').toString(),
+                     });
+                     
+                     _messages[lastIndex] = _messages[lastIndex].copyWith(codeExecutions: currentExecutions);
+                     shouldNotify = true;
+                  }
+               }
+            }
+
             // Handle file_tool_complete
             if (data['file_tool_complete'] != null) {
               final tag = data['file_tool_complete']['tag'] as String?;
@@ -812,9 +835,19 @@ class ChatProvider extends ChangeNotifier {
                  final lastIndex = _messages.length - 1;
                  if (lastIndex >= 0) {
                     final currentUpdates = List<String>.from(_messages[lastIndex].deepSearchUpdates);
+                    
+                    // Capture start index if it's the first update
+                    int? startIndex = _messages[lastIndex].deepSearchStartIndex;
+                    if (currentUpdates.isEmpty) {
+                      startIndex = fullThinking.length;
+                    }
+                    
                     if (currentUpdates.isEmpty || currentUpdates.last != message) {
                        currentUpdates.add(message);
-                       _messages[lastIndex] = _messages[lastIndex].copyWith(deepSearchUpdates: currentUpdates);
+                       _messages[lastIndex] = _messages[lastIndex].copyWith(
+                         deepSearchUpdates: currentUpdates,
+                         deepSearchStartIndex: startIndex
+                       );
                        shouldNotify = true;
                     }
                  }
