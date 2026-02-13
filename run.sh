@@ -96,11 +96,41 @@ clean_terminal() {
 # Trap để cleanup khi script bị kill
 trap 'stop_server; stop_tunnel; exit 0' SIGINT SIGTERM
 
+# Parse Argument
+MODE=$1
+
+if [ -z "$MODE" ]; then
+    echo "=========================================="
+    echo "  Chọn chế độ chạy (Select Mode):"
+    echo "  1) Local (không dùng tunnel)"
+    echo "  2) Tunnel (dùng cloudflared)"
+    echo "=========================================="
+    read -p "Nhập lựa chọn (1/2) [Mặc định: 1]: " choice
+    
+    case "$choice" in
+        2)
+            MODE="tunnel"
+            ;;
+        *)
+            MODE="local"
+            ;;
+    esac
+fi
+
+echo "=========================================="
+echo "  MODE: $MODE"
+echo "  Usage: ./run.sh [local|tunnel]"
+echo "=========================================="
+
 # Dọn dẹp cache lần đầu
 cleanup_cache
 
-# Chạy tunnel
-run_tunnel
+# Chạy tunnel nếu mode là tunnel
+if [ "$MODE" = "tunnel" ]; then
+    run_tunnel
+else
+    echo "🚫 Skipping Tunnel (Local Mode)"
+fi
 
 # Chạy server lần đầu
 if ! run_server; then

@@ -14,6 +14,8 @@ import glob
 from pathlib import Path
 from app.services.image_generation_service import image_generation_service
 from app.services.code_interpreter_service import CodeInterpreterService
+from app.services.cloud_file_service import CloudFileService
+from app.services.cloud_file_service import CloudFileService
 
 logger = logging.getLogger(__name__)
 
@@ -325,15 +327,97 @@ class ToolService:
             "pause_music": music_queue_service.pause_music,
             "resume_music": music_queue_service.resume_music,
             "get_current_playing": music_queue_service.get_current_playing,
-            "read_file": read_file_server,
-            "search_file": search_file_server,
-            "create_file": create_file_server,
+            "get_current_playing": music_queue_service.get_current_playing,
+            # Legacy/Unsafe tools - potentially deprecate or restrict?
+            # For now keeping them but adding cloud tools
+            # Legacy/Unsafe tools - Redirected to Cloud for security/consistency
+            "read_file": self._cloud_read_file_wrapper,
+            "search_file": self._cloud_search_file_wrapper,
+            "create_file": self._cloud_create_file_wrapper,
+            # New Cloud Tools
+            "cloud_list_files": self._cloud_list_files_wrapper,
+            "cloud_read_file": self._cloud_read_file_wrapper,
+            "cloud_create_file": self._cloud_create_file_wrapper,
+            "cloud_delete_file": self._cloud_delete_file_wrapper,
+            "cloud_create_folder": self._cloud_create_folder_wrapper,
             "generate_image": self._generate_image_sync,
             "create_canvas": self._create_canvas_wrapper,
             "update_canvas": self._update_canvas_wrapper,
             "read_canvas": self._read_canvas_wrapper,
             "execute_python": CodeInterpreterService.execute_python,
         }
+
+    # --- Cloud File Wrappers ---
+    def _get_user_id(self, user_id: int = None):
+        if user_id is None:
+            raise ValueError("User ID required for cloud file operations")
+        return user_id
+
+    def _cloud_list_files_wrapper(self, directory: str = "/", user_id: int = None):
+        try:
+            uid = self._get_user_id(user_id)
+            files = CloudFileService.list_files(uid, directory)
+            return json.dumps(files, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    def _cloud_search_file_wrapper(
+        self, query: str, directory: str = None, user_id: int = None
+    ):
+        try:
+            uid = self._get_user_id(user_id)
+            # If directory is provided, it's ignored for now as search is recursive from root,
+            # or we could filter results. For simplicity, ignore directory arg or assume it's part of query.
+            files = CloudFileService.search_files(uid, query)
+            return json.dumps(files, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    def _cloud_read_file_wrapper(self, path: str, user_id: int = None):
+        try:
+            uid = self._get_user_id(user_id)
+            content = CloudFileService.read_file(uid, path)
+            return content  # Return raw content string
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def _cloud_create_file_wrapper(self, path: str, content: str, user_id: int = None):
+        try:
+            uid = self._get_user_id(user_id)
+            result = CloudFileService.create_file(uid, path, content)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    def _cloud_delete_file_wrapper(self, path: str, user_id: int = None):
+        try:
+            uid = self._get_user_id(user_id)
+            # Try file delete first, then folder delete if needed?
+            # User asked for "delete (all)", so let's check path type or try both?
+            # Service has separate methods. Let's expose both or a smart delete?
+            # For header simplicity, let's try delete_file, if 'IsADirectory', try delete_folder
+            try:
+                result = CloudFileService.delete_file(uid, path)
+            except BlockingIOError:
+                # Directory not empty
+                raise ValueError(
+                    f"Directory {path} is not empty. Use cloud_delete_folder? Or we assume this tool deletes files only?"
+                )
+            except IsADirectoryError:
+                # It's a directory, use delete_folder (recursive)
+                result = CloudFileService.delete_folder(uid, path)
+
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    def _cloud_create_folder_wrapper(self, path: str, user_id: int = None):
+        try:
+            uid = self._get_user_id(user_id)
+            result = CloudFileService.create_folder(uid, path)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     def _create_canvas_wrapper(
         self, title: str, content: str, type: str = "markdown", user_id: int = None
@@ -649,6 +733,95 @@ class ToolService:
             {
                 "type": "function",
                 "function": {
+                    "name": "cloud_list_files",
+                    "description": "List files and directories in your secure cloud storage. Use this to see what files you have access to.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "directory": {
+                                "type": "string",
+                                "description": "Directory to list (default: '/')",
+                            }
+                        },
+                        "required": [],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "cloud_read_file",
+                    "description": "Read the content of a file from your cloud storage.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Path to the file (relative to cloud root, e.g., 'notes/plan.txt')",
+                            }
+                        },
+                        "required": ["path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "cloud_create_file",
+                    "description": "Create or overwrite a file in your cloud storage with new content.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Path to the file (e.g., 'reports/feb.txt')",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The content to write to the file.",
+                            },
+                        },
+                        "required": ["path", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "cloud_delete_file",
+                    "description": "Delete a file or directory from your cloud storage. BE CAREFUL: Deleting a directory is recursive.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Path to delete.",
+                            }
+                        },
+                        "required": ["path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "cloud_create_folder",
+                    "description": "Create a new directory in your cloud storage.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Path for the new folder.",
+                            }
+                        },
+                        "required": ["path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "deep_search",
                     "description": "Perform in-depth research on a complex topic. Generates a detailed report from multiple sources. Use only for complex requests.",
                     "parameters": {
@@ -804,6 +977,15 @@ class ToolService:
                         "read_canvas",
                         "list_canvases",
                         "delete_canvas",
+                        "delete_canvas",
+                        "read_file",
+                        "create_file",
+                        "search_file",
+                        "cloud_list_files",
+                        "cloud_read_file",
+                        "cloud_create_file",
+                        "cloud_delete_file",
+                        "cloud_create_folder",
                     ]:
                         tool_args["user_id"] = context["user_id"]
 
@@ -852,6 +1034,15 @@ class ToolService:
                         "read_canvas",
                         "list_canvases",
                         "delete_canvas",
+                        "delete_canvas",
+                        "read_file",
+                        "create_file",
+                        "search_file",
+                        "cloud_list_files",
+                        "cloud_read_file",
+                        "cloud_create_file",
+                        "cloud_delete_file",
+                        "cloud_create_folder",
                     ]:
                         tool_args["user_id"] = context["user_id"]
 

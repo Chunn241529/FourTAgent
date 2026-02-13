@@ -33,7 +33,7 @@ class MacDock extends StatefulWidget {
   State<MacDock> createState() => _MacDockState();
 }
 
-class _MacDockState extends State<MacDock> with SingleTickerProviderStateMixin {
+class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
   bool _isExpanded = true;
   Offset _position = const Offset(20, 20); // Default position
   late AnimationController _expandController;

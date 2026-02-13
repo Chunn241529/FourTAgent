@@ -11,6 +11,7 @@ import 'providers/canvas_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/desktop_home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'auth_wrapper.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -91,7 +92,7 @@ class _FourTChatAppState extends State<FourTChatApp> with WidgetsBindingObserver
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: const AuthWrapper(),
+            home: const SplashScreen(),
           );
         },
       ),

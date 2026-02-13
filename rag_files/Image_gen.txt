@@ -1,13 +1,221 @@
-Prompt tạo ảnh mẫu:
-1. There you can see a centipede-penguin hybrid.  Keep the realism of the photo and surrealism of the situation, The centipede-penguin hybrid face and main body are in focus while itself (as the background) is blurry, utilize heavy depth of field effect. 
-2. Create a close-up, ethereal portrait of a woman. She has striking blue eyes. Her face and hair are adorned with delicate butterflies, some resting on her lips and face, and tiny dried blue flowers. The lighting is soft and diffused, creating a dreamy atmosphere with a touch of melancholy. The overall style is reminiscent of a fashion magazine cover, with a focus on beauty and a connection with nature. Use muted, cool tones with emphasis on the blues and purples of the butterflies and flowers. 
-3. The light is diffused, filtering through an unseen canopy, illuminating a face poised between human and feline. Warm tones dominates ochre, gold, and umber mottled across the skin with darker spots like a leopard's coat. The eyes are narrow slits of amber, reflecting the ambient glow with unnerving intensity. Whiskers, fine and white, fan outward from the muzzle. A slight furrow creases the brow above the intense gaze. The mouth is open in a silent snarl, revealing rows of sharp, ivory teeth; saliva glistens faintly on the lower lip. The posture suggests alertness, a contained readiness for action. Subtle shadows define the cheekbones and jawline, emphasizing a primal strength. There's an almost palpable sense of restrained energy within the frame. 
-4. A low angle perspective view from lowest ground level of the Tin Woodman's full-length expressive metal body from his feet to head towering in the distance (The camera is placed on the ultra lowest ground level at his feet to the left of the central axis and shoots upward at an angle). The Tin Woodman clutches his large rusted two-handed axe in his hands, having moved it behind his back, swinging for a strike. The line of his closed mouth's lips is frozen in a wide, hopeless smile. His eyes are dimly smoldering, perceiving reality and searching for existential meanings. On his chest is a heart-shaped depression with many contacts around the outline and the Nvidia emblem in the center for the installation of the currently missing CPU. Show the electronic essence of his heart by forming a processor socket structure in the shape of a heart, conductors, and chips, while maintaining the shape of the heart. Corrosion has appeared on his metal body, and colonies of green microorganisms have begun to develop. A magical forest with mighty tree canopies in a haze of fog, condensing moisture on the cold metal of his body. A bizarre, mysterious world where the cyborg dreams of his new electronic heart, facing natural disasters and evil schemes. 
-5. masterpiece, high_quality, highres, blended, absurdres, solo, dynamic_angle, split colored background, woman, looking at viewer,
-6. masterpiece, best quality, photorealistic, impressionism, ass focus, pussy under clothes, black panties, excessive pussy juice, ultra detailed, dark, pussy under clothes, g-string, looking at the viewer, on side, blurry background, flat ass, blunt bangs, 
-7. Epic landscape, bright blue sky, majestic, fantasy land, elegant big rocks, (cold sun light: 1.7), lake, dramatic lighting, digital art, soft yellows, warm reds, green landscape, epiCPhoto, world tree, endless forest, amazing world, ancient world, feeling of time, abyss, epic landscape, just after ice age, ultra detailed
-8. Timeless color palette, soft yet intricate texture, slightly desaturated tones, warm and archival hues, subtle aging marks, The indecent drone photography scene immerses the viewer from a high vantage point, revealing intricate details that craft an enticing atmosphere brimming with captivating allure and radical intricacy. The soft bokeh effect enriches the expansive composition, encouraging exploration of delicate textures and vibrant patterns that unfold in stunning high-angle aerial views, filled with fundamental delight. Gentle contrasts between radiant highlights and bold shadows foster a soothing interplay of revealing light, evoking a sense of indecent fascination and profound layers within the scene viewed from above. Each distinctive image, captured from this perspective, celebrates the revealing art of drone photography, inviting deep admiration for the breathtaking beauty showcased from the sky., The landscape photography scene is set with warm, golden light that bathes the scenery in an inviting glow, highlighting the lush colors and intricate textures of the terrain. The subtle bokeh effect enhances the visual experience, adding depth and focus to the foreground details. Bold contrasts between the vibrant elements of nature and soft shadows enrich the dynamic interplay of light, showcasing the landscapeâ€™s beauty with a serene elegance that evokes a sense of tranquility and wonder., (Ultra-realistic, 32k, Masterpiece, filmfotos, film grain, reversal film photography) Soft, luminescent dawn, with a delicate, ethereal glow that seems to emanate from the very atmosphere itself, like the soft background with bokeh, added by a whispery fold of a softly blurring optical filter. The air is crisp, with a hint of morning dew and the scent of blooming flowers, as the rising light of day casts a serene radiance over the terrain, like the gentle delight of a awakening sunrise. The shadows themselves are nuanced and multi-tonal, with subtle gradations of rich plum, golden sienna, and soft amethyst that add depth and dimensionality to the scene, and seem to vibrate with a quiet, inner energy. The light is soft and diffused, with a slight purple-golden tint, like the gentle morning, and the shadows are long and sinuous, stretching out across the scene. The overall effect is one of peaceful, serene tranquility, as if the very world itself were awakening from a gentle slumber, and the dawn is a soft, soothing balm that calms the senses and lifts the spirit. The colors are muted and subdued, with a predominance of rich, jewel-toned hues that seem to deepen and richen as the light grows, with muted tones at the edges and a condensed centre focusing the intricate detailing in the foreground., Greek style, bold Hellenic rural representation, Greek flora, significant Greek biome features, dark , warm Mediterranean, radiant Greek, Aegean defined pastoral, primal Greek landscape shape. with gentle vignette, rounded natural contours, authentic material texture, analog document aesthetic, soft focus in selective areas, historical lighting style, stylized period imperfections, authentic historical mood, aged archival finish, glossy yet worn surface, classic period charm, carefully composed historical scene, evocative of past centuries, immersive atmosphere of bygone eras, handcrafted detailing, layered shadows with deep depth, hyperdetailed grain texture, high fidelity rendering of historical attire and setting, crisp focal point with blurred periphery, intimate historical moment, private archival capture, refined period lighting, motion captured in stillness, preserved memory feel, meticulously rendered with photographic precision yet period-authentic ambiance.
-9. Realistic, space, space ship. space battleship, red lasers, blue planet,
-10. 1girl,(dark art by Kentaro Miura:1.0) , masterpiece 3d blender render, cozy, Portrait of a Emerging Weird ([Megalodon:Helicopter:4] of Crushing:1.3) , Glib Bern in background, desolate reeds and Aurora Australis in background, Foggy conditions, deep focus, Sketched, Lonely, Nu Goth Art, rim light, F/5, two colors, Complex background, intricate, octane engine, extremely hyper aesthetic
-11. a simple room lit by window light, soft patterns of shadow on the wall, dust particles floating in the air, minimal furniture, calm and intimate atmosphere
-12. A cozy, cluttered artist's studio filled with canvases, paint tubes, and scattered sketches, illuminated by warm lamplight, creating a sense of creative chaos and inspiration.
+[RAG_ITEM]
+ID: img_001
+CATEGORY: surreal_photorealism
+STYLE: realistic surreal creature
+POSITIVE_PROMPT:
+centipede-penguin hybrid, photorealistic, surreal situation, heavy depth of field, subject in focus, blurry background, masterpiece, best quality, ultra detailed, cinematic lighting, sharp focus
+CAMERA_LIGHTING:
+realistic photography, strong depth of field
+COMPOSITION:
+subject centered
+SD1.5_TAGS:
+realistic, photorealistic, depth_of_field, detailed
+
+[RAG_ITEM]
+ID: img_002
+CATEGORY: portrait
+STYLE: ethereal fashion portrait
+POSITIVE_PROMPT:
+close-up portrait, woman, striking blue eyes, butterflies on face and lips, tiny dried blue flowers, soft diffused lighting, dreamy atmosphere, fashion magazine style, muted cool tones, blues and purples emphasis, masterpiece, best quality, ultra detailed, cinematic lighting, sharp focus
+CAMERA_LIGHTING:
+soft light, shallow depth of field
+COMPOSITION:
+close-up face framing
+SD1.5_TAGS:
+1girl, portrait, ethereal, soft light, detailed eyes
+
+[RAG_ITEM]
+ID: img_003
+CATEGORY: fantasy_creature
+STYLE: anthropomorphic feline cinematic
+POSITIVE_PROMPT:
+human-feline hybrid face, amber slit eyes, leopard-like skin texture, whiskers, primal expression, cinematic lighting, diffused canopy light, warm ochre gold umber tones, sharp ivory teeth, ultra detailed skin texture, masterpiece, best quality, cinematic atmosphere
+CAMERA_LIGHTING:
+cinematic portrait lighting
+COMPOSITION:
+intense face focus
+SD1.5_TAGS:
+fantasy, cinematic, realistic, dramatic lighting
+
+[RAG_ITEM]
+ID: img_004
+CATEGORY: cinematic_fantasy
+STYLE: dark fantasy cyborg
+POSITIVE_PROMPT:
+Tin Woodman, extreme low angle shot, full metal body towering view, rusted two-handed axe, foggy magical forest, cybernetic heart processor socket shaped like heart, corrosion and green microorganisms on metal body, cinematic dark fantasy world, epic scale, masterpiece, ultra detailed, dramatic lighting
+CAMERA_LIGHTING:
+extreme low angle cinematic lighting
+COMPOSITION:
+dynamic upward perspective
+SD1.5_TAGS:
+epic, cinematic, dark fantasy, mechanical
+
+[RAG_ITEM]
+ID: img_005
+CATEGORY: anime
+STYLE: sd tag prompt
+POSITIVE_PROMPT:
+masterpiece, high_quality, highres, absurdres, solo, dynamic_angle, split colored background, woman, looking at viewer, ultra detailed, sharp focus
+CAMERA_LIGHTING:
+stylized lighting
+COMPOSITION:
+character centered
+SD1.5_TAGS:
+1girl, anime, dynamic pose
+
+[RAG_ITEM]
+ID: img_006
+CATEGORY: nsfw_anime
+STYLE: detailed anime render
+POSITIVE_PROMPT:
+masterpiece, best quality, photorealistic, impressionism, ultra detailed, dark atmosphere, black panties, g-string, looking at viewer, blunt bangs, blurry background, cinematic lighting
+CAMERA_LIGHTING:
+dramatic dark lighting
+COMPOSITION:
+side view pose
+SD1.5_TAGS:
+anime, detailed, stylized
+
+[RAG_ITEM]
+ID: img_007
+CATEGORY: epic_landscape
+STYLE: fantasy environment
+POSITIVE_PROMPT:
+epic fantasy landscape, bright blue sky, majestic world tree, elegant big rocks, cold sunlight, lake, dramatic lighting, soft yellows, warm reds, green landscape, ancient world feeling, just after ice age, ultra detailed environment, masterpiece, cinematic scale
+CAMERA_LIGHTING:
+epic wide landscape lighting
+COMPOSITION:
+wide environmental shot
+SD1.5_TAGS:
+landscape, fantasy world, epic scenery
+
+[RAG_ITEM]
+ID: img_008
+CATEGORY: historical_landscape
+STYLE: cinematic drone photography historical aesthetic
+POSITIVE_PROMPT:
+high angle drone photography landscape, soft bokeh, warm golden light, archival historical aesthetic, aged film texture, greek rural landscape, mediterranean tones, analog document feel, layered shadows, soft luminescent dawn, ethereal atmosphere, ultra realistic, film grain, masterpiece, high fidelity rendering
+CAMERA_LIGHTING:
+aerial view, dawn lighting
+COMPOSITION:
+high angle expansive framing
+SD1.5_TAGS:
+drone_view, cinematic, historical, analog_style
+
+[RAG_ITEM]
+ID: img_009
+CATEGORY: sci_fi
+STYLE: space cinematic
+POSITIVE_PROMPT:
+realistic space scene, space battleship, red laser weapons, blue planet backdrop, cinematic sci-fi atmosphere, ultra detailed spacecraft, dramatic lighting, masterpiece, sharp focus
+CAMERA_LIGHTING:
+space cinematic lighting
+COMPOSITION:
+wide space battle framing
+SD1.5_TAGS:
+spaceship, sci-fi, space battle
+
+[RAG_ITEM]
+ID: img_010
+CATEGORY: dark_anime
+STYLE: dark fantasy anime inspired
+POSITIVE_PROMPT:
+1girl, dark art style inspired by Kentaro Miura, masterpiece 3d blender render, emerging weird hybrid creature, foggy conditions, rim light, deep focus, nu goth art, aurora australis background, complex environment, intricate details, octane render aesthetic, hyper aesthetic composition
+CAMERA_LIGHTING:
+rim lighting cinematic
+COMPOSITION:
+portrait with complex background
+SD1.5_TAGS:
+dark fantasy, anime, dramatic
+
+[RAG_ITEM]
+ID: img_011
+CATEGORY: minimal_interior
+STYLE: calm natural light photography
+POSITIVE_PROMPT:
+simple room, window light illumination, soft shadow patterns on wall, floating dust particles, minimal furniture, calm intimate atmosphere, natural lighting, realistic interior photography, masterpiece, ultra detailed
+CAMERA_LIGHTING:
+soft window light
+COMPOSITION:
+minimalist framing
+SD1.5_TAGS:
+interior, minimalism, natural light
+
+[RAG_ITEM]
+ID: img_012
+CATEGORY: cozy_interior
+STYLE: warm artistic studio
+POSITIVE_PROMPT:
+cozy cluttered artist studio, canvases, paint tubes, scattered sketches, warm lamplight illumination, creative chaos atmosphere, cinematic interior lighting, detailed environment, masterpiece, ultra detailed
+CAMERA_LIGHTING:
+warm lamp lighting
+COMPOSITION:
+environment storytelling
+SD1.5_TAGS:
+studio, cozy, artistic environment
+
+[RAG_ITEM]
+ID: img_013
+CATEGORY: animal_photorealistic
+STYLE: wildlife photography
+POSITIVE_PROMPT:
+majestic lion portrait, golden mane flowing in wind, intense eyes, photorealistic wildlife photography, natural savanna environment, cinematic lighting, ultra detailed fur texture, shallow depth of field, masterpiece, best quality, sharp focus
+CAMERA_LIGHTING:
+natural sunlight, telephoto wildlife lens
+COMPOSITION:
+close-up animal portrait
+SD1.5_TAGS:
+lion, wildlife, photorealistic, animal portrait
+
+[RAG_ITEM]
+ID: img_014
+CATEGORY: animal_fantasy
+STYLE: mystical creature
+POSITIVE_PROMPT:
+ethereal glowing fox spirit, flowing energy trails, magical forest environment, soft fog, fantasy atmosphere, luminescent fur, cinematic fantasy lighting, ultra detailed, masterpiece, vibrant mystical colors
+CAMERA_LIGHTING:
+soft magical glow
+COMPOSITION:
+dynamic side pose
+SD1.5_TAGS:
+fantasy animal, spirit fox, glowing creature
+
+[RAG_ITEM]
+ID: img_015
+CATEGORY: animal_anime
+STYLE: cute anime creature
+POSITIVE_PROMPT:
+cute anime cat, large expressive eyes, soft fluffy fur, pastel color palette, clean lineart, detailed shading, cozy atmosphere, sitting pose, looking at viewer, masterpiece, best quality, ultra detailed anime rendering
+CAMERA_LIGHTING:
+soft stylized lighting
+COMPOSITION:
+centered character framing
+SD1.5_TAGS:
+anime animal, cat, kawaii, 1animal
+
+[RAG_ITEM]
+ID: img_016
+CATEGORY: animal_sci_fi
+STYLE: cyberpunk creature
+POSITIVE_PROMPT:
+cybernetic wolf, mechanical limbs, glowing neon accents, futuristic armor plating, dark cyberpunk city background, cinematic lighting, ultra detailed mechanical textures, realistic fur mixed with metal, masterpiece, high detail
+CAMERA_LIGHTING:
+neon rim light, cyberpunk atmosphere
+COMPOSITION:
+dynamic action stance
+SD1.5_TAGS:
+cyberpunk animal, robotic wolf, sci-fi creature
+
+[RAG_ITEM]
+ID: img_017
+CATEGORY: animal_landscape
+STYLE: cinematic nature
+POSITIVE_PROMPT:
+herd of wild horses running across open grassland at sunset, dust particles in air, dramatic golden hour lighting, cinematic wide shot, photorealistic environment, dynamic motion capture, ultra detailed, masterpiece quality
+CAMERA_LIGHTING:
+golden hour sunlight
+COMPOSITION:
+wide cinematic landscape framing
+SD1.5_TAGS:
+horses, wildlife motion, cinematic landscape
+

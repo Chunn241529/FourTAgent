@@ -495,6 +495,7 @@ class ChatProvider extends ChangeNotifier {
     String? file,
     void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
     bool? voiceEnabled,
+    bool forceCanvas = false,
   }) async {
     if (content.trim().isEmpty) return;
 
@@ -522,7 +523,7 @@ class ChatProvider extends ChangeNotifier {
     _messages.add(userMessage);
     notifyListeners();
 
-    await _initiateStreamResponse(content, file: file, onMusicPlay: onMusicPlay, voiceEnabled: voiceEnabled);
+    await _initiateStreamResponse(content, file: file, onMusicPlay: onMusicPlay, voiceEnabled: voiceEnabled, forceCanvas: forceCanvas);
   }
 
   /// Initialise assistant message placeholder and start streaming
@@ -531,6 +532,7 @@ class ChatProvider extends ChangeNotifier {
     String? file,
     void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
     bool? voiceEnabled,
+    bool forceCanvas = false,
   }) async {
     // Stop any existing stream
     stopStreaming();
@@ -561,6 +563,7 @@ class ChatProvider extends ChangeNotifier {
         file: file,
         voiceEnabled: voiceEnabled ?? _voiceModeEnabled,
         voiceId: _currentVoiceId,  // Use selected voice
+        forceCanvas: forceCanvas,
       );
 
       final completer = Completer<void>();

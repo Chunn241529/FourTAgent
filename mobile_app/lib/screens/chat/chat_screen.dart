@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/music_player_provider.dart';
+import '../../models/conversation.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
 import '../../widgets/settings/settings_dialog.dart';
@@ -175,74 +176,62 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Use Consumer to scope provider access - the build method still rebuilds,
-    // but individual children can use Selector for fine-grained control
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, _) {
-        // Scroll to bottom when streaming - debounced via postFrameCallback
-        // This prevents layout during build phase
-        if (chatProvider.messages.isNotEmpty && chatProvider.isStreaming) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom(isStreaming: true);
-          });
-        }
-
-        return Row(
-          children: [
-            // Left sidebar - Collapsible conversation list
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: _sidebarCollapsed ? 60 : 280,
-              clipBehavior: Clip.hardEdge,
-              decoration: const BoxDecoration(),
-              child: _sidebarCollapsed 
-                  ? _buildCollapsedSidebar(context, theme, chatProvider)
-                  : _buildConversationSidebar(context, theme, chatProvider),
-            ),
-            const VerticalDivider(width: 1, thickness: 1),
-            // Main content area
-            Expanded(
-              child: Consumer<CanvasProvider>(
-                builder: (context, canvasProvider, _) {
-                  final showCanvas = _showCanvasPanel;
-                  if (showCanvas) {
-                     print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
-                  }
-                  
-                  return Column(
-                    children: [
-                      // Header - always full width above canvas
-                      _buildChatHeader(context, theme, chatProvider),
-                      // Chat + Canvas row below header
-                      Expanded(
-                        child: Row(
-                          children: [
-                            // Chat messages area
-                            Expanded(
-                              flex: showCanvas ? 2 : 1,
-                              child: _buildChatContent(context, theme, chatProvider),
-                            ),
-                            // Canvas Panel (List or Content)
-                            if (showCanvas)
-                              const Expanded(
-                                flex: 3,
-                                child: CanvasPanel(),
-                              ),
-                          ],
+    // Remove top-level Consumer to prevent whole screen rebuild on every tick
+    // Individual parts will listen to provider as needed
+    return Row(
+      children: [
+        // Left sidebar - Collapsible conversation list
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: _sidebarCollapsed ? 60 : 280,
+          clipBehavior: Clip.hardEdge,
+          decoration: const BoxDecoration(),
+          child: _sidebarCollapsed 
+              ? _buildCollapsedSidebar(context, theme)
+              : _buildConversationSidebar(context, theme),
+        ),
+        const VerticalDivider(width: 1, thickness: 1),
+        // Main content area
+        Expanded(
+          child: Consumer<CanvasProvider>(
+            builder: (context, canvasProvider, _) {
+              final showCanvas = _showCanvasPanel;
+              if (showCanvas) {
+                 print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
+              }
+              
+              return Column(
+                children: [
+                  // Header - always full width above canvas
+                  _buildChatHeader(context, theme),
+                  // Chat + Canvas row below header
+                  Expanded(
+                    child: Row(
+                      children: [
+                        // Chat messages area
+                        Expanded(
+                          flex: showCanvas ? 2 : 1,
+                          child: _buildChatContent(context, theme),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
+                        // Canvas Panel (List or Content)
+                        if (showCanvas)
+                          const Expanded(
+                            flex: 3,
+                            child: CanvasPanel(),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildConversationSidebar(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+  Widget _buildConversationSidebar(BuildContext context, ThemeData theme) {
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final hoverColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
@@ -342,7 +331,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () async {
-                      await chatProvider.createConversation();
+                      await context.read<ChatProvider>().createConversation();
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -369,8 +358,15 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 8),
           // Conversation list - clean and modern
           Expanded(
-            child: chatProvider.conversations.isEmpty
-                ? Center(
+            child: Selector<ChatProvider, (List<Conversation>, int?)>(
+              selector: (_, provider) => (provider.conversations, provider.currentConversation?.id),
+              shouldRebuild: (prev, next) => prev != next,
+              builder: (context, data, child) {
+                final conversations = data.$1;
+                final currentId = data.$2;
+                
+                if (conversations.isEmpty) {
+                  return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -390,20 +386,22 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: chatProvider.conversations.length,
+                  );
+                }
+                
+                return ListView.builder(
+                    itemCount: conversations.length,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     itemBuilder: (context, index) {
-                      final conversation = chatProvider.conversations[index];
-                      final isSelected = chatProvider.currentConversation?.id == conversation.id;
+                      final conversation = conversations[index];
+                      final isSelected = currentId == conversation.id;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 2),
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
-                            onTap: () => chatProvider.selectConversation(conversation),
+                            onTap: () => context.read<ChatProvider>().selectConversation(conversation),
                             hoverColor: hoverColor,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
@@ -456,7 +454,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       );
                     },
-                  ),
+                  );
+              },
+            ),
           ),
         ],
       ),
@@ -498,7 +498,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // Collapsed sidebar - only icons
-  Widget _buildCollapsedSidebar(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
+  Widget _buildCollapsedSidebar(BuildContext context, ThemeData theme) {
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     
@@ -520,7 +520,7 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Cuộc trò chuyện mới',
-            onPressed: () => chatProvider.createConversation(),
+            onPressed: () => context.read<ChatProvider>().createConversation(),
           ),
           const Spacer(),
           // Settings
@@ -541,85 +541,104 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // Chat header - always full width above canvas
-  Widget _buildChatHeader(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
-      ),
-      child: Row(
-        children: [
-          // Toggle sidebar (only show when expanded, collapsed sidebar has its own toggle)
-          if (!_sidebarCollapsed)
-            IconButton(
-              icon: const Icon(Icons.menu_open),
-              tooltip: 'Thu gọn sidebar',
-              onPressed: () => setState(() => _sidebarCollapsed = true),
-            ),
-          const SizedBox(width: 8),
-          // Title with animation
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Text(
-                chatProvider.currentConversation?.title ?? 'Lumina AI',
-                key: ValueKey<String>(chatProvider.currentConversation?.title ?? 'default'),
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+  Widget _buildChatHeader(BuildContext context, ThemeData theme) {
+    return Selector<ChatProvider, (String?, int?)>(
+      selector: (_, provider) => (provider.currentConversation?.title, provider.currentConversation?.id),
+      builder: (context, data, _) {
+        final title = data.$1;
+        final conversationId = data.$2;
+        
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
           ),
-          // Canvas toggle in header
-          IconButton(
-            icon: Icon(
-              Icons.article_outlined,
-              color: _showCanvasPanel ? theme.colorScheme.primary : null,
-            ),
-            tooltip: 'Canvas',
-            onPressed: () => setState(() => _showCanvasPanel = !_showCanvasPanel),
-          ),
-          // More options
-          if (chatProvider.currentConversation != null)
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'delete') {
-                  _showDeleteDialog(context, chatProvider);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Xóa cuộc trò chuyện'),
-                    ],
+          child: Row(
+            children: [
+              // Toggle sidebar (only show when expanded, collapsed sidebar has its own toggle)
+              if (!_sidebarCollapsed)
+                IconButton(
+                  icon: const Icon(Icons.menu_open),
+                  tooltip: 'Thu gọn sidebar',
+                  onPressed: () => setState(() => _sidebarCollapsed = true),
+                ),
+              const SizedBox(width: 8),
+              // Title with animation
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(
+                    title ?? 'Lumina AI',
+                    key: ValueKey<String>(title ?? 'default'),
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ],
-            ),
-        ],
-      ),
+              ),
+              // Canvas toggle in header
+              IconButton(
+                icon: Icon(
+                  Icons.article_outlined,
+                  color: _showCanvasPanel ? theme.colorScheme.primary : null,
+                ),
+                tooltip: 'Canvas',
+                onPressed: () => setState(() => _showCanvasPanel = !_showCanvasPanel),
+              ),
+              // More options
+              if (conversationId != null)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _showDeleteDialog(context, context.read<ChatProvider>());
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Xóa cuộc trò chuyện'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   // Chat content area (messages + input) - no header
-  Widget _buildChatContent(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
-    return _buildChatArea(context, theme, chatProvider);
+  Widget _buildChatContent(BuildContext context, ThemeData theme) {
+    return _buildChatArea(context, theme);
   }
 
-  Widget _buildChatArea(BuildContext context, ThemeData theme, ChatProvider chatProvider) {
-    return PopScope(
-      canPop: !chatProvider.voiceModeEnabled,
-      onPopInvoked: (didPop) {
-        if (didPop) return;
-        if (chatProvider.voiceModeEnabled) {
-          chatProvider.setVoiceMode(false);
+  Widget _buildChatArea(BuildContext context, ThemeData theme) {
+    // We need to listen to specific properties for the chat area logic
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, _) {
+        // Scroll to bottom when streaming - debounced via postFrameCallback
+        // This prevents layout during build phase
+        if (chatProvider.messages.isNotEmpty && chatProvider.isStreaming) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom(isStreaming: true);
+          });
         }
-      },
+        
+        return PopScope(
+          canPop: !chatProvider.voiceModeEnabled,
+          onPopInvoked: (didPop) {
+            if (didPop) return;
+            if (chatProvider.voiceModeEnabled) {
+              chatProvider.setVoiceMode(false);
+            }
+          },
       child: Stack(
         children: [
           // Voice Agent Overlay (covers everything when voice mode active)
@@ -785,14 +804,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     
                     final musicPlayer = context.read<MusicPlayerProvider>();
                     
-                    // Append " dùng canvas" to message for API only, not shown in UI
-                    final messageToSend = _forceCanvasTool 
-                        ? '$message dùng canvas' 
-                        : message;
-                    
                     chatProvider.sendMessage(
-                      messageToSend,
-                      displayContent: message, // Show original message to user
+                      message, // Send original message
+                      displayContent: message, 
                       onMusicPlay: (url, title, thumbnail, duration) {
                         musicPlayer.playFromUrl(
                           url: url,
@@ -801,6 +815,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           duration: duration,
                         );
                       },
+                      forceCanvas: _forceCanvasTool,
                     );
                     
                     // Scroll to bottom after user sends
@@ -863,6 +878,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ],  // End of spread operator for normal chat UI
         ],
       ),
+    );
+      },
     );
   }
 

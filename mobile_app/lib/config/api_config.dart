@@ -3,7 +3,10 @@ class ApiConfig {
   // Change this to your backend URL
   // For local development: http://localhost:8000
   // For production: https://api.fourt.io.vn
-  static const String baseUrl = 'https://api.fourt.io.vn';
+  static String baseUrl = 'https://api.fourt.io.vn'; // Default to tunnel, but mutable
+  
+  static const String tunnelUrl = 'https://api.fourt.io.vn';
+  static const String localUrl = 'http://localhost:8000';
   
   // Auth endpoints (prefix: /auth)
   static const String login = '/auth/login';

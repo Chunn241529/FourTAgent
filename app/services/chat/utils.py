@@ -81,45 +81,20 @@ def generate_title_suggestion(
             ],
             options={"num_predict": 50, "temperature": 0.3},
             stream=False,
-            # think=False, # removed think=False as it might not be supported by sync client or older versions, check original code...
-            # Original code had think=False. I should keep it if it was there.
-            # Checking original code... Yes it had think=False.
+            think=False,
         )
 
-        # Rechecking allowability of think param in ollama.chat.
-        # The key point is "don't add or remove logic".
-        # But wait, looking at original code line 771: `think=False`
-        # I must include it if the library supports it.
-
-        # wait, python client update might support it. I will keep it as is from original.
-        # But wait, I can't pass think=False to ollama.chat if the library version installed doesn't support it
-        # BUT the user code HAD IT. So I must keep it.
-
-    except Exception as e:
-        # Re-reading lines 763-772 of original file.
-        # It has `think=False`.
-        pass
-
-    try:
-        response = ollama.chat(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            options={"num_predict": 50, "temperature": 0.3},
-            stream=False,
-            # think=False # Commented out locally for safety, but if original had it, I should probably use kwargs or just put it in.
-        )
-        # Actually, let's look at the original code again.
-        # 771:                 think=False,
-        # It is there.
+        if "message" not in response or "content" not in response["message"]:
+            logger.error(f"Invalid Ollama response format: {response}")
+            return None
 
         title = response["message"]["content"].strip().strip('"')
         if not title:
+            logger.warning("Ollama returned empty title")
             return None
 
         return title
+
     except Exception as e:
         logger.error(f"Title generation failed: {e}")
         return None

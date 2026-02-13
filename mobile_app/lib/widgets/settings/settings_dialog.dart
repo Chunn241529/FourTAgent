@@ -7,6 +7,8 @@ import '../../providers/theme_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
 import '../../screens/auth/login_screen.dart';
+import '../../screens/auth/login_screen.dart';
+import '../../screens/cloud_files_screen.dart';
 import '../common/custom_snackbar.dart';
 
 /// Settings popup dialog with 2-column layout
@@ -30,6 +32,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   final List<_MenuItem> _menuItems = [
     _MenuItem(icon: Icons.settings_outlined, label: 'Tổng quát'),
+    _MenuItem(icon: Icons.cloud_outlined, label: 'File đám mây'),
     _MenuItem(icon: Icons.storage_outlined, label: 'Quản lý dữ liệu'),
     _MenuItem(icon: Icons.notifications_outlined, label: 'Thông báo'),
     _MenuItem(icon: Icons.security_outlined, label: 'Quyền hạn'),
@@ -147,12 +150,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
       case 0:
         return _buildGeneralSection(theme, isDark);
       case 1:
-        return _buildDataControlsSection(theme, isDark);
+        return const SizedBox(
+           height: 450, // Fixed height for embedded file manager
+           child: CloudFilesScreen(isEmbedded: true),
+        );
       case 2:
-        return _buildNotificationsSection(theme, isDark);
+        return _buildDataControlsSection(theme, isDark);
       case 3:
-        return _buildPermissionsSection(theme, isDark);
+        return _buildNotificationsSection(theme, isDark);
       case 4:
+        return _buildPermissionsSection(theme, isDark);
+      case 5:
         return _buildAccountSection(theme, isDark);
       default:
         return const SizedBox();

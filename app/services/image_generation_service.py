@@ -186,8 +186,9 @@ class ImageGenerationService:
             "thú",
             "động vật",
         ]
-        keywords_1girl = ["1girl", "1 girl"]
-        keywords_person = [
+        keywords_girl = [
+            "1girl",
+            "1 girl",
             "girl",
             "woman",
             "female",
@@ -195,25 +196,41 @@ class ImageGenerationService:
             "sister",
             "mother",
             "aunt",
+            "grandmother",
+            "daughter",
             "gái",
             "nữ",
             "cô",
+            "bà",
+            "chị",
+            "em",
+            "mẹ",
+            "dì",
+        ]
+        keywords_person = [
             "boy",
             "man",
             "male",
             "brother",
             "father",
             "uncle",
+            "grandfather",
+            "son",
             "trai",
             "nam",
             "anh",
             "ông",
-            "bà",
+            "bố",
+            "chú",
+            "bác",
             "person",
             "human",
             "people",
             "người",
         ]
+        # Merge girl keywords into person check for general person detection
+        all_person_keywords = keywords_girl + keywords_person
+
         keywords_anime = [
             "anime",
             "2d",
@@ -226,10 +243,10 @@ class ImageGenerationService:
         keywords_3d = ["3d", "render", "blender", "c4d", "unreal", "cgi"]
 
         is_animal = any(k in prompt_lower for k in keywords_animal)
-        has_person = any(k in prompt_lower for k in keywords_person) or any(
-            k in prompt_lower for k in keywords_1girl
-        )
-        is_1girl = any(k in prompt_lower for k in keywords_1girl)
+
+        # Specific checks
+        is_girl = any(k in prompt_lower for k in keywords_girl)
+        has_person = any(k in prompt_lower for k in all_person_keywords)
         is_anime_style = any(k in prompt_lower for k in keywords_anime) or any(
             k in prompt_lower for k in keywords_3d
         )
@@ -249,30 +266,36 @@ class ImageGenerationService:
         )
 
         # Inject positive anatomy prompt (masterpiece addition)
-        current_prompt = (
-            prompt
-            + ", (perfect hands, perfect fingers, correct anatomy:1.2), masterpiece, best quality"
-        )
+        current_prompt = prompt + ", masterpiece, best quality"
 
         # LoRA stack logic
         stack_39_config = [{"name": "None", "strength": 0.0}] * 4
-        if not is_animal:
-            slot_idx = 0
-            if has_person:
-                stack_39_config[0] = {
-                    "name": "detailed_eye.safetensors",
-                    "strength": 0.8,
-                }
-                stack_39_config[1] = {
-                    "name": None,
-                    "strength": 0.8,
-                }
-                slot_idx = 2
-                if is_1girl:
-                    stack_39_config[slot_idx] = {
-                        "name": "girl_face.safetensors",
-                        "strength": 0.8,
-                    }
+
+        if is_animal:
+            # Rule: Animal -> No LoRA
+            pass
+        elif is_girl:
+            # Rule: Girl -> detailed_eye + girl_face
+            stack_39_config[0] = {
+                "name": "detailed_eye.safetensors",
+                "strength": 0.8,
+            }
+            stack_39_config[1] = {
+                "name": "girl_face.safetensors",
+                "strength": 0.8,
+            }
+        elif has_person:
+            # Rule: Man/Other Person -> detailed_eye
+            stack_39_config[0] = {
+                "name": "detailed_eye.safetensors",
+                "strength": 0.8,
+            }
+        elif is_anime_style:
+            # Rule: 2D/Anime/3D -> detailed_eye (+ Lumina_2D selected above)
+            stack_39_config[0] = {
+                "name": "detailed_eye.safetensors",
+                "strength": 0.8,
+            }
 
         negative_prompt = "embedding:easynegative, (worst quality, low quality:1.4), (nude, naked, nsfw:1.2), bad hands, bad fingers, extra fingers, missing fingers, fused fingers, deformed fingers, mutated hands, malformed hands, poorly drawn hands, incorrect hand anatomy, broken fingers, twisted fingers, long fingers, short fingers, duplicate fingers, extra limbs, malformed limbs, bad proportions, disfigured, mutation, ugly hands, blurry hands, low detail hands, cropped hands, out of frame hands"
 

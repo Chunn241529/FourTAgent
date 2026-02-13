@@ -37,15 +37,16 @@ class DeepSearchService:
         from app.services.rag_service import RAGService
         from app.services.conversation_summary_service import ConversationSummaryService
         from app.services.chat_service import ChatService
+        from app.services.chat import memory
 
         client = ollama.AsyncClient()
 
         # 1. Get History Context
-        # ChatService._get_hierarchical_memory is static but we need to run it in executor if it's blocking
+        # data access should be in executor if blocking
         loop = asyncio.get_running_loop()
         summary, semantic_messages, working_memory = await loop.run_in_executor(
             None,
-            lambda: ChatService._get_hierarchical_memory(
+            lambda: memory.get_hierarchical_memory(
                 db, conversation_id, current_query=topic, user_id=user_id
             ),
         )

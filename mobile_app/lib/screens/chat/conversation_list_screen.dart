@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../widgets/navigation/app_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../models/conversation.dart';
 import 'chat_screen.dart';
 
 class ConversationListScreen extends StatefulWidget {
@@ -25,7 +26,8 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chatProvider = context.watch<ChatProvider>();
+    // Don't watch the whole provider here to avoid rebuilding everything on every tick
+    // final chatProvider = context.watch<ChatProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -33,7 +35,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
         actions: [
           IconButton(
             onPressed: () async {
-              await chatProvider.createConversation();
+              await context.read<ChatProvider>().createConversation();
               if (mounted) {
                 Navigator.push(
                   context,
@@ -48,14 +50,14 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
       ),
       drawer: AppDrawer(
         onConversationTap: (conversation) {
-          chatProvider.selectConversation(conversation);
+          context.read<ChatProvider>().selectConversation(conversation);
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ChatScreen()),
           );
         },
         onNewChat: () async {
-          await chatProvider.createConversation();
+          await context.read<ChatProvider>().createConversation();
           if (mounted) {
             Navigator.push(
               context,
@@ -65,16 +67,30 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
         },
       ),
       body: RefreshIndicator(
-        onRefresh: () => chatProvider.loadConversations(),
-        child: chatProvider.isLoading
-            ? const ShimmerLoading()
-            : chatProvider.conversations.isEmpty
-                ? _buildEmptyState(theme, chatProvider)
-                : _buildConversationList(theme, chatProvider),
+        onRefresh: () => context.read<ChatProvider>().loadConversations(),
+        child: Selector<ChatProvider, bool>(
+          selector: (_, provider) => provider.isLoading,
+          builder: (context, isLoading, child) {
+            if (isLoading) {
+              return const ShimmerLoading();
+            }
+            // Nested selector for conversations list
+            return Selector<ChatProvider, List<Conversation>>(
+              selector: (_, provider) => provider.conversations,
+              shouldRebuild: (prev, next) => prev != next, 
+              builder: (context, conversations, _) {
+                 if (conversations.isEmpty) {
+                   return _buildEmptyState(theme);
+                 }
+                 return _buildConversationList(theme, conversations);
+              },
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await chatProvider.createConversation();
+          await context.read<ChatProvider>().createConversation();
           if (mounted) {
             Navigator.push(
               context,
@@ -90,7 +106,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme, ChatProvider chatProvider) {
+  Widget _buildEmptyState(ThemeData theme) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -127,12 +143,12 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     );
   }
 
-  Widget _buildConversationList(ThemeData theme, ChatProvider chatProvider) {
+  Widget _buildConversationList(ThemeData theme, List<Conversation> conversations) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: chatProvider.conversations.length,
+      itemCount: conversations.length,
       itemBuilder: (context, index) {
-        final conversation = chatProvider.conversations[index];
+        final conversation = conversations[index];
         
         return Dismissible(
           key: Key('conv_${conversation.id}'),
@@ -148,7 +164,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             child: const Icon(Icons.delete, color: Colors.white),
           ),
           onDismissed: (_) {
-            chatProvider.deleteConversation(conversation.id);
+            context.read<ChatProvider>().deleteConversation(conversation.id);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Đã xóa cuộc trò chuyện')),
             );
@@ -157,7 +173,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
               onTap: () {
-                chatProvider.selectConversation(conversation);
+                context.read<ChatProvider>().selectConversation(conversation);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ChatScreen()),

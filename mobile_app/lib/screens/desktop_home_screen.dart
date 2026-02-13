@@ -87,6 +87,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 isSelected: _selectedIndex == 0,
                 onTap: () => setState(() => _selectedIndex = 0),
               ),
+
               DockItem(
                 icon: Icons.record_voice_over_outlined,
                 selectedIcon: Icons.record_voice_over,

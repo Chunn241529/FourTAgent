@@ -55,20 +55,10 @@ class ChatService:
         await utils.cleanup_vram(model_name)
 
     @staticmethod
-    def _generate_title(response: Dict[str, Any]) -> Optional[str]:
-        # Helper used in chat_with_rag logic if I recall correctly?
-        # Checking implementation... it was used in `_generate_title_bg` task maybe?
-        # Wait, I moved `generate_title_suggestion` to utils.
-        # But `_generate_title` in original line 801 took `response` dict?
-        # Let's check original.
-        # Line 791: `def _generate_title(prompt: str, model_name: str...)`
-        # ... no wait.
-        # I remember `generate_title_suggestion` in `utils.py`.
-        # I should check if there was another method.
-        # Original lines 801-810 used `response["message"]["content"]`.
-        # Ah, that was inside `_generate_title`?
-        # Let's assume `utils.generate_title_suggestion` replaces the logic.
-        pass
+    def generate_title_suggestion(
+        context: str, model_name: str = "Lumina-small"
+    ) -> Optional[str]:
+        return utils.generate_title_suggestion(context, model_name)
 
     @staticmethod
     async def chat_with_rag(
@@ -150,9 +140,8 @@ class ChatService:
             xung_ho, current_time, voice_enabled, tools
         )
 
-        # Force canvas tool usage if requested
-        # if force_canvas_tool:
-        #    system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
+        if force_canvas_tool:
+            system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
 
         # Get RAG context (Non-blocking)
         loop = asyncio.get_running_loop()
@@ -202,6 +191,19 @@ class ChatService:
         db.commit()
         logger.info("User message saved to DB immediately")
 
+        # Trigger title generation in background if it's a new conversation or has no title
+        # We do this AFTER verifying user and creating conversation AND saving user message
+        if is_new_conversation or not conversation.title:
+            logger.info(
+                f"Triggering background title generation for conversation {conversation.id}"
+            )
+            # Pass the user query directly to avoid DB lookup latency in BG task if possible,
+            # but utils.generate_title_suggestion might want more context.
+            # Let's pass conversation_id and let it refetch to be safe/consistent.
+            asyncio.create_task(
+                ChatService._generate_title_bg(conversation.id, user_id)
+            )
+
         # Generate stream response
         # Inject preference examples into system prompt if available
         enhanced_system_prompt = system_prompt
@@ -225,6 +227,74 @@ class ChatService:
             voice_enabled=voice_enabled,
             voice_id=voice_id,
         )
+
+    @staticmethod
+    async def _generate_title_bg(conversation_id: int, user_id: int):
+        """Background task to generate conversation title"""
+        try:
+            # Wait a bit for the assistant to start responding/generating context
+            # This allows capturing the AI's response in the context too if we wait long enough,
+            # but usually the user prompt is enough for a title.
+            # Let's wait 2 seconds to not block anything and ensure DB consistency.
+            await asyncio.sleep(2)
+
+            # Create a new session for this background task
+            db_bg = SessionLocal()
+            try:
+                # Get the conversation
+                conversation = (
+                    db_bg.query(ModelConversation)
+                    .filter(ModelConversation.id == conversation_id)
+                    .first()
+                )
+                if not conversation:
+                    return
+
+                # Check again if title exists (race condition check)
+                if conversation.title:
+                    return
+
+                # Get recent messages (first few are enough)
+                messages = (
+                    db_bg.query(ModelChatMessage)
+                    .filter(ModelChatMessage.conversation_id == conversation_id)
+                    .order_by(ModelChatMessage.timestamp.asc())
+                    .limit(3)
+                    .all()
+                )
+
+                if not messages:
+                    return
+
+                # Build context string
+                context = ""
+                for msg in messages:
+                    role_str = "User" if msg.role == "user" else "Assistant"
+                    context += f"{role_str}: {msg.content}\n"
+
+                # Generate title using utility
+                # Use a small/fast model for this
+                model_name = "Lumina-small"  # Hardcode or config
+                title = await asyncio.to_thread(
+                    utils.generate_title_suggestion, context, model_name
+                )
+
+                if title:
+                    conversation.title = title
+                    db_bg.commit()
+                    logger.info(
+                        f"Generated title for conversation {conversation_id}: {title}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to generate title for conversation {conversation_id}"
+                    )
+
+            finally:
+                db_bg.close()
+
+        except Exception as e:
+            logger.error(f"Background title generation failed: {e}")
 
     @staticmethod
     async def _generate_stream_response(
