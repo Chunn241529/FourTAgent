@@ -201,6 +201,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
           value: settings.soundEnabled,
           onChanged: settings.setSoundEnabled,
         ),
+        _SettingsSwitch(
+          title: 'Hiển thị Canvas',
+          subtitle: 'Bật/tắt giao diện Canvas bên phải',
+          value: settings.showCanvas,
+          onChanged: settings.setShowCanvas,
+        ),
       ],
     );
   }

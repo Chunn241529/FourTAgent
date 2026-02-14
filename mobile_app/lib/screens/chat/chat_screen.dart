@@ -10,6 +10,7 @@ import '../../widgets/settings/settings_dialog.dart';
 import '../../widgets/voice/voice_agent_overlay.dart';
 import '../../providers/canvas_provider.dart';
 import '../../widgets/canvas/canvas_panel.dart';
+import '../../providers/settings_provider.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -22,7 +23,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   bool _isUserScrolling = false;
   bool _isNearBottom = true;
-  bool _showCanvasPanel = false;
   bool _forceCanvasTool = false; // Forces LLM to use canvas tool
   bool _sidebarCollapsed = false; // Sidebar collapse state
 
@@ -77,12 +77,11 @@ class _ChatScreenState extends State<ChatScreen> {
     context.read<ChatProvider>().setOnCanvasUpdate((canvasId) {
        if (mounted) {
          print('>>> ChatScreen: Received canvas update $canvasId');
+         print('DEBUG: Init with canvasId=$canvasId');
          final canvasProvider = context.read<CanvasProvider>();
          
-         // Open panel immediately
-         setState(() {
-           _showCanvasPanel = true;
-         });
+         // Open panel immediately (via Settings)
+         context.read<SettingsProvider>().setShowCanvas(true);
          
          if (canvasId > 0) {
            // Real canvas ID - fetch and select
@@ -107,11 +106,11 @@ class _ChatScreenState extends State<ChatScreen> {
   void _handleCanvasUpdate() {
     if (!mounted) return;
     final canvasProvider = context.read<CanvasProvider>();
+    final settingsProvider = context.read<SettingsProvider>();
+    
     // Auto-open panel if a canvas is selected and panel is closed
-    if (canvasProvider.currentCanvas != null && !_showCanvasPanel) {
-      setState(() {
-        _showCanvasPanel = true;
-      });
+    if (canvasProvider.currentCanvas != null && !settingsProvider.showCanvas) {
+      settingsProvider.setShowCanvas(true);
     }
   }
 
@@ -153,20 +152,22 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         final maxScroll = _scrollController.position.maxScrollExtent;
+        final currentScroll = _scrollController.offset;
         
-        if (isStreaming) {
-           // For streaming, jump to bottom to keep up with the spinner instantly
-           // and avoid animation lag/jank
-           if (_scrollController.position.pixels < maxScroll) {
-             _scrollController.jumpTo(maxScroll);
-           }
-        } else {
-          // For new messages (not streaming), animate smoothly
-          _scrollController.animateTo(
-            maxScroll,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
+        // If we are already near the bottom (within threshold), force scroll to bottom
+        // This handles cases where size increases due to images or text wrapping
+        if ((maxScroll - currentScroll) <= 200 || isStreaming) {
+             if (isStreaming) {
+               // Jump for instant updates during streaming to avoid jitter
+               _scrollController.jumpTo(maxScroll);
+             } else {
+               // Animate for new messages
+               _scrollController.animateTo(
+                 maxScroll,
+                 duration: const Duration(milliseconds: 300),
+                 curve: Curves.easeOut,
+               );
+             }
         }
       }
     });
@@ -195,7 +196,7 @@ class _ChatScreenState extends State<ChatScreen> {
         Expanded(
           child: Consumer<CanvasProvider>(
             builder: (context, canvasProvider, _) {
-              final showCanvas = _showCanvasPanel;
+              final showCanvas = context.watch<SettingsProvider>().showCanvas;
               if (showCanvas) {
                  print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
               }
@@ -577,15 +578,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               ),
-              // Canvas toggle in header
-              IconButton(
-                icon: Icon(
-                  Icons.article_outlined,
-                  color: _showCanvasPanel ? theme.colorScheme.primary : null,
-                ),
-                tooltip: 'Canvas',
-                onPressed: () => setState(() => _showCanvasPanel = !_showCanvasPanel),
-              ),
+              // Canvas toggle moved to Settings
+              
               // More options
               if (conversationId != null)
                 PopupMenuButton<String>(
@@ -625,10 +619,20 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, chatProvider, _) {
         // Scroll to bottom when streaming - debounced via postFrameCallback
         // This prevents layout during build phase
-        if (chatProvider.messages.isNotEmpty && chatProvider.isStreaming) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom(isStreaming: true);
-          });
+        if (chatProvider.messages.isNotEmpty) {
+           WidgetsBinding.instance.addPostFrameCallback((_) {
+             // Scroll if streaming OR if we just finished streaming (to show actions)
+             // We rely on the _scrollToBottom internal logic to not scroll if user is up
+             if (chatProvider.isStreaming) {
+                _scrollToBottom(isStreaming: true);
+             } else if (chatProvider.messages.last.isStreaming == false) {
+                 // Check if we just finished? The provider might not have a "just finished" flag easily.
+                 // But we can check if the last message is NOT streaming, and we are near bottom.
+                 // The _scrollToBottom logic already handles "near bottom".
+                 // We call it here to ensure if content expanded (actions appeared), we adjust.
+                 _scrollToBottom(isStreaming: false);
+             }
+           });
         }
         
         return PopScope(
@@ -743,6 +747,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             id: msg.id,
                             content: msg.content,
                             thinking: msg.thinking,
+                            plan: msg.plan,
+                            deepSearchLength: msg.deepSearchUpdates.length,
+                            codeExecLength: msg.codeExecutions.length,
                             isStreaming: msg.isStreaming,
                             isGeneratingImage: msg.isGeneratingImage,
                             generatedImages: msg.generatedImages.length,
@@ -795,6 +802,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: MessageInput(
                   voiceModeEnabled: chatProvider.voiceModeEnabled,
                   onVoiceModeChanged: (enabled) => chatProvider.setVoiceMode(enabled),
+                  forceCanvasTool: _forceCanvasTool,
+                  onCanvasTap: () => setState(() => _forceCanvasTool = !_forceCanvasTool),
                   onSend: (message) async {
                     // Auto-create conversation if none exists
                     if (chatProvider.currentConversation == null) {
@@ -864,13 +873,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       musicPlayer.show();
                     }
                   },
-                  onCanvasTap: () {
-                    // Only toggle forceCanvasTool mode - canvas panel shows when LLM creates canvas
-                    setState(() {
-                      _forceCanvasTool = !_forceCanvasTool;
-                    });
-                  },
-                  forceCanvasTool: _forceCanvasTool,
                 ),
               ),
             ),
@@ -932,12 +934,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   theme,
                 ),
                 _buildSuggestionChip(
-                  'Tạo ảnh 1 con mèo',
+                  'Vẽ ảnh 1 con mèo',
                   Icons.image,
                   theme,
                 ),
                 _buildSuggestionChip(
-                  'Mở 1 bài nhạc RnB',
+                  'Mở 1 bài nhạc bất kỳ',
                   Icons.music_note,
                   theme,
                 ),
@@ -1112,6 +1114,9 @@ class _MessageSnapshot {
   final int? id;
   final String content;
   final String? thinking;
+  final String? plan;
+  final int deepSearchLength;
+  final int codeExecLength;
   final bool isStreaming;
   final bool isGeneratingImage;
   final int generatedImages;
@@ -1120,6 +1125,9 @@ class _MessageSnapshot {
     required this.id,
     required this.content,
     required this.thinking,
+    required this.plan,
+    required this.deepSearchLength,
+    required this.codeExecLength,
     required this.isStreaming,
     required this.isGeneratingImage,
     required this.generatedImages,
@@ -1132,11 +1140,24 @@ class _MessageSnapshot {
         other.id == id &&
         other.content == content &&
         other.thinking == thinking &&
+        other.plan == plan &&
+        other.deepSearchLength == deepSearchLength &&
+        other.codeExecLength == codeExecLength &&
         other.isStreaming == isStreaming &&
         other.isGeneratingImage == isGeneratingImage &&
         other.generatedImages == generatedImages;
   }
 
   @override
-  int get hashCode => Object.hash(id, content, thinking, isStreaming, isGeneratingImage, generatedImages);
+  int get hashCode => Object.hash(
+    id, 
+    content, 
+    thinking, 
+    plan, 
+    deepSearchLength, 
+    codeExecLength, 
+    isStreaming, 
+    isGeneratingImage, 
+    generatedImages
+  );
 }

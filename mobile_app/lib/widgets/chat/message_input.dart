@@ -337,15 +337,16 @@ class _MessageInputState extends State<MessageInput> {
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
               child: Row(
                 children: [
-                  // + Attachment menu (consolidated)
+                  // + Attachment menu
                   PopupMenuButton<String>(
                     icon: Icon(
-                      Icons.add,
+                      Icons.add_circle_outline, // Changed icon
                       color: (_selectedFileName != null || _selectedImagePath != null)
                           ? theme.colorScheme.primary
                           : theme.colorScheme.onSurface.withOpacity(0.5),
                     ),
                     tooltip: 'Đính kèm',
+                    offset: const Offset(0, -100),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     onSelected: (value) {
                       if (value == 'image') _pickImage();
@@ -374,8 +375,86 @@ class _MessageInputState extends State<MessageInput> {
                       ),
                     ],
                   ),
-                  const SizedBox(width: 4),
-                  // Music toggle
+                  
+                  // Canvas Button with Text
+                  if (widget.onCanvasTap != null)
+                    InkWell(
+                       onTap: widget.onCanvasTap!,
+                       borderRadius: BorderRadius.circular(20),
+                       child: Padding(
+                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                         child: Row(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             Icon(
+                               widget.forceCanvasTool ? Icons.edit_document : Icons.article_outlined,
+                               size: 20,
+                               color: widget.forceCanvasTool 
+                                   ? theme.colorScheme.primary 
+                                   : theme.colorScheme.onSurface.withOpacity(0.5),
+                             ),
+                             const SizedBox(width: 6),
+                             Text(
+                               'Canvas',
+                               style: TextStyle(
+                                 fontSize: 13,
+                                 fontWeight: FontWeight.w500,
+                                 color: widget.forceCanvasTool 
+                                     ? theme.colorScheme.primary 
+                                     : theme.colorScheme.onSurface.withOpacity(0.6),
+                               ),
+                             ),
+                           ],
+                         ),
+                       ),
+                    ),
+
+                  const SizedBox(width: 8),
+
+                  // Mode Dropdown (Nhanh, Tư duy, Tư duy sâu)
+                  PopupMenuButton<String>(
+                    tooltip: 'Chế độ mô hình',
+                    offset: const Offset(0, -120), // Show above
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onSelected: (value) {
+                       // TODO: Implement logic
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Nhanh',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.keyboard_arrow_down, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                        ],
+                      ),
+                    ),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'fast',
+                        child: Text('Nhanh', style: theme.textTheme.bodyMedium),
+                      ),
+                      PopupMenuItem(
+                        value: 'thinking',
+                        child: Text('Tư duy', style: theme.textTheme.bodyMedium),
+                      ),
+                      PopupMenuItem(
+                        value: 'deep_thinking',
+                        child: Text('Tư duy sâu', style: theme.textTheme.bodyMedium),
+                      ),
+                    ],
+                  ),
+
+                  const Spacer(),
+                  
+                  // Music toggle (Right side)
                   if (widget.onMusicTap != null)
                     _IconBtn(
                       icon: isMusicActive ? Icons.music_note : Icons.music_note_outlined,
@@ -384,16 +463,7 @@ class _MessageInputState extends State<MessageInput> {
                           ? theme.colorScheme.primary 
                           : theme.colorScheme.onSurface.withOpacity(0.5),
                     ),
-                  // Canvas toggle button (icon only for narrow widths)
-                  if (widget.onCanvasTap != null)
-                    _IconBtn(
-                      icon: widget.forceCanvasTool ? Icons.edit_document : Icons.article_outlined,
-                      onTap: widget.onCanvasTap!,
-                      color: widget.forceCanvasTool 
-                          ? theme.colorScheme.primary 
-                          : theme.colorScheme.onSurface.withOpacity(0.5),
-                    ),
-                  const Spacer(),
+
                   // Voice Mode Toggle (microphone)
                   _IconBtn(
                     icon: widget.voiceModeEnabled 

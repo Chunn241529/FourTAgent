@@ -63,9 +63,22 @@ class SettingsProvider extends ChangeNotifier {
     _vibration = prefs.getBool('vibration') ?? true;
     _improveModel = prefs.getBool('improveModel') ?? true;
     _improveModel = prefs.getBool('improveModel') ?? true;
+    _improveModel = prefs.getBool('improveModel') ?? true;
     _permissionFileAccess = prefs.getBool('permissionFileAccess') ?? false;
     _autoUpdate = prefs.getBool('autoUpdate') ?? true;
+    _showCanvas = prefs.getBool('showCanvas') ?? false;
     
+    notifyListeners();
+  }
+
+  // Canvas
+  bool _showCanvas = false;
+  bool get showCanvas => _showCanvas;
+
+  Future<void> setShowCanvas(bool enabled) async {
+    _showCanvas = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('showCanvas', enabled);
     notifyListeners();
   }
 

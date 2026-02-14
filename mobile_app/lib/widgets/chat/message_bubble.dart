@@ -17,6 +17,7 @@ import 'code_block_builder.dart';
 import 'file_action_indicator.dart';
 import 'simple_tool_indicator.dart';
 import 'code_execution_widget.dart';
+import 'message_images_widget.dart';
 
 class MessageBubble extends StatefulWidget {
   final Message message;
@@ -31,6 +32,21 @@ class _MessageBubbleState extends State<MessageBubble> {
   bool _isEditing = false;
   late TextEditingController _editController;
 
+  // Caching variables to prevent expensive rebuilds (markdown parsing)
+  Widget? _cachedWidget;
+  String? _lastContent;
+  bool? _lastIsStreaming;
+  bool? _lastIsGeneratingImage;
+  int? _lastImagesLength;
+  String? _lastThinking;
+  String? _lastPlan;
+  int? _lastDeepSearchLength;
+  int? _lastCodeExecLength;
+  bool? _lastIsDark;
+  bool? _lastIsEditing;
+  // For feedback
+  String? _lastFeedback;
+
   @override
   void initState() {
     super.initState();
@@ -43,12 +59,57 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (oldWidget.message.content != widget.message.content && !_isEditing) {
       _editController.text = widget.message.content;
     }
+    // Note: Since message object reference might be the same, 
+    // we handled change detection in build() via _shouldRebuild()
   }
 
   @override
   void dispose() {
     _editController.dispose();
     super.dispose();
+  }
+
+  bool _shouldRebuild(bool isDark) {
+    if (_cachedWidget == null) return true;
+    
+    final m = widget.message;
+    
+    if (isDark != _lastIsDark) return true;
+    if (_isEditing != _lastIsEditing) return true;
+    
+    if (m.content != _lastContent) return true;
+    if (m.isStreaming != _lastIsStreaming) return true;
+    if (m.isGeneratingImage != _lastIsGeneratingImage) return true;
+    if (m.generatedImages.length != _lastImagesLength) return true;
+    if (m.thinking != _lastThinking) return true;
+    if (m.plan != _lastPlan) return true;
+    if (m.deepSearchUpdates.length != _lastDeepSearchLength) return true;
+    // Check deep search content if length same (status update) -> assume length change for now or simply rebuild if specific optimized check needed.
+    // For lists, checking length is often fast heuristic, but let's check hash if needed.
+    // Actually, deep search updates are appended. Length check is okay.
+    // But if status of an item updates? 
+    // Let's assume rebuild on any deep search update is rare enough.
+    
+    if (m.codeExecutions.length != _lastCodeExecLength) return true;
+    
+    if (m.feedback != _lastFeedback) return true;
+
+    return false;
+  }
+
+  void _updateCacheState(bool isDark) {
+    final m = widget.message;
+    _lastIsDark = isDark;
+    _lastIsEditing = _isEditing;
+    _lastContent = m.content;
+    _lastIsStreaming = m.isStreaming;
+    _lastIsGeneratingImage = m.isGeneratingImage;
+    _lastImagesLength = m.generatedImages.length;
+    _lastThinking = m.thinking;
+    _lastPlan = m.plan;
+    _lastDeepSearchLength = m.deepSearchUpdates.length;
+    _lastCodeExecLength = m.codeExecutions.length;
+    _lastFeedback = m.feedback;
   }
 
   /// Download image to Downloads folder
@@ -96,14 +157,23 @@ class _MessageBubbleState extends State<MessageBubble> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isUser = widget.message.role == 'user';
     final isDark = theme.brightness == Brightness.dark;
 
-    if (isUser) {
-      return _buildUserMessage(context, theme);
-    } else {
-      return _buildAIMessage(context, theme, isDark);
+    if (_shouldRebuild(isDark)) {
+      final isUser = widget.message.role == 'user';
+      Widget content;
+      if (isUser) {
+        content = _buildUserMessage(context, theme);
+      } else {
+        content = _buildAIMessage(context, theme, isDark);
+      }
+      
+      // Wrap in RepaintBoundary to isolate painting updates (e.g. streaming text)
+      _cachedWidget = RepaintBoundary(child: content);
+      _updateCacheState(isDark);
     }
+    
+    return _cachedWidget!;
   }
 
   /// User message - right aligned, no background, simple style
@@ -453,175 +523,12 @@ class _MessageBubbleState extends State<MessageBubble> {
 
 
 
-                    // Generated Images from ComfyUI (base64 encoded)
-                    if (widget.message.generatedImages.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: widget.message.generatedImages.map((imageBase64) {
-                            // Decode base64 to bytes
-                            final imageBytes = base64Decode(imageBase64);
-                            
-                            return GestureDetector(
-                              onTap: () {
-                                // Show full screen image dialog
-                                showDialog(
-                                  context: context,
-                                  builder: (ctx) => LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final isMobile = constraints.maxWidth < 600;
-                                      
-                                      return Dialog(
-                                        backgroundColor: Colors.transparent,
-                                        insetPadding: isMobile 
-                                          ? const EdgeInsets.all(8)
-                                          : const EdgeInsets.all(40),
-                                        child: Stack(
-                                          children: [
-                                            // Image with InteractiveViewer
-                                            Container(
-                                              constraints: isMobile
-                                                ? null
-                                                : BoxConstraints(
-                                                    maxWidth: constraints.maxWidth * 0.8,
-                                                    maxHeight: constraints.maxHeight * 0.8,
-                                                  ),
-                                              child: InteractiveViewer(
-                                                minScale: 0.5,
-                                                maxScale: 4.0,
-                                                child: Image.memory(
-                                                  imageBytes,
-                                                  fit: BoxFit.contain,
-                                                  errorBuilder: (_, __, ___) => Container(
-                                                    padding: const EdgeInsets.all(20),
-                                                    color: theme.colorScheme.surface,
-                                                    child: const Text('Failed to load image'),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            
-                                            // Buttons - positioned based on screen size
-                                            if (isMobile)
-                                              // Mobile: Buttons at bottom
-                                              Positioned(
-                                                bottom: 16,
-                                                left: 0,
-                                                right: 0,
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.center,
-                                                    children: [
-                                                      FloatingActionButton(
-                                                        heroTag: 'download',
-                                                        backgroundColor: Colors.black.withOpacity(0.7),
-                                                        onPressed: () async {
-                                                          await _downloadImage(ctx, imageBytes, imageBase64);
-                                                        },
-                                                        child: const Icon(Icons.download, color: Colors.white),
-                                                      ),
-                                                      const SizedBox(width: 16),
-                                                      FloatingActionButton(
-                                                        heroTag: 'close',
-                                                        backgroundColor: Colors.black.withOpacity(0.7),
-                                                        onPressed: () => Navigator.pop(ctx),
-                                                        child: const Icon(Icons.close, color: Colors.white),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              // Desktop: Buttons at top right
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child: Row(
-                                                  children: [
-                                                    IconButton(
-                                                      icon: const Icon(Icons.download, color: Colors.white),
-                                                      style: IconButton.styleFrom(
-                                                        backgroundColor: Colors.black.withOpacity(0.5),
-                                                      ),
-                                                      onPressed: () async {
-                                                        await _downloadImage(ctx, imageBytes, imageBase64);
-                                                      },
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    IconButton(
-                                                      icon: const Icon(Icons.close, color: Colors.white),
-                                                      style: IconButton.styleFrom(
-                                                        backgroundColor: Colors.black.withOpacity(0.5),
-                                                      ),
-                                                      onPressed: () => Navigator.pop(ctx),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.memory(
-                                  imageBytes,
-                                  width: 256,
-                                  height: 256,
-                                  fit: BoxFit.cover,
-                                  gaplessPlayback: true,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 256,
-                                    height: 256,
-                                    color: theme.colorScheme.surfaceContainerHighest,
-                                    child: const Icon(Icons.broken_image, size: 48),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-
-                    // Image Generation Shimmer
-                    if (widget.message.isGeneratingImage)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: const ShimmerPlaceholder(width: 256, height: 256),
-                      ),
-                    
-                    // Generation Warning/Error
-                    if (widget.message.generationError != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          border: Border.all(color: Colors.red.withOpacity(0.5)),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.red[400]),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                widget.message.generationError!, 
-                                style: TextStyle(
-                                  color: theme.brightness == Brightness.dark ? Colors.red[200] : Colors.red[900],
-                                  fontSize: 13,
-                                )
-                              ),
-                            ),
-                          ],
-                        ),
+                    // Generated Images using optimized widget
+                    if (widget.message.generatedImages.isNotEmpty || widget.message.isGeneratingImage)
+                      MessageImagesWidget(
+                        images: widget.message.generatedImages,
+                        isGenerating: widget.message.isGeneratingImage,
+                        onDownload: _downloadImage,
                       ),
 
                     // Streaming indicator REMOVED (replaced by Avatar Spinner)
