@@ -1,9 +1,10 @@
 import json
 import faiss
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 import numpy as np
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.db import get_db
 from app.models import (
@@ -20,6 +21,68 @@ from app.services.rag_service import RAGService
 router = APIRouter(prefix="/messages", tags=["messages"])
 embedding_service = EmbeddingService()
 rag_service = RAGService()
+logger = logging.getLogger(__name__)
+
+
+def _parse_message_fields(msg: ModelChatMessage, feedback: Optional[str] = None) -> dict:
+    """Helper to parse JSON fields from message model"""
+    msg_dict = msg.__dict__.copy()
+    
+    if msg.embedding and isinstance(msg.embedding, str):
+        try:
+            msg_dict["embedding"] = json.loads(msg.embedding)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            msg_dict["embedding"] = None
+
+    if msg.generated_images and isinstance(msg.generated_images, str):
+        try:
+            msg_dict["generated_images"] = json.loads(msg.generated_images)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            msg_dict["generated_images"] = []
+
+    if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
+        try:
+            msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            msg_dict["deep_search_updates"] = []
+
+    if feedback:
+        msg_dict["feedback"] = feedback
+        
+    return msg_dict
+
+
+def _rebuild_faiss_index(db: Session, user_id: int, conversation_id: int) -> bool:
+    """Rebuild FAISS index for a conversation. Returns True if successful."""
+    try:
+        index, _ = rag_service.load_faiss(user_id, conversation_id)
+        all_messages = (
+            db.query(ModelChatMessage)
+            .filter(ModelChatMessage.conversation_id == conversation_id)
+            .all()
+        )
+        embs = []
+        for m in all_messages:
+            if m.embedding:
+                try:
+                    if isinstance(m.embedding, str):
+                        emb_data = json.loads(m.embedding)
+                    elif isinstance(m.embedding, list):
+                        emb_data = m.embedding
+                    else:
+                        continue
+                    embs.append(emb_data)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    continue
+        
+        index.reset()
+        if len(embs) > 0:
+            index.add(np.array(embs, dtype="float32"))
+        faiss.write_index(index, rag_service.get_faiss_path(user_id, conversation_id))
+        return True
+    except Exception as e:
+        logger.warning(f"Error rebuilding FAISS index: {e}")
+        return False
 
 
 @router.get(
@@ -44,16 +107,12 @@ def get_messages(
     messages = (
         db.query(ModelChatMessage)
         .filter(
-            ModelChatMessage.conversation_id
-            == conversation_id
-            # Don't filter by user_id - we want both user and assistant messages
-            # Authorization is already handled by checking conversation ownership above
+            ModelChatMessage.conversation_id == conversation_id
         )
         .order_by(ModelChatMessage.timestamp.asc())
         .all()
     )
 
-    # Get all feedback for this user's messages in this conversation
     message_ids = [msg.id for msg in messages]
     feedbacks = (
         db.query(MessageFeedback)
@@ -67,29 +126,8 @@ def get_messages(
 
     result = []
     for msg in messages:
-        msg_dict = msg.__dict__.copy()
-        if msg.embedding and isinstance(msg.embedding, str):
-            try:
-                parsed_embedding = json.loads(msg.embedding)
-                msg_dict["embedding"] = parsed_embedding
-            except json.JSONDecodeError:
-                msg_dict["embedding"] = None
-
-        if msg.generated_images and isinstance(msg.generated_images, str):
-            try:
-                msg_dict["generated_images"] = json.loads(msg.generated_images)
-            except json.JSONDecodeError:
-                msg_dict["generated_images"] = []
-
-        if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
-            try:
-                msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
-            except json.JSONDecodeError:
-                msg_dict["deep_search_updates"] = []
-
-        # Add feedback status
-        msg_dict["feedback"] = feedback_map.get(msg.id)
-
+        feedback = feedback_map.get(msg.id)
+        msg_dict = _parse_message_fields(msg, feedback)
         result.append(ChatMessage(**msg_dict))
 
     return result
@@ -115,8 +153,15 @@ def create_message(
     if not conversation:
         raise HTTPException(404, "Conversation not found or not authorized")
 
-    # Create embedding for the message
-    embedding = EmbeddingService.get_embedding(content)
+    # Create embedding for the message with error handling
+    embedding = None
+    emb_json = None
+    try:
+        embedding = EmbeddingService.get_embedding(content)
+        if embedding is not None and not np.all(embedding == 0):
+            emb_json = json.dumps(embedding.tolist())
+    except Exception as e:
+        logger.warning(f"Failed to create embedding for message: {e}")
 
     # Create and save the message
     message = ModelChatMessage(
@@ -124,7 +169,7 @@ def create_message(
         conversation_id=conversation_id,
         content=content,
         role=role,
-        embedding=json.dumps(embedding.tolist()) if embedding is not None else None,
+        embedding=emb_json,
     )
     db.add(message)
     db.commit()
@@ -132,40 +177,16 @@ def create_message(
 
     # Update FAISS index
     try:
-        index, _ = rag_service.load_faiss(user_id, conversation_id)
-        if embedding is not None:
+        if embedding is not None and not np.all(embedding == 0):
+            index, _ = rag_service.load_faiss(user_id, conversation_id)
             index.add(np.array([embedding]))
             faiss.write_index(
                 index, rag_service.get_faiss_path(user_id, conversation_id)
             )
     except Exception as e:
-        print(f"FAISS update error: {e}")
+        logger.warning(f"FAISS update error: {e}")
 
-    msg_dict = message.__dict__.copy()
-    if msg_dict.get("embedding") and isinstance(msg_dict["embedding"], str):
-        try:
-            msg_dict["embedding"] = json.loads(msg_dict["embedding"])
-        except json.JSONDecodeError:
-            msg_dict["embedding"] = None
-
-    if msg_dict.get("generated_images") and isinstance(
-        msg_dict["generated_images"], str
-    ):
-        try:
-            msg_dict["generated_images"] = json.loads(msg_dict["generated_images"])
-        except json.JSONDecodeError:
-            msg_dict["generated_images"] = []
-
-    if msg_dict.get("deep_search_updates") and isinstance(
-        msg_dict["deep_search_updates"], str
-    ):
-        try:
-            msg_dict["deep_search_updates"] = json.loads(
-                msg_dict["deep_search_updates"]
-            )
-        except json.JSONDecodeError:
-            msg_dict["deep_search_updates"] = []
-
+    msg_dict = _parse_message_fields(message)
     return ChatMessage(**msg_dict)
 
 
@@ -181,26 +202,7 @@ def get_message(
     if not message:
         raise HTTPException(404, "Message not found or not authorized")
 
-    msg_dict = message.__dict__
-    if msg_dict["embedding"] and isinstance(msg_dict["embedding"], str):
-        try:
-            parsed_embedding = json.loads(msg_dict["embedding"])
-            msg_dict["embedding"] = parsed_embedding
-        except json.JSONDecodeError:
-            msg_dict["embedding"] = None
-
-    if msg.generated_images and isinstance(msg.generated_images, str):
-        try:
-            msg_dict["generated_images"] = json.loads(msg.generated_images)
-        except json.JSONDecodeError:
-            msg_dict["generated_images"] = []
-
-    if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
-        try:
-            msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
-        except json.JSONDecodeError:
-            msg_dict["deep_search_updates"] = []
-
+    msg_dict = _parse_message_fields(message)
     return ChatMessage(**msg_dict)
 
 
@@ -221,54 +223,22 @@ def update_message(
 
     if msg_update.content is not None:
         message.content = msg_update.content
-        new_embedding = embedding_service.get_embedding(
-            msg_update.content, max_length=1024
-        )
-        message.embedding = json.dumps(new_embedding.tolist())
+        # Create new embedding with error handling
+        try:
+            new_embedding = embedding_service.get_embedding(
+                msg_update.content, max_length=1024
+            )
+            if new_embedding is not None and not np.all(new_embedding == 0):
+                message.embedding = json.dumps(new_embedding.tolist())
+        except Exception as e:
+            logger.warning(f"Failed to create embedding on update: {e}")
 
-        index, _ = rag_service.load_faiss(user_id, message.conversation_id)
-        all_messages = (
-            db.query(ModelChatMessage)
-            .filter(ModelChatMessage.conversation_id == message.conversation_id)
-            .all()
-        )
-        embs = np.array([json.loads(m.embedding) for m in all_messages if m.embedding])
-
-        index.reset()
-        if len(embs) > 0:
-            index.add(embs)
-        faiss.write_index(
-            index, rag_service.get_faiss_path(user_id, message.conversation_id)
-        )
+        # Rebuild FAISS index using helper
+        _rebuild_faiss_index(db, user_id, message.conversation_id)
 
     db.commit()
     db.refresh(message)
-    msg_dict = message.__dict__
-    if msg_dict["embedding"] and isinstance(msg_dict["embedding"], str):
-        try:
-            parsed_embedding = json.loads(msg_dict["embedding"])
-            msg_dict["embedding"] = parsed_embedding
-        except json.JSONDecodeError:
-            msg_dict["embedding"] = None
-
-    if msg_dict.get("generated_images") and isinstance(
-        msg_dict["generated_images"], str
-    ):
-        try:
-            msg_dict["generated_images"] = json.loads(msg_dict["generated_images"])
-        except json.JSONDecodeError:
-            msg_dict["generated_images"] = []
-
-    if msg_dict.get("deep_search_updates") and isinstance(
-        msg_dict["deep_search_updates"], str
-    ):
-        try:
-            msg_dict["deep_search_updates"] = json.loads(
-                msg_dict["deep_search_updates"]
-            )
-        except json.JSONDecodeError:
-            msg_dict["deep_search_updates"] = []
-
+    msg_dict = _parse_message_fields(message)
     return ChatMessage(**msg_dict)
 
 
@@ -284,25 +254,11 @@ def delete_message(
     if not message:
         raise HTTPException(404, "Message not found or not authorized")
 
+    conversation_id = message.conversation_id
     db.delete(message)
     db.commit()
 
-    index, _ = rag_service.load_faiss(user_id, message.conversation_id)
-    embs = np.array(
-        [
-            json.loads(m.embedding)
-            for m in db.query(ModelChatMessage)
-            .filter(ModelChatMessage.conversation_id == message.conversation_id)
-            .all()
-            if m.embedding
-        ]
-    )
-
-    index.reset()
-    if len(embs) > 0:
-        index.add(embs)
-    faiss.write_index(
-        index, rag_service.get_faiss_path(user_id, message.conversation_id)
-    )
+    # Rebuild FAISS index using helper
+    _rebuild_faiss_index(db, user_id, conversation_id)
 
     return {"message": "Message deleted"}

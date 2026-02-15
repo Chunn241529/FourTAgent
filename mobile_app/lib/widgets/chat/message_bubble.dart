@@ -59,7 +59,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (oldWidget.message.content != widget.message.content && !_isEditing) {
       _editController.text = widget.message.content;
     }
-    // Note: Since message object reference might be the same, 
+    // Note: Since message object reference might be the same,
     // we handled change detection in build() via _shouldRebuild()
   }
 
@@ -71,12 +71,12 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   bool _shouldRebuild(bool isDark) {
     if (_cachedWidget == null) return true;
-    
+
     final m = widget.message;
-    
+
     if (isDark != _lastIsDark) return true;
     if (_isEditing != _lastIsEditing) return true;
-    
+
     if (m.content != _lastContent) return true;
     if (m.isStreaming != _lastIsStreaming) return true;
     if (m.isGeneratingImage != _lastIsGeneratingImage) return true;
@@ -87,11 +87,11 @@ class _MessageBubbleState extends State<MessageBubble> {
     // Check deep search content if length same (status update) -> assume length change for now or simply rebuild if specific optimized check needed.
     // For lists, checking length is often fast heuristic, but let's check hash if needed.
     // Actually, deep search updates are appended. Length check is okay.
-    // But if status of an item updates? 
+    // But if status of an item updates?
     // Let's assume rebuild on any deep search update is rare enough.
-    
+
     if (m.codeExecutions.length != _lastCodeExecLength) return true;
-    
+
     if (m.feedback != _lastFeedback) return true;
 
     return false;
@@ -113,12 +113,18 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   /// Download image to Downloads folder
-  Future<void> _downloadImage(BuildContext context, List<int> imageBytes, String imageBase64) async {
+  Future<void> _downloadImage(
+    BuildContext context,
+    List<int> imageBytes,
+    String imageBase64,
+  ) async {
     try {
       // Get Downloads directory
       Directory? downloadsDir;
       if (Platform.isAndroid || Platform.isLinux) {
-        downloadsDir = Directory('/home/${Platform.environment['USER']}/Downloads');
+        downloadsDir = Directory(
+          '/home/${Platform.environment['USER']}/Downloads',
+        );
         if (!downloadsDir.existsSync()) {
           downloadsDir = await getDownloadsDirectory();
         }
@@ -167,12 +173,12 @@ class _MessageBubbleState extends State<MessageBubble> {
       } else {
         content = _buildAIMessage(context, theme, isDark);
       }
-      
+
       // Wrap in RepaintBoundary to isolate painting updates (e.g. streaming text)
       _cachedWidget = RepaintBoundary(child: content);
       _updateCacheState(isDark);
     }
-    
+
     return _cachedWidget!;
   }
 
@@ -194,14 +200,15 @@ class _MessageBubbleState extends State<MessageBubble> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     // Display image if present
-                    if (widget.message.imageBase64 != null && widget.message.imageBase64!.isNotEmpty)
+                    if (widget.message.imageBase64 != null &&
+                        widget.message.imageBase64!.isNotEmpty)
                       Builder(
                         builder: (context) {
                           String base64Str = widget.message.imageBase64!;
                           // Check for data URI info
                           bool isImage = true;
                           String mimeType = '';
-                          
+
                           if (base64Str.startsWith('data:')) {
                             final markerIndex = base64Str.indexOf(';');
                             if (markerIndex > 0) {
@@ -211,175 +218,205 @@ class _MessageBubbleState extends State<MessageBubble> {
                               }
                             }
                           }
-                          
+
                           // Extract raw bytes
                           String base64Data = base64Str;
                           if (base64Data.contains(',')) {
                             base64Data = base64Data.split(',').last;
                           }
-                          
+
                           // Decode to check validity (optional, but good for safety)
                           try {
-                              base64Decode(base64Data);
+                            base64Decode(base64Data);
                           } catch (e) {
-                              return const SizedBox.shrink();
+                            return const SizedBox.shrink();
                           }
 
                           if (isImage) {
-                             return Padding(
-                               padding: const EdgeInsets.only(bottom: 8),
-                               child: ClipRRect(
-                                 borderRadius: BorderRadius.circular(12),
-                                 child: Image.memory(
-                                   base64Decode(base64Data),
-                                   width: 200,
-                                   height: 200,
-                                   fit: BoxFit.cover,
-                                   errorBuilder: (_, __, ___) => Container(
-                                     width: 200,
-                                     height: 100,
-                                     color: theme.colorScheme.surfaceContainerHighest,
-                                     child: const Icon(Icons.broken_image, size: 40),
-                                   ),
-                                 ),
-                               ),
-                             );
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(
+                                  base64Decode(base64Data),
+                                  width: 200,
+                                  height: 200,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 200,
+                                    height: 100,
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                    child: const Icon(
+                                      Icons.broken_image,
+                                      size: 40,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
                           } else {
                             // Render File Card for non-image files
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                                color: theme.colorScheme.surfaceContainerHighest
+                                    .withOpacity(0.5),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                   color: theme.colorScheme.outline.withOpacity(0.2),
+                                  color: theme.colorScheme.outline.withOpacity(
+                                    0.2,
+                                  ),
                                 ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                   Icon(
-                                     _getFileIcon(mimeType),
-                                     color: theme.colorScheme.primary,
-                                   ),
-                                   const SizedBox(width: 8),
-                                   Flexible(
-                                     child: Text(
-                                       'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
-                                       style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                                       maxLines: 1,
-                                       overflow: TextOverflow.ellipsis,
-                                     ),
-                                   ),
+                                  Icon(
+                                    _getFileIcon(mimeType),
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                                 ],
                               ),
                             );
                           }
                         },
                       ),
-                      
-                    if (widget.message.content.isNotEmpty && !widget.message.content.startsWith('[Đã gửi')) ...[
+
+                    if (widget.message.content.isNotEmpty &&
+                        !widget.message.content.startsWith('[Đã gửi')) ...[
                       if (_isEditing)
-                         Container(
-                           margin: const EdgeInsets.only(top: 8),
-                           width: double.infinity,
-                           decoration: BoxDecoration(
-                             color: theme.colorScheme.surface,
-                             borderRadius: BorderRadius.circular(12),
-                 
-                           ),
-                           child: Column(
-                             crossAxisAlignment: CrossAxisAlignment.end,
-                             children: [
-                               TextField(
-                                 controller: _editController,
-                                 autofocus: true,
-                                 maxLines: null,
-                                 style: theme.textTheme.bodyLarge,
-                                 decoration: const InputDecoration(
-                                   contentPadding: EdgeInsets.all(12),
-                                   border: InputBorder.none,
-                                   isDense: true,
-                                 ),
-                               ),
-                               Padding(
-                                 padding: const EdgeInsets.all(8.0),
-                                 child: Row(
-                                   mainAxisSize: MainAxisSize.min,
-                                   children: [
-                                     TextButton(
-                                       onPressed: () {
-                                         setState(() {
-                                           _isEditing = false;
-                                           _editController.text = widget.message.content;
-                                         });
-                                       },
-                                       style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                       ),
-                                       child: const Text('Hủy'),
-                                     ),
-                                     const SizedBox(width: 8),
-                                     FilledButton(
-                                       onPressed: () {
-                                         final newContent = _editController.text.trim();
-                                         if (newContent.isNotEmpty && newContent != widget.message.content) {
-                                           context.read<ChatProvider>().editMessage(widget.message, newContent);
-                                         }
-                                         setState(() {
-                                           _isEditing = false;
-                                         });
-                                       },
-                                       style: FilledButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                       ),
-                                       child: const Text('Lưu'),
-                                     ),
-                                   ],
-                                 ),
-                               ),
-                             ],
-                           ),
-                         )
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              TextField(
+                                controller: _editController,
+                                autofocus: true,
+                                maxLines: null,
+                                style: theme.textTheme.bodyLarge,
+                                decoration: const InputDecoration(
+                                  contentPadding: EdgeInsets.all(12),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _isEditing = false;
+                                          _editController.text =
+                                              widget.message.content;
+                                        });
+                                      },
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: const Text('Hủy'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FilledButton(
+                                      onPressed: () {
+                                        final newContent = _editController.text
+                                            .trim();
+                                        if (newContent.isNotEmpty &&
+                                            newContent !=
+                                                widget.message.content) {
+                                          context
+                                              .read<ChatProvider>()
+                                              .editMessage(
+                                                widget.message,
+                                                newContent,
+                                              );
+                                        }
+                                        setState(() {
+                                          _isEditing = false;
+                                        });
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: const Text('Lưu'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
                       else
                         Column(
-                           crossAxisAlignment: CrossAxisAlignment.end,
-                           children: [
-                              SelectableText(
-                                widget.message.content,
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  height: 1.5,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                                textAlign: TextAlign.right,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            SelectableText(
+                              widget.message.content,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                height: 1.5,
+                                color: theme.colorScheme.onSurface,
                               ),
-                              // Edit Icon (placed below message, right aligned)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _isEditing = true;
-                                      _editController.text = widget.message.content;
-                                    });
-                                  },
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(6),
-                                    child: Icon(
-                                      Icons.edit_outlined, 
-                                      size: 14, 
-                                      color: theme.colorScheme.onSurface.withOpacity(0.4)
-                                    ),
+                              textAlign: TextAlign.right,
+                            ),
+                            // Edit Icon (placed below message, right aligned)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _isEditing = true;
+                                    _editController.text =
+                                        widget.message.content;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurface
+                                        .withOpacity(0.4),
                                   ),
                                 ),
                               ),
-                           ],
+                            ),
+                          ],
                         ),
                     ],
                   ],
@@ -406,8 +443,10 @@ class _MessageBubbleState extends State<MessageBubble> {
               // AI Avatar with Spinner
               _AvatarSpinner(
                 // Show spinner only when streaming/generating but no content yet
-                isAnimating: (widget.message.isStreaming && widget.message.content.isEmpty) || 
-                            widget.message.isGeneratingImage,
+                isAnimating:
+                    (widget.message.isStreaming &&
+                        widget.message.content.isEmpty) ||
+                    widget.message.isGeneratingImage,
                 child: Container(
                   width: 28,
                   height: 28,
@@ -446,24 +485,34 @@ class _MessageBubbleState extends State<MessageBubble> {
                     const SizedBox(height: 6),
 
                     // 1. Pre-Search Thinking (if any)
-                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty) ...[
-                      Builder(builder: (context) {
-                         final thinking = widget.message.thinking!;
-                         final splitIndex = widget.message.deepSearchStartIndex;
-                         
-                         String preThinking = thinking;
-                         if (splitIndex != null && splitIndex < thinking.length) {
-                           preThinking = thinking.substring(0, splitIndex);
-                         }
-                         
-                         if (preThinking.isNotEmpty) {
+                    if (widget.message.thinking != null &&
+                        widget.message.thinking!.isNotEmpty) ...[
+                      Builder(
+                        builder: (context) {
+                          final thinking = widget.message.thinking!;
+                          final splitIndex =
+                              widget.message.deepSearchStartIndex;
+
+                          String preThinking = thinking;
+                          if (splitIndex != null &&
+                              splitIndex < thinking.length) {
+                            preThinking = thinking.substring(0, splitIndex);
+                          }
+
+                          if (preThinking.isNotEmpty) {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildReasoningChain(context, theme, widget.message, contentOverride: preThinking),
+                              child: _buildReasoningChain(
+                                context,
+                                theme,
+                                widget.message,
+                                contentOverride: preThinking,
+                              ),
                             );
-                         }
-                         return const SizedBox.shrink();
-                      }),
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
                     ],
 
                     // 2. Deep Search Indicator (status updates)
@@ -474,7 +523,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                       ),
 
                     // 3. Plan Indicator (collapsible)
-                    if (widget.message.plan != null && widget.message.plan!.isNotEmpty)
+                    if (widget.message.plan != null &&
+                        widget.message.plan!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: PlanIndicator(
@@ -482,49 +532,58 @@ class _MessageBubbleState extends State<MessageBubble> {
                           isStreaming: widget.message.isStreaming,
                         ),
                       ),
-                      
+
                     // 4. Post-Search Thinking (if any)
-                    if (widget.message.thinking != null && widget.message.thinking!.isNotEmpty) ...[
-                      Builder(builder: (context) {
-                         final thinking = widget.message.thinking!;
-                         final splitIndex = widget.message.deepSearchStartIndex;
-                         
-                         if (splitIndex != null && splitIndex < thinking.length) {
-                           final postThinking = thinking.substring(splitIndex);
-                           if (postThinking.isNotEmpty) {
+                    if (widget.message.thinking != null &&
+                        widget.message.thinking!.isNotEmpty) ...[
+                      Builder(
+                        builder: (context) {
+                          final thinking = widget.message.thinking!;
+                          final splitIndex =
+                              widget.message.deepSearchStartIndex;
+
+                          if (splitIndex != null &&
+                              splitIndex < thinking.length) {
+                            final postThinking = thinking.substring(splitIndex);
+                            if (postThinking.isNotEmpty) {
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildReasoningChain(context, theme, widget.message, contentOverride: postThinking),
+                                child: _buildReasoningChain(
+                                  context,
+                                  theme,
+                                  widget.message,
+                                  contentOverride: postThinking,
+                                ),
                               );
-                           }
-                         }
-                         return const SizedBox.shrink();
-                      }),
+                            }
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
                     ],
 
                     // Code Executions Results (Above content to avoid jumping)
                     if (widget.message.codeExecutions.isNotEmpty) ...[
-                       ...widget.message.codeExecutions.map((exec) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: CodeExecutionWidget(
-                              code: exec['code'] ?? '',
-                              output: exec['output'] ?? '',
-                              error: exec['error'] ?? '',
-                              isDark: isDark,
-                            ),
-                          );
-                       }),
-                       const SizedBox(height: 8),
+                      ...widget.message.codeExecutions.map((exec) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: CodeExecutionWidget(
+                            code: exec['code'] ?? '',
+                            output: exec['output'] ?? '',
+                            error: exec['error'] ?? '',
+                            isDark: isDark,
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 8),
                     ],
 
                     // 2. Content with interleaved indicators (using imageBuilder)
                     _buildMarkdownContent(theme, isDark),
 
-
-
                     // Generated Images using optimized widget
-                    if (widget.message.generatedImages.isNotEmpty || widget.message.isGeneratingImage)
+                    if (widget.message.generatedImages.isNotEmpty ||
+                        widget.message.isGeneratingImage)
                       MessageImagesWidget(
                         images: widget.message.generatedImages,
                         isGenerating: widget.message.isGeneratingImage,
@@ -538,7 +597,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                     //     child: _buildStreamingIndicator(theme),
                     //   ),
                     // Actions
-                    if (!widget.message.isStreaming && widget.message.content.isNotEmpty)
+                    if (!widget.message.isStreaming &&
+                        widget.message.content.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: _buildActions(context, theme),
@@ -557,7 +617,8 @@ class _MessageBubbleState extends State<MessageBubble> {
   IconData _getFileIcon(String mimeType) {
     if (mimeType.contains('pdf')) return Icons.picture_as_pdf;
     if (mimeType.contains('word')) return Icons.description;
-    if (mimeType.contains('sheet') || mimeType.contains('excel')) return Icons.table_chart;
+    if (mimeType.contains('sheet') || mimeType.contains('excel'))
+      return Icons.table_chart;
     if (mimeType.contains('text')) return Icons.text_snippet;
     if (mimeType.contains('audio')) return Icons.audio_file;
     return Icons.insert_drive_file;
@@ -569,9 +630,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       data: widget.message.content,
       selectable: true,
       softLineBreak: true,
-      builders: {
-        'code': CodeBlockBuilder(isDark: isDark),
-      },
+      builders: {'code': CodeBlockBuilder(isDark: isDark)},
       styleSheet: MarkdownStyleSheet(
         // Body text
         p: theme.textTheme.bodyLarge?.copyWith(
@@ -630,7 +689,9 @@ class _MessageBubbleState extends State<MessageBubble> {
           color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF0F4F8),
           border: Border(
             left: BorderSide(
-              color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+              color: isDark
+                  ? const Color(0xFF64B5F6)
+                  : theme.colorScheme.primary,
               width: 3,
             ),
           ),
@@ -659,7 +720,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       // Handle image rendering (used for custom indicators)
       imageBuilder: (uri, title, alt) {
         final uriStr = uri.toString();
-        
+
         // Handle custom SEARCH indicator
         if (uriStr.startsWith('search:')) {
           final query = Uri.decodeComponent(uriStr.substring(7));
@@ -675,7 +736,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             ),
           );
         }
-        
+
         // Handle custom FILE_ACTION indicator
         if (uriStr.startsWith('file:')) {
           final parts = Uri.decodeComponent(uriStr.substring(5)).split(':');
@@ -685,18 +746,20 @@ class _MessageBubbleState extends State<MessageBubble> {
             while (action.startsWith('/')) {
               action = action.substring(1);
             }
-            
-            
-            final target = parts.sublist(1).join(':'); // Path might contain colons
+
+            final target = parts
+                .sublist(1)
+                .join(':'); // Path might contain colons
             final actionTag = '${action}:${target}';
-            final isActionCompleted = widget.message.completedFileActions.contains(actionTag);
-            
+            final isActionCompleted = widget.message.completedFileActions
+                .contains(actionTag);
+
             return Align(
               alignment: Alignment.centerLeft,
               child: FileActionIndicator(
                 action: action,
                 target: target,
-                isCompleted: !widget.message.isStreaming || isActionCompleted, 
+                isCompleted: !widget.message.isStreaming || isActionCompleted,
               ),
             );
           }
@@ -720,7 +783,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                   children: [
                     Icon(Icons.broken_image, color: Colors.grey[500]),
                     const SizedBox(width: 8),
-                    Flexible(child: Text(alt ?? 'Image failed to load', style: TextStyle(color: Colors.grey[500]))),
+                    Flexible(
+                      child: Text(
+                        alt ?? 'Image failed to load',
+                        style: TextStyle(color: Colors.grey[500]),
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -735,7 +803,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     return Padding(
       padding: EdgeInsets.zero, // Fixed alignment
       child: _TypingIndicator(
-        dotCount: widget.message.content.isEmpty ? 3 : 1, // 3 dots when thinking/empty, 1 dot when streaming text
+        dotCount: widget.message.content.isEmpty
+            ? 3
+            : 1, // 3 dots when thinking/empty, 1 dot when streaming text
       ),
     );
   }
@@ -781,60 +851,108 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
-
   Widget _buildDeepSearchIndicator(Message message) {
     if (message.deepSearchUpdates.isEmpty) return const SizedBox.shrink();
 
     final updates = message.deepSearchUpdates;
-    // If streaming, the last update is active.
-    // If not streaming (done), all updates are completed.
-    // However, usually we might want to collapse completed ones or show them differently?
-    // For now, let's show all as completed except the last one if streaming.
-    
     final isStreaming = message.isStreaming;
-    final completedSteps = isStreaming && updates.isNotEmpty 
+    final completedSteps = isStreaming && updates.isNotEmpty
         ? updates.sublist(0, updates.length - 1)
         : updates;
-    
+
     final activeSteps = isStreaming && updates.isNotEmpty
         ? [updates.last]
         : <String>[];
 
+    final searchType = _determineSearchType(message);
+    final metadata = DeepSearchMetadata(
+      totalSearches: message.completedSearches.length,
+      elapsedTime: DateTime.now().difference(message.timestamp),
+      sources: _extractSources(message),
+      recentActions: message.completedSearches.take(5).toList(),
+    );
+
     return DeepSearchIndicator(
       activeSteps: activeSteps,
       completedSteps: completedSteps,
+      searchType: searchType,
+      metadata: metadata,
     );
   }
-  Widget _buildReasoningChain(BuildContext context, ThemeData theme, Message message, {String? contentOverride}) {
-    if (message.thinking == null && contentOverride == null) return const SizedBox.shrink();
+
+  DeepSearchType _determineSearchType(Message message) {
+    final content = '${message.content} ${message.thinking ?? ''}'
+        .toLowerCase();
+
+    if (content.contains('phân tích') || content.contains('analysis')) {
+      return DeepSearchType.analysis;
+    } else if (content.contains('sáng tạo') ||
+        content.contains('creative') ||
+        content.contains('viết')) {
+      return DeepSearchType.creative;
+    } else if (content.contains('nghiên cứu') || content.contains('research')) {
+      return DeepSearchType.research;
+    }
+    return DeepSearchType.general;
+  }
+
+  List<String> _extractSources(Message message) {
+    final sources = <String>[];
+    final content = message.content;
+
+    final urlPattern = RegExp(r'https?://[^\s\)]+');
+    final matches = urlPattern.allMatches(content);
+    for (final match in matches.take(5)) {
+      final url = match.group(0) ?? '';
+      if (url.isNotEmpty) {
+        final domain = Uri.tryParse(url)?.host ?? url;
+        if (!sources.contains(domain)) {
+          sources.add(domain);
+        }
+      }
+    }
+
+    return sources;
+  }
+
+  Widget _buildReasoningChain(
+    BuildContext context,
+    ThemeData theme,
+    Message message, {
+    String? contentOverride,
+  }) {
+    if (message.thinking == null && contentOverride == null)
+      return const SizedBox.shrink();
 
     final List<Widget> children = [];
     final splitPattern = RegExp(r'\n\n<<<TOOL:(.*?):(.*?)>>>\n\n');
-    
+
     final thinkingContent = contentOverride ?? message.thinking!;
     final matches = splitPattern.allMatches(thinkingContent);
-    
+
     int lastIndex = 0;
-    
+
     for (final match in matches) {
       if (match.start > lastIndex) {
-        final segmentText = thinkingContent.substring(lastIndex, match.start).trim();
+        final segmentText = thinkingContent
+            .substring(lastIndex, match.start)
+            .trim();
         if (segmentText.isNotEmpty) {
-           children.add(_ThinkingSegment(content: segmentText, isLast: false));
+          children.add(_ThinkingSegment(content: segmentText, isLast: false));
         }
       }
-      
+
       final action = match.group(1) ?? 'UNKNOWN';
       final target = match.group(2) ?? '';
-      
+
       bool isCompleted = false;
       if (action == 'SEARCH') {
-         if (message.completedSearches.contains(target)) isCompleted = true;
+        if (message.completedSearches.contains(target)) isCompleted = true;
       } else if (['READ', 'CREATE', 'SEARCH_FILE'].contains(action)) {
-         final tag = '$action:$target';
-         if (message.completedFileActions.contains(tag)) isCompleted = true;
+        final tag = '$action:$target';
+        if (message.completedFileActions.contains(tag)) isCompleted = true;
       }
-      
+
       children.add(
         Padding(
           padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
@@ -843,19 +961,19 @@ class _MessageBubbleState extends State<MessageBubble> {
             target: target,
             isCompleted: isCompleted,
           ),
-        )
+        ),
       );
-      
+
       lastIndex = match.end;
     }
-    
+
     if (lastIndex < thinkingContent.length) {
       final segmentText = thinkingContent.substring(lastIndex).trim();
       if (segmentText.isNotEmpty) {
-         children.add(_ThinkingSegment(content: segmentText, isLast: true));
+        children.add(_ThinkingSegment(content: segmentText, isLast: true));
       }
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
@@ -894,7 +1012,6 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-
 class _TypingIndicator extends StatefulWidget {
   final int dotCount;
   const _TypingIndicator({this.dotCount = 3});
@@ -903,7 +1020,8 @@ class _TypingIndicator extends StatefulWidget {
   State<_TypingIndicator> createState() => _TypingIndicatorState();
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerProviderStateMixin {
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -924,13 +1042,13 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
   @override
   Widget build(BuildContext context) {
     // Modern accent color or just onSurface
-    final color = Theme.of(context).brightness == Brightness.dark 
-        ? Colors.white 
-        : Colors.black; 
-        
+    final color = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black;
+
     return Container(
       // Reduced padding to fix alignment, removing left padding
-      padding: const EdgeInsets.symmetric(vertical: 8), 
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: List.generate(widget.dotCount, (index) {
@@ -939,9 +1057,13 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
             builder: (context, child) {
               // Creating a wave effect
               double wave = (_controller.value + index * 0.2) % 1.0;
-              double opacity = 0.2 + 0.8 * (0.5 - (0.5 - wave).abs()) * 2; // Triangle 0.2 -> 1.0 -> 0.2
+              double opacity =
+                  0.2 +
+                  0.8 *
+                      (0.5 - (0.5 - wave).abs()) *
+                      2; // Triangle 0.2 -> 1.0 -> 0.2
               opacity = opacity.clamp(0.2, 1.0);
-              
+
               return Container(
                 width: 8,
                 height: 8,
@@ -962,18 +1084,15 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
 class _ThinkingSegment extends StatefulWidget {
   final String content;
   final bool isLast;
-  
-  const _ThinkingSegment({
-    required this.content,
-    required this.isLast,
-  });
+
+  const _ThinkingSegment({required this.content, required this.isLast});
 
   @override
   State<_ThinkingSegment> createState() => _ThinkingSegmentState();
 }
 
 class _ThinkingSegmentState extends State<_ThinkingSegment> {
-  bool _isExpanded = true; 
+  bool _isExpanded = true;
 
   @override
   void initState() {
@@ -1004,7 +1123,9 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                  _isExpanded
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_right,
                   size: 14,
                   color: theme.colorScheme.onSurface.withOpacity(0.5),
                 ),
@@ -1052,21 +1173,29 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
 class ShimmerPlaceholder extends StatefulWidget {
   final double width;
   final double height;
-  const ShimmerPlaceholder({super.key, required this.width, required this.height});
+  const ShimmerPlaceholder({
+    super.key,
+    required this.width,
+    required this.height,
+  });
 
   @override
   State<ShimmerPlaceholder> createState() => _ShimmerPlaceholderState();
 }
 
-class _ShimmerPlaceholderState extends State<ShimmerPlaceholder> with SingleTickerProviderStateMixin {
+class _ShimmerPlaceholderState extends State<ShimmerPlaceholder>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
-  
+
   @override
   void dispose() {
     _controller.dispose();
@@ -1091,19 +1220,15 @@ class _ShimmerPlaceholderState extends State<ShimmerPlaceholder> with SingleTick
             gradient: LinearGradient(
               begin: Alignment(-2.0 + _controller.value * 4, -1.0),
               end: Alignment(1.0 + _controller.value * 4, 1.0),
-              colors: [
-                baseColor,
-                highlightColor,
-                baseColor,
-              ],
+              colors: [baseColor, highlightColor, baseColor],
               stops: const [0.3, 0.5, 0.7],
             ),
           ),
           child: Center(
             child: Icon(
-              Icons.image, 
-              size: 48, 
-              color: isDark ? Colors.white10 : Colors.black12
+              Icons.image,
+              size: 48,
+              color: isDark ? Colors.white10 : Colors.black12,
             ),
           ),
         );
@@ -1116,16 +1241,14 @@ class _AvatarSpinner extends StatefulWidget {
   final bool isAnimating;
   final Widget child;
 
-  const _AvatarSpinner({
-    required this.isAnimating,
-    required this.child,
-  });
+  const _AvatarSpinner({required this.isAnimating, required this.child});
 
   @override
   State<_AvatarSpinner> createState() => _AvatarSpinnerState();
 }
 
-class _AvatarSpinnerState extends State<_AvatarSpinner> with SingleTickerProviderStateMixin {
+class _AvatarSpinnerState extends State<_AvatarSpinner>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -1185,31 +1308,31 @@ class _AvatarSpinnerState extends State<_AvatarSpinner> with SingleTickerProvide
         RotationTransition(
           turns: _controller,
           child: Container(
-             width: 34,
-             height: 34,
-             padding: const EdgeInsets.all(2), // The thickness of the Ring
-             decoration: BoxDecoration(
-               shape: BoxShape.circle,
-               gradient: SweepGradient(
-                 colors: [
-                   Colors.transparent,
-                   Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                   Theme.of(context).colorScheme.primary,
-                 ],
-                 stops: const [0.0, 0.5, 1.0],
-               ),
-             ),
-             // This creates a mask to make it a ring
-             child: Container(
-               decoration: BoxDecoration(
-                 shape: BoxShape.circle,
-                 color: Theme.of(context).scaffoldBackgroundColor, 
-                  // Note: In message bubbles, we might be on a colored bg, 
-                  // but usually avatars are in a transparent row. 
-                  // Transparent hole is tricky with SweepGradient without CustomPainter.
-                  // Let's rely on the Child covering the center.
-               ),
-             ),
+            width: 34,
+            height: 34,
+            padding: const EdgeInsets.all(2), // The thickness of the Ring
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  Colors.transparent,
+                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  Theme.of(context).colorScheme.primary,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            // This creates a mask to make it a ring
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).scaffoldBackgroundColor,
+                // Note: In message bubbles, we might be on a colored bg,
+                // but usually avatars are in a transparent row.
+                // Transparent hole is tricky with SweepGradient without CustomPainter.
+                // Let's rely on the Child covering the center.
+              ),
+            ),
           ),
         ),
         // The Avatar stays on top

@@ -62,15 +62,15 @@ def get_hierarchical_memory(
         # Generate query embedding
         query_emb = EmbeddingService.get_embedding(current_query)
 
-        # Get candidate messages (exclude working memory)
-        # Optimization: Fetch only messages with embeddings, and maybe limit to last 500?
-        # For now, fetch all then filter. FAISS is fast.
+        # Get candidate messages (exclude working memory, limit to last 500 for performance)
         candidates = (
             db.query(ModelChatMessage)
             .filter(
                 ModelChatMessage.conversation_id == conversation_id,
                 ModelChatMessage.embedding.isnot(None),
             )
+            .order_by(ModelChatMessage.timestamp.desc())
+            .limit(500)
             .all()
         )
 
@@ -89,7 +89,8 @@ def get_hierarchical_memory(
                     if emb.shape[0] == EmbeddingService.DIM:
                         emb_list.append(emb)
                         valid_candidates.append(msg)
-                except:
+                except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+                    logger.warning(f"Skipping message {msg.id} due to invalid embedding")
                     continue
 
             if emb_list:
@@ -116,6 +117,7 @@ def get_hierarchical_memory(
                 )
     except Exception as e:
         logger.warning(f"Error getting semantic memory: {e}")
+        # Return empty list to ensure semantic_messages is always a list
 
     # 4. Return components separately
     logger.info(
