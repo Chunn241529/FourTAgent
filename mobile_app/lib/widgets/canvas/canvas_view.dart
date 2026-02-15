@@ -9,6 +9,7 @@ import '../../providers/canvas_provider.dart';
 import '../../utils/html_detector.dart';
 import '../chat/code_block_builder.dart'; // Reuse code block builder
 import 'html_preview_widget.dart';
+import 'webview_preview_widget.dart';
 
 /// View modes for canvas content
 enum CanvasViewMode { markdown, html, source }
@@ -16,7 +17,7 @@ enum CanvasViewMode { markdown, html, source }
 class CanvasView extends StatefulWidget {
   final CanvasModel canvas;
   final VoidCallback onClose; // Determines "Back" behavior (close current view)
-  final VoidCallback onHide;  // Determines "Hide" behavior (close entire panel)
+  final VoidCallback onHide; // Determines "Hide" behavior (close entire panel)
 
   const CanvasView({
     super.key,
@@ -35,12 +36,12 @@ class _CanvasViewState extends State<CanvasView> {
   bool _isEditing = false;
   CanvasViewMode _viewMode = CanvasViewMode.markdown; // Current view mode
   bool _hasFrontendCode = false; // Whether content has HTML/CSS/JS
-  
+
   // Undo/Redo stacks
   final List<String> _undoStack = [];
   final List<String> _redoStack = [];
   String _lastSavedContent = '';
-  
+
   // Current heading level for dropdown display
   String _currentHeading = 'p';
 
@@ -53,7 +54,7 @@ class _CanvasViewState extends State<CanvasView> {
     _contentController.addListener(_onContentChanged);
     _checkFrontendCode();
   }
-  
+
   /// Check if content contains frontend code (HTML/CSS/JS)
   void _checkFrontendCode() {
     _hasFrontendCode = HtmlDetector.isFrontendCode(widget.canvas.content);
@@ -87,7 +88,7 @@ class _CanvasViewState extends State<CanvasView> {
     _contentController.dispose();
     super.dispose();
   }
-  
+
   // Save content to undo stack when changed
   void _onContentChanged() {
     // Debounce: only save if content changed significantly
@@ -99,7 +100,7 @@ class _CanvasViewState extends State<CanvasView> {
       if (_undoStack.length > 50) _undoStack.removeAt(0);
     }
   }
-  
+
   void _undo() {
     if (_undoStack.isEmpty) return;
     _redoStack.add(_contentController.text);
@@ -110,7 +111,7 @@ class _CanvasViewState extends State<CanvasView> {
     _contentController.addListener(_onContentChanged);
     setState(() {});
   }
-  
+
   void _redo() {
     if (_redoStack.isEmpty) return;
     _undoStack.add(_contentController.text);
@@ -121,14 +122,17 @@ class _CanvasViewState extends State<CanvasView> {
     _contentController.addListener(_onContentChanged);
     setState(() {});
   }
-  
+
   // Wrap selected text with markdown syntax
   void _wrapSelection(String prefix, String suffix) {
     final text = _contentController.text;
     final selection = _contentController.selection;
-    
+
     // Check if selection is valid
-    if (selection.start < 0 || selection.end < 0 || selection.start > text.length || selection.end > text.length) {
+    if (selection.start < 0 ||
+        selection.end < 0 ||
+        selection.start > text.length ||
+        selection.end > text.length) {
       // No valid selection, insert at end
       _contentController.text = text + prefix + suffix;
       _contentController.selection = TextSelection.collapsed(
@@ -137,12 +141,14 @@ class _CanvasViewState extends State<CanvasView> {
       setState(() {});
       return;
     }
-    
+
     if (selection.isCollapsed) {
       // No selection, insert at cursor
-      final newText = text.substring(0, selection.start) + 
-                      prefix + suffix + 
-                      text.substring(selection.end);
+      final newText =
+          text.substring(0, selection.start) +
+          prefix +
+          suffix +
+          text.substring(selection.end);
       _contentController.text = newText;
       _contentController.selection = TextSelection.collapsed(
         offset: selection.start + prefix.length,
@@ -150,9 +156,12 @@ class _CanvasViewState extends State<CanvasView> {
     } else {
       // Wrap selected text
       final selectedText = text.substring(selection.start, selection.end);
-      final newText = text.substring(0, selection.start) + 
-                      prefix + selectedText + suffix + 
-                      text.substring(selection.end);
+      final newText =
+          text.substring(0, selection.start) +
+          prefix +
+          selectedText +
+          suffix +
+          text.substring(selection.end);
       _contentController.text = newText;
       _contentController.selection = TextSelection(
         baseOffset: selection.start + prefix.length,
@@ -161,36 +170,38 @@ class _CanvasViewState extends State<CanvasView> {
     }
     setState(() {});
   }
-  
+
   // Toggle line prefix (for headings, lists)
   void _toggleLinePrefix(String prefix) {
     final text = _contentController.text;
     final selection = _contentController.selection;
-    
+
     // Check if selection is valid
     if (selection.start < 0 || selection.start > text.length) {
       // No valid cursor, add prefix to new line at end
       final newText = text.isEmpty ? prefix : '$text\n$prefix';
       _contentController.text = newText;
-      _contentController.selection = TextSelection.collapsed(offset: newText.length);
+      _contentController.selection = TextSelection.collapsed(
+        offset: newText.length,
+      );
       setState(() {});
       return;
     }
-    
+
     // Find current line start
     int lineStart = selection.start;
     while (lineStart > 0 && text[lineStart - 1] != '\n') {
       lineStart--;
     }
-    
-    // Find current line end  
+
+    // Find current line end
     int lineEnd = selection.start;
     while (lineEnd < text.length && text[lineEnd] != '\n') {
       lineEnd++;
     }
-    
+
     final currentLine = text.substring(lineStart, lineEnd);
-    
+
     String newLine;
     int offset;
     if (currentLine.startsWith(prefix)) {
@@ -199,35 +210,43 @@ class _CanvasViewState extends State<CanvasView> {
       offset = -prefix.length;
     } else {
       // Remove any existing heading prefixes first
-      final cleanLine = currentLine.replaceFirst(RegExp(r'^#{1,6}\s*|^[-*]\s*|^\d+\.\s*'), '');
+      final cleanLine = currentLine.replaceFirst(
+        RegExp(r'^#{1,6}\s*|^[-*]\s*|^\d+\.\s*'),
+        '',
+      );
       // Add new prefix
       newLine = prefix + cleanLine;
       offset = newLine.length - currentLine.length;
     }
-    
-    final newText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
+
+    final newText =
+        text.substring(0, lineStart) + newLine + text.substring(lineEnd);
     _contentController.text = newText;
     _contentController.selection = TextSelection.collapsed(
       offset: (selection.start + offset).clamp(0, newText.length),
     );
     setState(() {});
   }
-  
+
   // Copy content to clipboard
   Future<void> _copyToClipboard() async {
     await Clipboard.setData(ClipboardData(text: _contentController.text));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã sao chép nội dung'), duration: Duration(seconds: 1)),
+        const SnackBar(
+          content: Text('Đã sao chép nội dung'),
+          duration: Duration(seconds: 1),
+        ),
       );
     }
   }
-  
+
   // Export to file
   Future<void> _exportToFile() async {
     // Use file_picker to save file
     try {
-      final fileName = '${_titleController.text.replaceAll(RegExp(r'[^\w\s-]'), '')}.md';
+      final fileName =
+          '${_titleController.text.replaceAll(RegExp(r'[^\w\s-]'), '')}.md';
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'Xuất canvas',
         fileName: fileName,
@@ -239,14 +258,20 @@ class _CanvasViewState extends State<CanvasView> {
         await file.writeAsString(_contentController.text);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Đã xuất file: $path'), duration: const Duration(seconds: 2)),
+            SnackBar(
+              content: Text('Đã xuất file: $path'),
+              duration: const Duration(seconds: 2),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi xuất file: $e'), duration: const Duration(seconds: 2)),
+          SnackBar(
+            content: Text('Lỗi xuất file: $e'),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     }
@@ -263,7 +288,10 @@ class _CanvasViewState extends State<CanvasView> {
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã lưu canvas'), duration: Duration(seconds: 1)),
+        const SnackBar(
+          content: Text('Đã lưu canvas'),
+          duration: Duration(seconds: 1),
+        ),
       );
     }
   }
@@ -273,7 +301,9 @@ class _CanvasViewState extends State<CanvasView> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xác nhận xóa'),
-        content: Text('Bạn có chắc muốn xóa canvas "${widget.canvas.title}"? Hành động này không thể hoàn tác.'),
+        content: Text(
+          'Bạn có chắc muốn xóa canvas "${widget.canvas.title}"? Hành động này không thể hoàn tác.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -292,10 +322,10 @@ class _CanvasViewState extends State<CanvasView> {
       await context.read<CanvasProvider>().deleteCanvas(widget.canvas.id);
       // Provider automatically handles setting currentCanvas to null, but we can double check or just let the parent rebuild
       // actually CanvasPanel listens to provider and if currentCanvas is null it shows list.
-      // But we need to ensure this view is disposed or parent rebuilds. 
+      // But we need to ensure this view is disposed or parent rebuilds.
       // trigger close just in case, though deleteCanvas usually updates the selected state too.
       // Checking provider... usually deleteCanvas in provider should set currentCanvas = null if it was selected.
-      widget.onClose(); 
+      widget.onClose();
     }
   }
 
@@ -305,306 +335,468 @@ class _CanvasViewState extends State<CanvasView> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Column(
-          children: [
-            // Gemini-style Header Toolbar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.3))),
+      children: [
+        // Gemini-style Header Toolbar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(color: theme.dividerColor.withOpacity(0.3)),
+            ),
+          ),
+          child: Row(
+            children: [
+              // LEFT SECTION - Fixed: Back button + Title
+              IconButton(
+                icon: const Icon(Icons.arrow_back, size: 18),
+                tooltip: 'Quay lại',
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(4),
+                  minimumSize: const Size(32, 32),
+                ),
+                onPressed: widget.onClose,
               ),
-              child: Row(
-                children: [
-                  // LEFT SECTION - Fixed: Back button + Title
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, size: 18),
-                    tooltip: 'Quay lại',
-                    style: IconButton.styleFrom(
-                      padding: const EdgeInsets.all(4),
-                      minimumSize: const Size(32, 32),
-                    ),
-                    onPressed: widget.onClose,
-                  ),
-                  const SizedBox(width: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 150, minWidth: 80),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _isEditing = true),
-                      child: _isEditing
-                          ? TextField(
-                              controller: _titleController,
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150, minWidth: 80),
+                child: GestureDetector(
+                  onTap: () => setState(() => _isEditing = true),
+                  child: _isEditing
+                      ? TextField(
+                          controller: _titleController,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.primary.withOpacity(
+                                  0.5,
                                 ),
-                                focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: BorderSide(color: theme.colorScheme.primary),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                isDense: true,
-                              ),
-                              onSubmitted: (_) => _save(),
-                            )
-                          : Text(
-                              widget.canvas.title,
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Edit button to enable editing
-                  _ToolbarIconButton(
-                    icon: Icons.edit_outlined, 
-                    tooltip: 'Chỉnh sửa', 
-                    onTap: () => setState(() => _isEditing = !_isEditing), 
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 4),
-                  Container(width: 1, height: 20, color: theme.dividerColor.withOpacity(0.5)),
-                  
-                  // MIDDLE SECTION - Scrollable formatting buttons
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 4),
-                          // Undo/Redo buttons
-                          _ToolbarIconButton(icon: Icons.undo, tooltip: 'Hoàn tác', onTap: _undo, theme: theme, enabled: _undoStack.isNotEmpty),
-                          _ToolbarIconButton(icon: Icons.redo, tooltip: 'Làm lại', onTap: _redo, theme: theme, enabled: _redoStack.isNotEmpty),
-                          const SizedBox(width: 4),
-                          Container(width: 1, height: 20, color: theme.dividerColor.withOpacity(0.5)),
-                          const SizedBox(width: 4),
-                          // Heading dropdown
-                          PopupMenuButton<String>(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                color: Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _currentHeading == 'h1' ? 'H1' : _currentHeading == 'h2' ? 'H2' : _currentHeading == 'h3' ? 'H3' : 'P',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: theme.colorScheme.onSurface.withOpacity(0.7),
-                                    ),
-                                  ),
-                                  Icon(Icons.keyboard_arrow_down, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.7)),
-                                ],
                               ),
                             ),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(value: 'h1', child: Text('Tiêu đề 1', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-                              const PopupMenuItem(value: 'h2', child: Text('Tiêu đề 2', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                              const PopupMenuItem(value: 'h3', child: Text('Tiêu đề 3', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
-                              const PopupMenuItem(value: 'p', child: Text('Đoạn văn')),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _save(),
+                        )
+                      : Text(
+                          widget.canvas.title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Edit button to enable editing
+              _ToolbarIconButton(
+                icon: Icons.edit_outlined,
+                tooltip: 'Chỉnh sửa',
+                onTap: () => setState(() => _isEditing = !_isEditing),
+                theme: theme,
+              ),
+              const SizedBox(width: 4),
+              Container(
+                width: 1,
+                height: 20,
+                color: theme.dividerColor.withOpacity(0.5),
+              ),
+
+              // MIDDLE SECTION - Scrollable formatting buttons
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      // Undo/Redo buttons
+                      _ToolbarIconButton(
+                        icon: Icons.undo,
+                        tooltip: 'Hoàn tác',
+                        onTap: _undo,
+                        theme: theme,
+                        enabled: _undoStack.isNotEmpty,
+                      ),
+                      _ToolbarIconButton(
+                        icon: Icons.redo,
+                        tooltip: 'Làm lại',
+                        onTap: _redo,
+                        theme: theme,
+                        enabled: _redoStack.isNotEmpty,
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        width: 1,
+                        height: 20,
+                        color: theme.dividerColor.withOpacity(0.5),
+                      ),
+                      const SizedBox(width: 4),
+                      // Heading dropdown
+                      PopupMenuButton<String>(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            color: Colors.transparent,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _currentHeading == 'h1'
+                                    ? 'H1'
+                                    : _currentHeading == 'h2'
+                                    ? 'H2'
+                                    : _currentHeading == 'h3'
+                                    ? 'H3'
+                                    : 'P',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.7),
+                                ),
+                              ),
+                              Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 16,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.7,
+                                ),
+                              ),
                             ],
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'h1': _toggleLinePrefix('# '); break;
-                                case 'h2': _toggleLinePrefix('## '); break;
-                                case 'h3': _toggleLinePrefix('### '); break;
-                                case 'p': _toggleLinePrefix(''); break;
-                              }
-                              setState(() => _currentHeading = value ?? 'p');
-                            },
                           ),
-                          const SizedBox(width: 4),
-                          // Format buttons: Bold, Italic, Underline
-                          _ToolbarIconButton(icon: Icons.format_bold, tooltip: 'Đậm', onTap: () => _wrapSelection('**', '**'), theme: theme),
-                          _ToolbarIconButton(icon: Icons.format_italic, tooltip: 'Nghiêng', onTap: () => _wrapSelection('*', '*'), theme: theme),
-                          _ToolbarIconButton(icon: Icons.format_underlined, tooltip: 'Gạch chân', onTap: () => _wrapSelection('<u>', '</u>'), theme: theme),
-                          const SizedBox(width: 4),
-                          Container(width: 1, height: 20, color: theme.dividerColor.withOpacity(0.5)),
-                          const SizedBox(width: 4),
-                          // List buttons
-                          _ToolbarIconButton(icon: Icons.format_list_bulleted, tooltip: 'Danh sách', onTap: () => _toggleLinePrefix('- '), theme: theme),
-                          _ToolbarIconButton(icon: Icons.format_list_numbered, tooltip: 'Danh sách đánh số', onTap: () => _toggleLinePrefix('1. '), theme: theme),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // RIGHT SECTION - Fixed: Copy, Tạo, Close
-                  Container(width: 1, height: 20, color: theme.dividerColor.withOpacity(0.5)),
-                  const SizedBox(width: 4),
-                  _ToolbarIconButton(icon: Icons.copy_outlined, tooltip: 'Sao chép', onTap: _copyToClipboard, theme: theme),
-                  const SizedBox(width: 4),
-                  // "Tạo" button
-                  PopupMenuButton<String>(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Tạo',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.onPrimary,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'h1',
+                            child: Text(
+                              'Tiêu đề 1',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          Icon(Icons.keyboard_arrow_down, size: 16, color: theme.colorScheme.onPrimary),
+                          const PopupMenuItem(
+                            value: 'h2',
+                            child: Text(
+                              'Tiêu đề 2',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'h3',
+                            child: Text(
+                              'Tiêu đề 3',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'p',
+                            child: Text('Đoạn văn'),
+                          ),
                         ],
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'h1':
+                              _toggleLinePrefix('# ');
+                              break;
+                            case 'h2':
+                              _toggleLinePrefix('## ');
+                              break;
+                            case 'h3':
+                              _toggleLinePrefix('### ');
+                              break;
+                            case 'p':
+                              _toggleLinePrefix('');
+                              break;
+                          }
+                          setState(() => _currentHeading = value ?? 'p');
+                        },
                       ),
-                    ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'save', child: Text('Lưu')),
-                      const PopupMenuItem(value: 'export', child: Text('Xuất file')),
-                      const PopupMenuItem(value: 'copy', child: Text('Sao chép nội dung')),
+                      const SizedBox(width: 4),
+                      // Format buttons: Bold, Italic, Underline
+                      _ToolbarIconButton(
+                        icon: Icons.format_bold,
+                        tooltip: 'Đậm',
+                        onTap: () => _wrapSelection('**', '**'),
+                        theme: theme,
+                      ),
+                      _ToolbarIconButton(
+                        icon: Icons.format_italic,
+                        tooltip: 'Nghiêng',
+                        onTap: () => _wrapSelection('*', '*'),
+                        theme: theme,
+                      ),
+                      _ToolbarIconButton(
+                        icon: Icons.format_underlined,
+                        tooltip: 'Gạch chân',
+                        onTap: () => _wrapSelection('<u>', '</u>'),
+                        theme: theme,
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        width: 1,
+                        height: 20,
+                        color: theme.dividerColor.withOpacity(0.5),
+                      ),
+                      const SizedBox(width: 4),
+                      // List buttons
+                      _ToolbarIconButton(
+                        icon: Icons.format_list_bulleted,
+                        tooltip: 'Danh sách',
+                        onTap: () => _toggleLinePrefix('- '),
+                        theme: theme,
+                      ),
+                      _ToolbarIconButton(
+                        icon: Icons.format_list_numbered,
+                        tooltip: 'Danh sách đánh số',
+                        onTap: () => _toggleLinePrefix('1. '),
+                        theme: theme,
+                      ),
                     ],
-                    onSelected: (value) async {
-                      switch (value) {
-                        case 'save': await _save(); break;
-                        case 'export': await _exportToFile(); break;
-                        case 'copy': await _copyToClipboard(); break;
-                      }
-                    },
                   ),
-                  const SizedBox(width: 4),
-                  // Delete button
-                  _ToolbarIconButton(
-                    icon: Icons.delete_outline,
-                    tooltip: 'Xóa Canvas',
-                    onTap: _deleteCanvas,
-                    theme: theme,
+                ),
+              ),
+
+              // RIGHT SECTION - Fixed: Copy, Tạo, Close
+              Container(
+                width: 1,
+                height: 20,
+                color: theme.dividerColor.withOpacity(0.5),
+              ),
+              const SizedBox(width: 4),
+              _ToolbarIconButton(
+                icon: Icons.copy_outlined,
+                tooltip: 'Sao chép',
+                onTap: _copyToClipboard,
+                theme: theme,
+              ),
+              const SizedBox(width: 4),
+              // "Tạo" button
+              PopupMenuButton<String>(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
                   ),
-                  const SizedBox(width: 8),
-                  // Hide button
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: 'Ẩn Canvas',
-                    style: IconButton.styleFrom(
-                      padding: const EdgeInsets.all(6),
-                      minimumSize: const Size(32, 32),
-                    ),
-                    onPressed: widget.onHide,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Tạo',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onPrimary,
+                        ),
+                      ),
+                      Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: theme.colorScheme.onPrimary,
+                      ),
+                    ],
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'save', child: Text('Lưu')),
+                  const PopupMenuItem(
+                    value: 'export',
+                    child: Text('Xuất file'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'copy',
+                    child: Text('Sao chép nội dung'),
                   ),
                 ],
+                onSelected: (value) async {
+                  switch (value) {
+                    case 'save':
+                      await _save();
+                      break;
+                    case 'export':
+                      await _exportToFile();
+                      break;
+                    case 'copy':
+                      await _copyToClipboard();
+                      break;
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
+              // Delete button
+              _ToolbarIconButton(
+                icon: Icons.delete_outline,
+                tooltip: 'Xóa Canvas',
+                onTap: _deleteCanvas,
+                theme: theme,
+              ),
+              const SizedBox(width: 8),
+              // Hide button
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Ẩn Canvas',
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(32, 32),
+                ),
+                onPressed: widget.onHide,
+              ),
+            ],
+          ),
+        ),
+        // View mode toggle (below toolbar when not editing)
+        if (!_isEditing)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2)),
               ),
             ),
-          // View mode toggle (below toolbar when not editing)
-          if (!_isEditing)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
-              ),
-              child: Row(
-                children: [
-                  if (!_hasFrontendCode)
-                    _buildViewModeChip(
-                      'Xem trước', 
-                      _viewMode == CanvasViewMode.markdown, 
-                      () => setState(() => _viewMode = CanvasViewMode.markdown), 
-                      theme,
-                    ),
-                  if (!_hasFrontendCode) const SizedBox(width: 8),
-
-                  // Show HTML preview tab when frontend code detected
-                  if (_hasFrontendCode) ...[
-                    _buildViewModeChip(
-                      'Xem trước (HTML)', 
-                      _viewMode == CanvasViewMode.html, 
-                      () => setState(() => _viewMode = CanvasViewMode.html), 
-                      theme,
-                      icon: Icons.web,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
+            child: Row(
+              children: [
+                if (!_hasFrontendCode)
                   _buildViewModeChip(
-                    'Mã nguồn', 
-                    _viewMode == CanvasViewMode.source, 
-                    () => setState(() => _viewMode = CanvasViewMode.source), 
+                    'Xem trước',
+                    _viewMode == CanvasViewMode.markdown,
+                    () => setState(() => _viewMode = CanvasViewMode.markdown),
                     theme,
                   ),
-                  const Spacer(),
-                  // Type badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _hasFrontendCode 
-                          ? Colors.green.withOpacity(0.1)
-                          : (widget.canvas.type == 'code' ? Colors.blue : Colors.orange).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _hasFrontendCode ? 'HTML' : widget.canvas.type.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _hasFrontendCode 
-                            ? Colors.green 
-                            : (widget.canvas.type == 'code' ? Colors.blue : Colors.orange),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          // Save/Cancel buttons when editing
-          if (_isEditing)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
-              ),
-              child: Row(
-                children: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Lưu'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.green,
-                    ),
-                    onPressed: _save,
+                if (!_hasFrontendCode) const SizedBox(width: 8),
+
+                // Show HTML preview tab when frontend code detected
+                if (_hasFrontendCode) ...[
+                  _buildViewModeChip(
+                    'Xem trước (HTML)',
+                    _viewMode == CanvasViewMode.html,
+                    () => setState(() => _viewMode = CanvasViewMode.html),
+                    theme,
+                    icon: Icons.web,
                   ),
                   const SizedBox(width: 8),
-                  TextButton.icon(
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Hủy'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red.withOpacity(0.8),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isEditing = false;
-                        _titleController.text = widget.canvas.title;
-                        _contentController.text = widget.canvas.content;
-                        _viewMode = CanvasViewMode.markdown;
-                      });
-                    },
-                  ),
                 ],
+                _buildViewModeChip(
+                  'Mã nguồn',
+                  _viewMode == CanvasViewMode.source,
+                  () => setState(() => _viewMode = CanvasViewMode.source),
+                  theme,
+                ),
+                const Spacer(),
+                // Type badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _hasFrontendCode
+                        ? Colors.green.withOpacity(0.1)
+                        : (widget.canvas.type == 'code'
+                                  ? Colors.blue
+                                  : Colors.orange)
+                              .withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _hasFrontendCode
+                        ? 'HTML'
+                        : widget.canvas.type.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: _hasFrontendCode
+                          ? Colors.green
+                          : (widget.canvas.type == 'code'
+                                ? Colors.blue
+                                : Colors.orange),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        // Save/Cancel buttons when editing
+        if (_isEditing)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2)),
               ),
             ),
-          // Content
-          Expanded(
-            child: _isEditing
-                ? _buildEditor(theme)
-                : _buildContentView(theme, isDark),
+            child: Row(
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Lưu'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.green),
+                  onPressed: _save,
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('Hủy'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red.withOpacity(0.8),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isEditing = false;
+                      _titleController.text = widget.canvas.title;
+                      _contentController.text = widget.canvas.content;
+                      _viewMode = CanvasViewMode.markdown;
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
-        ],
-      );
+        // Content
+        Expanded(
+          child: _isEditing
+              ? _buildEditor(theme)
+              : _buildContentView(theme, isDark),
+        ),
+      ],
+    );
   }
 
   Widget _buildEditor(ThemeData theme) {
@@ -647,9 +839,7 @@ class _CanvasViewState extends State<CanvasView> {
     return Markdown(
       data: widget.canvas.content,
       selectable: true,
-      builders: {
-        'code': CodeBlockBuilder(isDark: isDark),
-      },
+      builders: {'code': CodeBlockBuilder(isDark: isDark)},
       styleSheet: MarkdownStyleSheet(
         p: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
         codeblockDecoration: BoxDecoration(
@@ -672,12 +862,16 @@ class _CanvasViewState extends State<CanvasView> {
     }
   }
 
-  /// Build HTML preview using flutter_widget_from_html
+  /// Build HTML preview using WebView for Windows, fallback to flutter_widget_from_html for Linux
   Widget _buildHtmlPreview(bool isDark) {
-    return HtmlPreviewWidget(
-      content: widget.canvas.content,
-      isDark: isDark,
-    );
+    // Use WebView for Windows, fallback to HtmlPreviewWidget for Linux
+    if (Platform.isWindows) {
+      return WebViewPreviewWidget(
+        content: widget.canvas.content,
+        isDark: isDark,
+      );
+    }
+    return HtmlPreviewWidget(content: widget.canvas.content, isDark: isDark);
   }
 
   Widget _buildToggleIcon({
@@ -695,21 +889,23 @@ class _CanvasViewState extends State<CanvasView> {
         decoration: BoxDecoration(
           color: isSelected ? theme.colorScheme.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            )
-          ] : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
         ),
         child: Tooltip(
           message: tooltip,
           child: Icon(
             icon,
             size: 18,
-            color: isSelected 
-                ? theme.colorScheme.primary 
+            color: isSelected
+                ? theme.colorScheme.primary
                 : theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
           ),
         ),
@@ -717,19 +913,25 @@ class _CanvasViewState extends State<CanvasView> {
     );
   }
 
-  Widget _buildViewModeChip(String label, bool isSelected, VoidCallback onTap, ThemeData theme, {IconData? icon}) {
+  Widget _buildViewModeChip(
+    String label,
+    bool isSelected,
+    VoidCallback onTap,
+    ThemeData theme, {
+    IconData? icon,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected 
+          color: isSelected
               ? theme.colorScheme.primary.withOpacity(0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? theme.colorScheme.primary.withOpacity(0.3)
                 : Colors.transparent,
           ),
@@ -739,10 +941,10 @@ class _CanvasViewState extends State<CanvasView> {
           children: [
             if (icon != null) ...[
               Icon(
-                icon, 
-                size: 14, 
-                color: isSelected 
-                    ? theme.colorScheme.primary 
+                icon,
+                size: 14,
+                color: isSelected
+                    ? theme.colorScheme.primary
                     : theme.colorScheme.onSurface.withOpacity(0.6),
               ),
               const SizedBox(width: 4),
@@ -752,7 +954,7 @@ class _CanvasViewState extends State<CanvasView> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected 
+                color: isSelected
                     ? theme.colorScheme.primary
                     : theme.colorScheme.onSurface.withOpacity(0.6),
               ),

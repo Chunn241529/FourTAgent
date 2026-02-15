@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/tts_service.dart';
 import '../widgets/audio/waveform_player.dart';
-import '../widgets/common/custom_tab_selector.dart';
 import '../widgets/common/custom_snackbar.dart';
 
 class TtsScreen extends StatefulWidget {
@@ -15,90 +14,114 @@ class TtsScreen extends StatefulWidget {
   State<TtsScreen> createState() => _TtsScreenState();
 }
 
-class _TtsScreenState extends State<TtsScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  int _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-       if (_tabController.index != _selectedIndex) {
-         setState(() => _selectedIndex = _tabController.index);
-       }
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _TtsScreenState extends State<TtsScreen> {
+  int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.transparent, 
+      backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          const SizedBox(height: 16),
-          // Header & Tabs
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Image.asset('assets/icon/icon.png'),
-                ),
-                const SizedBox(width: 12),
-                const Text("TTS Engine", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 32),
-                Expanded(
-                  child: CustomTabSelector(
-                    tabs: const ["Synthesis", "Voice Lab"],
-                    selectedIndex: _selectedIndex,
-                    onTabSelected: (index) {
-                      _tabController.animateTo(index);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 100), 
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+          _buildTopBar(theme, isDark),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: const [
-                SynthesisTab(),
-                VoiceLabTab(),
-              ],
+            child: Center(
+              child: _selectedTab == 0
+                  ? const SynthesisView()
+                  : const VoiceLabView(),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildTopBar(ThemeData theme, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.record_voice_over,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            "TTS Engine",
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const Spacer(),
+          _buildTabChip(0, "Synthesis", theme),
+          const SizedBox(width: 8),
+          _buildTabChip(1, "Voice Lab", theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabChip(int index, String label, ThemeData theme) {
+    final isSelected = _selectedTab == index;
+
+    return InkWell(
+      onTap: () => setState(() => _selectedTab = index),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primary.withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.5),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class SynthesisTab extends StatefulWidget {
-  const SynthesisTab({super.key});
+class SynthesisView extends StatefulWidget {
+  const SynthesisView({super.key});
 
   @override
-  State<SynthesisTab> createState() => _SynthesisTabState();
+  State<SynthesisView> createState() => _SynthesisViewState();
 }
 
-class _SynthesisTabState extends State<SynthesisTab> {
+class _SynthesisViewState extends State<SynthesisView> {
   final TextEditingController _textController = TextEditingController();
   List<Voice> _voices = [];
   String? _selectedVoiceId;
   bool _isLoading = false;
-
-  // State for WaveformPlayer
   Uint8List? _audioBytes;
 
   @override
@@ -106,7 +129,7 @@ class _SynthesisTabState extends State<SynthesisTab> {
     super.initState();
     _loadVoices();
   }
-  
+
   @override
   void dispose() {
     _textController.dispose();
@@ -120,29 +143,34 @@ class _SynthesisTabState extends State<SynthesisTab> {
         setState(() {
           _voices = voices;
           if (_voices.isNotEmpty) {
-             _selectedVoiceId = _voices.any((v) => v.id == 'Binh') ? 'Binh' : _voices.first.id;
+            _selectedVoiceId = _voices.any((v) => v.id == 'Binh')
+                ? 'Binh'
+                : _voices.first.id;
           }
         });
       }
     } catch (e) {
       if (mounted) {
-         CustomSnackBar.showError(context, "Error loading voices: $e");
+        CustomSnackBar.showError(context, "Error loading voices: $e");
       }
     }
   }
 
   Future<void> _synthesize() async {
     if (_selectedVoiceId == null || _textController.text.isEmpty) return;
-    
+
     setState(() => _isLoading = true);
     try {
-      final bytes = await TtsService.synthesize(_textController.text, _selectedVoiceId!);
+      final bytes = await TtsService.synthesize(
+        _textController.text,
+        _selectedVoiceId!,
+      );
       setState(() {
         _audioBytes = Uint8List.fromList(bytes);
       });
     } catch (e) {
       if (mounted) {
-         CustomSnackBar.showError(context, "Synthesis failed: $e");
+        CustomSnackBar.showError(context, "Synthesis failed: $e");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -151,20 +179,17 @@ class _SynthesisTabState extends State<SynthesisTab> {
 
   Future<void> _downloadAudio() async {
     if (_audioBytes == null) return;
-    
+
     try {
-      // Generate filename with timestamp
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'tts_audio_$timestamp.mp3';
-      
-      // Get downloads directory
+
       String? downloadPath;
       if (Platform.isLinux || Platform.isMacOS) {
         downloadPath = '${Platform.environment['HOME']}/Downloads';
       } else if (Platform.isWindows) {
         downloadPath = '${Platform.environment['USERPROFILE']}\\Downloads';
       } else {
-        // For mobile, use file picker to save
         final result = await FilePicker.platform.saveFile(
           dialogTitle: 'Save Audio',
           fileName: fileName,
@@ -176,11 +201,10 @@ class _SynthesisTabState extends State<SynthesisTab> {
         }
         return;
       }
-      
-      // Write file for desktop
+
       final file = File('$downloadPath/$fileName');
       await file.writeAsBytes(_audioBytes!);
-      
+
       if (mounted) {
         CustomSnackBar.showSuccess(context, 'Audio saved to: ${file.path}');
       }
@@ -193,98 +217,256 @@ class _SynthesisTabState extends State<SynthesisTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final theme = Theme.of(context);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 500),
+      child: Row(
         children: [
-          // Voice Selector Card
-          Card(
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_pin),
-                  const SizedBox(width: 16),
-                  const Text("Speaker:", style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedVoiceId,
-                        isExpanded: true,
-                        items: _voices.map((v) => DropdownMenuItem(
-                          value: v.id, 
-                          child: Text("${v.name} (${v.type})", overflow: TextOverflow.ellipsis)
-                        )).toList(),
-                        onChanged: (val) => setState(() => _selectedVoiceId = val),
-                        hint: const Text("Select Voice"),
-                      ),
-                    ),
-                  ),
-                ],
+          Expanded(child: _buildEditorPanel(theme)),
+          const SizedBox(width: 12),
+          SizedBox(width: 280, child: _buildControlPanel(theme)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditorPanel(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: theme.dividerColor.withOpacity(0.08)),
               ),
             ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.text_fields,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  "Text Input",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  "${_textController.text.length} / 5000",
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          
-          // Main Input Area
           Expanded(
             child: TextField(
               controller: _textController,
               maxLines: null,
               expands: true,
-              style: const TextStyle(fontSize: 16, height: 1.5),
+              textAlignVertical: TextAlignVertical.top,
+              style: const TextStyle(fontSize: 13, height: 1.5),
               maxLength: 5000,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: "Enter text to synthesize...",
-                alignLabelWithHint: true,
-                filled: true,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.all(14),
+                hintText: "Type or paste your text here...",
+                hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.25),
+                  fontSize: 13,
+                ),
                 counterText: "",
               ),
             ),
           ),
-          
-          const SizedBox(height: 24),
-          
-          // Audio Player Area (if generated)
-          if (_audioBytes != null) ...[
-             Row(
-               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-               children: [
-                 const Text("Generated Audio:", style: TextStyle(fontWeight: FontWeight.bold)),
-                 IconButton(
-                   onPressed: _downloadAudio,
-                   icon: const Icon(Icons.download_rounded),
-                   tooltip: 'Download Audio',
-                   style: IconButton.styleFrom(
-                     backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                     foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                   ),
-                 ),
-               ],
-             ),
-             const SizedBox(height: 8),
-             WaveformPlayer(
-               key: ValueKey(_audioBytes.hashCode), // Rebuild if bytes change
-               audioBytes: _audioBytes!,
-             ),
-             const SizedBox(height: 24),
-          ],
+        ],
+      ),
+    );
+  }
 
-          // Synthesize Button
-          SizedBox(
-            height: 56,
-            child: FilledButton.icon(
-              onPressed: _isLoading ? null : _synthesize,
-              icon: _isLoading 
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                : const Icon(Icons.auto_awesome, size: 28),
-              label: Text(_isLoading ? "Synthesizing..." : "Generate Speech", style: const TextStyle(fontSize: 18)),
+  Widget _buildControlPanel(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Voice",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.15),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedVoiceId,
+                      isExpanded: true,
+                      isDense: true,
+                      items: _voices
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v.id,
+                              child: Text(
+                                v.name,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedVoiceId = val),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _audioBytes != null
+                ? _buildAudioResult(theme)
+                : _buildEmptyState(theme),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: FilledButton.icon(
+                onPressed: _isLoading || _textController.text.isEmpty
+                    ? null
+                    : _synthesize,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.play_arrow, size: 16),
+                label: Text(
+                  _isLoading ? "Generating..." : "Generate",
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.mic_none,
+            size: 28,
+            color: theme.colorScheme.onSurface.withOpacity(0.25),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Ready",
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withOpacity(0.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAudioResult(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, size: 14, color: Colors.green),
+              const SizedBox(width: 6),
+              Text(
+                "Done",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.green,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: _downloadAudio,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.download,
+                        size: 12,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Save",
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: WaveformPlayer(
+              key: ValueKey(_audioBytes.hashCode),
+              audioBytes: _audioBytes!,
             ),
           ),
         ],
@@ -293,14 +475,14 @@ class _SynthesisTabState extends State<SynthesisTab> {
   }
 }
 
-class VoiceLabTab extends StatefulWidget {
-  const VoiceLabTab({super.key});
+class VoiceLabView extends StatefulWidget {
+  const VoiceLabView({super.key});
 
   @override
-  State<VoiceLabTab> createState() => _VoiceLabTabState();
+  State<VoiceLabView> createState() => _VoiceLabViewState();
 }
 
-class _VoiceLabTabState extends State<VoiceLabTab> {
+class _VoiceLabViewState extends State<VoiceLabView> {
   final TextEditingController _nameController = TextEditingController();
   File? _selectedFile;
   bool _isUploading = false;
@@ -314,20 +496,26 @@ class _VoiceLabTabState extends State<VoiceLabTab> {
 
   Future<void> _createVoice() async {
     if (_nameController.text.isEmpty || _selectedFile == null) return;
-    
+
     setState(() => _isUploading = true);
     try {
-      final newVoice = await TtsService.createVoice(_nameController.text, _selectedFile!);
+      final newVoice = await TtsService.createVoice(
+        _nameController.text,
+        _selectedFile!,
+      );
       if (mounted) {
-        CustomSnackBar.showSuccess(context, "Voice '${newVoice.name}' created!");
+        CustomSnackBar.showSuccess(
+          context,
+          "Voice '${newVoice.name}' created!",
+        );
         setState(() {
-            _nameController.clear();
-            _selectedFile = null;
+          _nameController.clear();
+          _selectedFile = null;
         });
       }
     } catch (e) {
       if (mounted) {
-         CustomSnackBar.showError(context, "Error creating voice: $e");
+        CustomSnackBar.showError(context, "Error creating voice: $e");
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
@@ -336,56 +524,142 @@ class _VoiceLabTabState extends State<VoiceLabTab> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Card(
-          elevation: 4,
-          margin: const EdgeInsets.all(32),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                   children: [
-                      Icon(Icons.mic, size: 32, color: Theme.of(context).primaryColor),
-                      const SizedBox(width: 16),
-                      Text("Clone New Voice", style: Theme.of(context).textTheme.headlineSmall),
-                   ]
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withOpacity(0.2),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 16),
-                const Text("Upload a short audio sample (10-30s) containing clear speech. The system will analyze it to create a custom voice profile."),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: "Voice Name",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.label),
+                child: Icon(
+                  Icons.mic,
+                  size: 22,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Clone Voice",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Upload audio (10-30s) to create custom voice",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withOpacity(0.45),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _nameController,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: "Voice Name",
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintText: "Enter voice name",
+                  hintStyle: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface.withOpacity(0.25),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickAudio,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.25),
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _selectedFile != null
+                            ? Icons.audio_file
+                            : Icons.upload_rounded,
+                        size: 18,
+                        color: _selectedFile != null
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withOpacity(0.4),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedFile != null
+                              ? _selectedFile!.path.split('/').last
+                              : "Select audio file",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _selectedFile != null
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurface.withOpacity(0.4),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                ListTile(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Colors.grey)),
-                  leading: const Icon(Icons.audio_file),
-                  title: Text(_selectedFile != null ? _selectedFile!.path.split('/').last : "No audio file selected"),
-                  trailing: TextButton(onPressed: _pickAudio, child: const Text("BROWSE")),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 38,
+                child: FilledButton(
+                  onPressed:
+                      _isUploading ||
+                          _nameController.text.isEmpty ||
+                          _selectedFile == null
+                      ? null
+                      : _createVoice,
+                  child: _isUploading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          "Create Voice",
+                          style: TextStyle(fontSize: 12),
+                        ),
                 ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: FilledButton(
-                    onPressed: _isUploading ? null : _createVoice,
-                    child: _isUploading 
-                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                       : const Text("Create Custom Voice"),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

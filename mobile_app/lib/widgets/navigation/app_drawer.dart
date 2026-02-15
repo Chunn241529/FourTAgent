@@ -13,11 +13,7 @@ class AppDrawer extends StatelessWidget {
   final Function(Conversation)? onConversationTap;
   final VoidCallback? onNewChat;
 
-  const AppDrawer({
-    super.key,
-    this.onConversationTap,
-    this.onNewChat,
-  });
+  const AppDrawer({super.key, this.onConversationTap, this.onNewChat});
 
   @override
   Widget build(BuildContext context) {
@@ -61,10 +57,7 @@ class AppDrawer extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Lumina AI',
-                          style: theme.textTheme.titleLarge,
-                        ),
+                        Text('Lumina AI', style: theme.textTheme.titleLarge),
                         Text(
                           authProvider.user?.email ?? '',
                           style: theme.textTheme.bodySmall,
@@ -77,9 +70,7 @@ class AppDrawer extends StatelessWidget {
                   IconButton(
                     onPressed: () => themeProvider.toggleTheme(),
                     icon: Icon(
-                      themeProvider.isDark
-                          ? Icons.light_mode
-                          : Icons.dark_mode,
+                      themeProvider.isDark ? Icons.light_mode : Icons.dark_mode,
                     ),
                   ),
                 ],
@@ -105,75 +96,79 @@ class AppDrawer extends StatelessWidget {
               child: chatProvider.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : chatProvider.conversations.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline,
-                                size: 48,
-                                color: theme.colorScheme.onSurface.withOpacity(0.3),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Chưa có cuộc trò chuyện nào',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 48,
+                            color: theme.colorScheme.onSurface.withOpacity(0.3),
                           ),
-                        )
-                      : ListView.builder(
-                          itemCount: chatProvider.conversations.length,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemBuilder: (context, index) {
-                            final conversation = chatProvider.conversations[index];
-                            final isSelected = 
-                                chatProvider.currentConversation?.id == conversation.id;
-                            
-                            return Dismissible(
-                              key: Key('conv_${conversation.id}'),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 16),
-                                color: theme.colorScheme.error,
-                                child: const Icon(
-                                  Icons.delete,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              onDismissed: (_) {
-                                chatProvider.deleteConversation(conversation.id);
-                              },
-                              child: ListTile(
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  onConversationTap?.call(conversation);
-                                },
-                                selected: isSelected,
-                                selectedTileColor: theme.colorScheme.primary.withOpacity(0.1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                leading: Icon(
-                                  Icons.chat_bubble_outline,
-                                  color: isSelected
-                                      ? theme.colorScheme.primary
-                                      : theme.colorScheme.onSurface.withOpacity(0.5),
-                                ),
-                                title: Text(
-                                  conversation.title ?? 'Cuộc trò chuyện mới',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  _formatDate(conversation.createdAt),
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ),
-                            );
+                          const SizedBox(height: 16),
+                          Text(
+                            'Chưa có cuộc trò chuyện nào',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: chatProvider.conversations.length,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemBuilder: (context, index) {
+                        final conversation = chatProvider.conversations[index];
+                        final isSelected =
+                            chatProvider.currentConversation?.id ==
+                            conversation.id;
+
+                        return Dismissible(
+                          key: Key('conv_${conversation.id}'),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 16),
+                            color: theme.colorScheme.error,
+                            child: const Icon(
+                              Icons.delete,
+                              color: Colors.white,
+                            ),
+                          ),
+                          onDismissed: (_) {
+                            chatProvider.deleteConversation(conversation.id);
                           },
-                        ),
+                          child: ListTile(
+                            onTap: () {
+                              Navigator.pop(context);
+                              onConversationTap?.call(conversation);
+                            },
+                            selected: isSelected,
+                            selectedTileColor: theme.colorScheme.primary
+                                .withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            leading: Icon(
+                              Icons.chat_bubble_outline,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.5,
+                                    ),
+                            ),
+                            title: Text(
+                              conversation.title ?? 'Cuộc trò chuyện mới',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              _formatDate(conversation.createdAt),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
             // Bottom actions
             Container(
@@ -187,12 +182,14 @@ class AppDrawer extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
-                        context, 
-                        MaterialPageRoute(builder: (_) => const DesktopHomeScreen())
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DesktopHomeScreen(),
+                        ),
                       );
                     },
-                    leading: const Icon(Icons.auto_awesome_motion),
-                    title: const Text('AI Studio (TTS)'),
+                    leading: const Icon(Icons.translate),
+                    title: const Text('Translator'),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -213,15 +210,14 @@ class AppDrawer extends StatelessWidget {
                       await authProvider.logout();
                       if (context.mounted) {
                         Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
                           (route) => false,
                         );
                       }
                     },
-                    leading: Icon(
-                      Icons.logout,
-                      color: theme.colorScheme.error,
-                    ),
+                    leading: Icon(Icons.logout, color: theme.colorScheme.error),
                     title: Text(
                       'Đăng xuất',
                       style: TextStyle(color: theme.colorScheme.error),

@@ -31,15 +31,18 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
 
   Future<void> _checkForUpdates() async {
     // Check settings first
-    final settings = context.read<SettingsProvider>(); // Use read here as we don't need to listen to updates inside this async method's future execution flow usually, but access current value. Actually, if we want to be safe, read is fine.
+    final settings = context
+        .read<
+          SettingsProvider
+        >(); // Use read here as we don't need to listen to updates inside this async method's future execution flow usually, but access current value. Actually, if we want to be safe, read is fine.
     if (!settings.autoUpdate) return;
 
     // Wait a bit for UI to settle
     await Future.delayed(const Duration(seconds: 2));
-    
+
     try {
       final updateInfo = await UpdateService.checkForUpdates();
-      
+
       if (updateInfo != null && mounted) {
         // Show update dialog
         showDialog(
@@ -71,10 +74,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
           // Main content - Use SizedBox.expand as the base non-positioned child
           // to ensure the Stack fills the screen and provides constraints.
           SizedBox.expand(
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: _screens,
-            ),
+            child: IndexedStack(index: _selectedIndex, children: _screens),
           ),
 
           // macOS Style Dock
@@ -96,16 +96,18 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 onTap: () => setState(() => _selectedIndex = 1),
               ),
               DockItem(
-                icon: Icons.subtitles_outlined,
-                selectedIcon: Icons.subtitles,
-                label: 'Studio',
+                icon: Icons.translate_outlined,
+                selectedIcon: Icons.translate,
+                label: 'Translator',
                 isSelected: _selectedIndex == 2,
                 onTap: () => setState(() => _selectedIndex = 2),
               ),
             ],
             actionItems: [
               DockItem(
-                icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                icon: isDark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
                 label: isDark ? 'Chế độ sáng' : 'Chế độ tối',
                 onTap: () => context.read<ThemeProvider>().toggleTheme(),
               ),

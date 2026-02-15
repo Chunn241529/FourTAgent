@@ -35,7 +35,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _MenuItem(icon: Icons.settings_outlined, label: 'Tổng quát'),
     _MenuItem(icon: Icons.cloud_outlined, label: 'File đám mây'),
     _MenuItem(icon: Icons.storage_outlined, label: 'Quản lý dữ liệu'),
-    _MenuItem(icon: Icons.notifications_outlined, label: 'Thông báo'),
+    // _MenuItem(icon: Icons.notifications_outlined, label: 'Thông báo'),
     _MenuItem(icon: Icons.security_outlined, label: 'Quyền hạn'),
     _MenuItem(icon: Icons.person_outline, label: 'Tài khoản'),
   ];
@@ -157,11 +157,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
         );
       case 2:
         return _buildDataControlsSection(theme, isDark);
+      // case 3:
+      //   return _buildNotificationsSection(theme, isDark);
       case 3:
-        return _buildNotificationsSection(theme, isDark);
-      case 4:
         return _buildPermissionsSection(theme, isDark);
-      case 5:
+      case 4:
         return _buildAccountSection(theme, isDark);
       default:
         return const SizedBox();
@@ -184,11 +184,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
           title: 'Ngôn ngữ',
           subtitle: settings.language == 'vi' ? 'Tiếng Việt' : 'English',
           onTap: () => _showLanguagePicker(settings),
-        ),
-        _SettingsTile(
-          title: 'Cỡ chữ',
-          subtitle: _getFontSizeLabel(settings.fontScale),
-          onTap: () => _showFontSizePicker(settings),
         ),
         _SettingsSwitch(
           title: 'Tự động cập nhật',
@@ -244,38 +239,38 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   // ===== NOTIFICATIONS SECTION =====
-  Widget _buildNotificationsSection(ThemeData theme, bool isDark) {
-    final settings = context.watch<SettingsProvider>();
+  // Widget _buildNotificationsSection(ThemeData theme, bool isDark) {
+  //   final settings = context.watch<SettingsProvider>();
     
-    return Column(
-      children: [
-        _SettingsSwitch(
-          title: 'Thông báo đẩy',
-          subtitle: 'Nhận thông báo khi có tin nhắn mới',
-          value: settings.pushNotifications,
-          onChanged: settings.setPushNotifications,
-        ),
-        _SettingsSwitch(
-          title: 'Thông báo email',
-          subtitle: 'Nhận email về hoạt động quan trọng',
-          value: settings.emailNotifications,
-          onChanged: settings.setEmailNotifications,
-        ),
-        _SettingsSwitch(
-          title: 'Âm thanh thông báo',
-          subtitle: 'Phát âm thanh khi có thông báo',
-          value: settings.soundNotifications,
-          onChanged: settings.setSoundNotifications,
-        ),
-        _SettingsSwitch(
-          title: 'Rung',
-          subtitle: 'Rung khi có thông báo',
-          value: settings.vibration,
-          onChanged: settings.setVibration,
-        ),
-      ],
-    );
-  }
+  //   return Column(
+  //     children: [
+  //       // _SettingsSwitch(
+  //       //   title: 'Thông báo đẩy',
+  //       //   subtitle: 'Nhận thông báo khi có tin nhắn mới',
+  //       //   value: settings.pushNotifications,
+  //       //   onChanged: settings.setPushNotifications,
+  //       // ),
+  //       // _SettingsSwitch(
+  //       //   title: 'Thông báo email',
+  //       //   subtitle: 'Nhận email về hoạt động quan trọng',
+  //       //   value: settings.emailNotifications,
+  //       //   onChanged: settings.setEmailNotifications,
+  //       // ),
+  //       _SettingsSwitch(
+  //         title: 'Âm thanh thông báo',
+  //         subtitle: 'Phát âm thanh khi có thông báo',
+  //         value: settings.soundNotifications,
+  //         onChanged: settings.setSoundNotifications,
+  //       ),
+  //       _SettingsSwitch(
+  //         title: 'Rung',
+  //         subtitle: 'Rung khi có thông báo',
+  //         value: settings.vibration,
+  //         onChanged: settings.setVibration,
+  //       ),
+  //     ],
+  //   );
+  // }
 
   // ===== PERMISSIONS SECTION =====
   Widget _buildPermissionsSection(ThemeData theme, bool isDark) {

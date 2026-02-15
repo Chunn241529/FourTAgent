@@ -219,61 +219,6 @@ def read_file_server(path: str) -> str:
         return f"Error reading file: {str(e)}"
 
 
-def search_file_server(query: str, directory: str = None) -> str:
-    """
-    Search for files matching query (glob pattern or name substring).
-    """
-    try:
-        user_home = os.path.expanduser("~")
-        search_roots = [
-            os.path.join(user_home, "Documents"),
-            os.path.join(user_home, "Downloads"),
-            os.path.join(user_home, "Desktop"),
-        ]
-
-        if directory:
-            if directory.startswith("~/"):
-                directory = directory.replace("~/", f"{user_home}/")
-            search_roots = [directory]
-
-        results = []
-
-        # Simple glob if query contains wildcard
-        pattern = query if "*" in query else f"*{query}*"
-
-        for root in search_roots:
-            if not os.path.exists(root):
-                continue
-
-            # Use os.walk for recursive search
-            for dirpath, dirnames, filenames in os.walk(root):
-                # Check filenames
-                for filename in filenames:
-                    if (
-                        query.lower() in filename.lower()
-                    ):  # Simple substring match case-insensitive
-                        results.append(os.path.join(dirpath, filename))
-                    elif Path(filename).match(query):  # Glob match
-                        results.append(os.path.join(dirpath, filename))
-
-                if len(results) > 20:  # Limit results
-                    break
-
-            if len(results) > 20:
-                break
-
-        if not results:
-            return "No files found matching the query."
-
-        return json.dumps(
-            {"files": results[:20]}, ensure_ascii=False
-        )  # Return proper JSON list
-
-    except Exception as e:
-        logger.error(f"Error searching file {query}: {e}")
-        return f"Error searching files: {str(e)}"
-
-
 def create_file_server(path: str, content: str) -> str:
     """
     Create a file with content.
@@ -331,9 +276,8 @@ class ToolService:
             # Legacy/Unsafe tools - potentially deprecate or restrict?
             # For now keeping them but adding cloud tools
             # Legacy/Unsafe tools - Redirected to Cloud for security/consistency
-            # RESTORED LOCAL SEARCH FOR APP CODEBASE ACCESS
             "read_file": read_file_server,
-            "search_file": search_file_server,
+            "search_file": self._cloud_search_file_wrapper,
             "create_file": self._cloud_create_file_wrapper,  # Create still cloud for safety? Or local? Let's keep create cloud for now unless asked.
             # New Cloud Tools
             "cloud_list_files": self._cloud_list_files_wrapper,

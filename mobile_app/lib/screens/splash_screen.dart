@@ -49,7 +49,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     if (tunnelSuccess) {
       ApiConfig.baseUrl = ApiConfig.tunnelUrl;
       setState(() {
-        _statusMessage = 'Connected to Cloudflare Tunnel!';
+        _statusMessage = 'Connecting to server...';
       });
     } else {
       // Fallback to local
@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (localSuccess) {
         ApiConfig.baseUrl = ApiConfig.localUrl;
         setState(() {
-          _statusMessage = 'Connected to Local Server!';
+          _statusMessage = 'Connecting to server...';
         });
       } else {
         // Both failed - Default to Tunnel but maybe show error? 
