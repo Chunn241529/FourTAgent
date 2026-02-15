@@ -107,8 +107,9 @@ class ChatService:
                 topic, user_id, conversation.id, db
             )
 
-        gender = user.gender
-        xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
+        # gender = user.gender
+        # xung_ho = "anh" if gender == "male" else "chị" if gender == "female" else "bạn"
+        # Logic moved to prompts.build_system_prompt
         current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p %z")
 
         # Detect canvas mode from message content (frontend appends " dùng canvas")
@@ -137,7 +138,11 @@ class ChatService:
 
         # System prompt
         system_prompt = prompts.build_system_prompt(
-            xung_ho, current_time, voice_enabled, tools
+            user_name=user.username,
+            gender=user.gender,
+            current_time=current_time,
+            voice_enabled=voice_enabled,
+            tools=tools,
         )
 
         if force_canvas_tool:
@@ -150,6 +155,7 @@ class ChatService:
 
         # Skip RAG and preferences for Voice Agent to reduce latency
         if not voice_enabled:
+            # File-Level Reranking Logic is now inside get_rag_context
             rag_context = await loop.run_in_executor(
                 None,
                 lambda: RAGService.get_rag_context(
@@ -170,8 +176,8 @@ class ChatService:
             f"RAG context retrieved: {len(rag_context) if rag_context else 0} characters"
         )
 
-        # Tạo full prompt với RAG context
-        full_prompt = prompts.build_full_prompt(rag_context, effective_query, file)
+        # Tạo full prompt (ko còn RAG context ở đây, chỉ là query + file)
+        full_prompt = prompts.build_full_prompt(effective_query, file)
 
         logger.info(f"Full prompt length: {len(full_prompt)} characters")
 
@@ -226,6 +232,7 @@ class ChatService:
             db=db,
             voice_enabled=voice_enabled,
             voice_id=voice_id,
+            rag_context=rag_context,
         )
 
     @staticmethod
@@ -310,6 +317,7 @@ class ChatService:
         db: Session,
         voice_enabled: bool = False,
         voice_id: Optional[str] = None,
+        rag_context: str = "",
     ):
         """Generate streaming response với level_think (Async)"""
         # Override model for voice mode - use faster model
@@ -405,8 +413,28 @@ class ChatService:
 
             full_response = []
 
-            # Update system prompt with conversation summary AND semantic memory
+            # Update system prompt with conversation summary AND semantic memory AND RAG Context
             enhanced_system_prompt = system_prompt
+
+            # Add RAG Context (Now injected into System Prompt)
+            if rag_context and rag_context.strip():
+                context_chunks = rag_context.split("|||")
+                formatted_context = "\n\n".join(
+                    [
+                        f"Context {i+1}:\n{chunk}"
+                        for i, chunk in enumerate(context_chunks)
+                    ]
+                )
+                enhanced_system_prompt += f"""
+                
+                **THÔNG TIN THAM KHẢO TỪ HỆ THỐNG (RAG CONTEXT):**
+                Dưới đây là thông tin tìm thấy trong tài liệu nội bộ.
+                - Nếu hữu ích: Hãy dùng nó.
+                - Nếu KHÔNG ĐỦ hoặc KHÔNG LIÊN QUAN: **HÃY DÙNG TOOL (Web Search, File Search, Python) NGAY LẬP TỨC**.
+                - KHÔNG ĐƯỢC trả lời "không có thông tin" nếu chưa thử dùng Tool.
+
+                {formatted_context}
+                """
 
             # Add Summary
             if summary:

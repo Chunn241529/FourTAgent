@@ -43,16 +43,17 @@ class AppDrawer extends StatelessWidget {
                     height: 48,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.secondary,
-                        ],
+                      color: theme.colorScheme.surface,
+                      border: Border.all(
+                        color: theme.dividerColor.withOpacity(0.5),
+                        width: 1,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      color: Colors.white,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icon/icon.png',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),

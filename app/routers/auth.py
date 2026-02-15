@@ -373,11 +373,18 @@ def update_profile(
         user.username = data.username
     if data.gender is not None:
         user.gender = data.gender
+    if data.phone_number is not None:
+        user.phone_number = data.phone_number
 
     db.commit()
     return {
         "message": "Profile updated",
-        "user": {"username": user.username, "gender": user.gender},
+        "user": {
+            "username": user.username,
+            "gender": user.gender,
+            "email": user.email,
+            "phone_number": user.phone_number,
+        },
     }
 
 

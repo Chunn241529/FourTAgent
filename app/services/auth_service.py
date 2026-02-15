@@ -101,6 +101,10 @@ class AuthService:
                     "message": "Login successful",
                     "token": token,
                     "user_id": db_user.id,
+                    "username": db_user.username,
+                    "email": db_user.email,
+                    "gender": db_user.gender,
+                    "phone_number": db_user.phone_number,
                     "status": 200,
                 }
             else:
@@ -231,6 +235,10 @@ class AuthService:
                 "message": "Device verified successfully",
                 "token": token,
                 "user_id": user_id,
+                "username": db_user.username,
+                "email": db_user.email,
+                "gender": db_user.gender,
+                "phone_number": db_user.phone_number,
                 "status": 200,
             }
 

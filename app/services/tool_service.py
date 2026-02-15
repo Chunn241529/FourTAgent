@@ -331,9 +331,10 @@ class ToolService:
             # Legacy/Unsafe tools - potentially deprecate or restrict?
             # For now keeping them but adding cloud tools
             # Legacy/Unsafe tools - Redirected to Cloud for security/consistency
-            "read_file": self._cloud_read_file_wrapper,
-            "search_file": self._cloud_search_file_wrapper,
-            "create_file": self._cloud_create_file_wrapper,
+            # RESTORED LOCAL SEARCH FOR APP CODEBASE ACCESS
+            "read_file": read_file_server,
+            "search_file": search_file_server,
+            "create_file": self._cloud_create_file_wrapper,  # Create still cloud for safety? Or local? Let's keep create cloud for now unless asked.
             # New Cloud Tools
             "cloud_list_files": self._cloud_list_files_wrapper,
             "cloud_read_file": self._cloud_read_file_wrapper,
@@ -522,7 +523,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "web_search",
-                    "description": "Search the web for information. Use this when you need current news, facts, technical documentation, or knowledge outside your training data. Prefer English keywords for technical/international topics.",
+                    "description": "Search the web for information. PROACTIVELY use this for any query needing current/external data (news, facts, docs, errors). Do not hesitate.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -865,7 +866,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "create_canvas",
-                    "description": "Create a new canvas for code or markdown validation. Use this when you want to write a long piece of code, a document, or a report that the user might want to edit or view separately.",
+                    "description": "Create a new canvas. USE ONLY when explicitly requested (e.g. 'create canvas') or for very long artifacts user wants to save.",
                     "parameters": {
                         "type": "object",
                         "properties": {

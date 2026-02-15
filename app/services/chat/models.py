@@ -128,3 +128,80 @@ def select_model(
                 logger.warning(f"Error checking recent images for vision switch: {e}")
 
         return "Lumina", tools, False
+
+
+def should_use_rag(query: str) -> bool:
+    """Determine if RAG should be used based on query content"""
+    query_lower = query.lower()
+
+    # 1. Skip if Image Generation (handled by tool)
+    image_keywords = [
+        "vẽ",
+        "tạo ảnh",
+        "generate image",
+        "draw",
+        "sketch",
+        "paint",
+        "picture",
+        "photo",
+    ]
+    if (
+        any(k in query_lower for k in image_keywords) and len(query.split()) < 20
+    ):  # Short image prompts
+        return False
+
+    # 2. Skip if Greeting/Chitchat (approximate)
+    chitchat = [
+        "hi",
+        "hello",
+        "chào",
+        "xin chào",
+        "bạn ơi",
+        "alo",
+        "thời tiết",
+        "mấy giờ",
+        "cảm ơn",
+        "thank",
+    ]
+    if any(query_lower.startswith(k) for k in chitchat) and len(query.split()) < 5:
+        return False
+
+    # 3. Enable for Informational/Search keywords
+    rag_keywords = [
+        "là gì",
+        "như thế nào",
+        "how to",
+        "giải thích",
+        "explain",
+        "tài liệu",
+        "document",
+        "hồ sơ",
+        "quy trình",
+        "policy",
+        "tìm",
+        "search",
+        "thông tin",
+        "chi tiết",
+        "phân tích",
+        "code",
+        "lỗi",
+        "error",
+        "bug",
+        "fix",
+        "sửa",
+        "tại sao",
+        "why",
+        "nằm ở đâu",
+        "location",
+        "cấu trúc",
+        "project",
+        "dự án",
+    ]
+    if any(k in query_lower for k in rag_keywords):
+        return True
+
+    # 4. Default: Enable if query is long enough (likely seeking info)
+    if len(query.split()) > 5:
+        return True
+
+    return False

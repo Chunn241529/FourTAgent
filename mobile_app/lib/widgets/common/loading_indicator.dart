@@ -19,23 +19,20 @@ class LoadingIndicator extends StatelessWidget {
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Shimmer.fromColors(
-            baseColor: theme.colorScheme.primary,
-            highlightColor: theme.colorScheme.primary.withOpacity(0.5),
-            child: Container(
-              width: 48,
-              height: 48,
+        Container(
+          width: 48,
+          height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: theme.colorScheme.primary, width: 3),
               ),
-              child: Icon(
-                Icons.auto_awesome,
-                color: theme.colorScheme.primary,
-                size: 24,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/icon/icon.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-          ),
         
         if (message != null) ...[
           const SizedBox(height: 16),

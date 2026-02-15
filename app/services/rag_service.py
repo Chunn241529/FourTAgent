@@ -29,7 +29,7 @@ class RAGConfig:
     ALPHA_BM25 = 0.4
 
     # Thresholds
-    SIMILARITY_THRESHOLD = 0.2
+    SIMILARITY_THRESHOLD = 0.35
 
     # Paths
     RAG_FILES_DIR = "rag_files"
@@ -276,7 +276,7 @@ class RAGService:
                     file_info = RAGService._global_files[idx]
 
                     # Higher threshold for file selection to reduce noise
-                    if score > 0.35:
+                    if score > 0.45:
                         relevant_paths.append(file_info["path"])
                         logger.info(
                             f"Found relevant file: {file_info['filename']} (score: {score:.3f})"

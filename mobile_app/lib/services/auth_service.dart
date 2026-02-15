@@ -133,10 +133,11 @@ class AuthService {
   }
 
   /// Update profile (username, gender)
-  static Future<User> updateProfile({String? username, String? gender}) async {
+  static Future<User> updateProfile({String? username, String? gender, String? phoneNumber}) async {
     final response = await ApiService.put(ApiConfig.profile, body: {
       if (username != null) 'username': username,
       if (gender != null) 'gender': gender,
+      if (phoneNumber != null) 'phone_number': phoneNumber,
     });
 
     ApiService.parseResponse(response); // returns {"message": "...", "user": {...}}
@@ -150,6 +151,7 @@ class AuthService {
       email: currentUser.email,
       username: username ?? currentUser.username, // updated username
       gender: gender ?? currentUser.gender, // updated gender
+      phoneNumber: phoneNumber ?? currentUser.phoneNumber, // updated phone number
       token: currentUser.token,
     );
     

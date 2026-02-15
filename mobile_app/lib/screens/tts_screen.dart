@@ -48,6 +48,12 @@ class _TtsScreenState extends State<TtsScreen> with SingleTickerProviderStateMix
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Row(
               children: [
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Image.asset('assets/icon/icon.png'),
+                ),
+                const SizedBox(width: 12),
                 const Text("TTS Engine", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 32),
                 Expanded(

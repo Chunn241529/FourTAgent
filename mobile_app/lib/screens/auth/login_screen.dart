@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
@@ -115,7 +116,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final theme = Theme.of(context);
     
     return Scaffold(
-      body: SafeArea(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surface,
+              theme.colorScheme.surface, // Double surface to make it subtle
+              theme.colorScheme.primary.withOpacity(0.05), // Slight tint
+            ],
+          ),
+        ),
+        child: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: SlideTransition(
@@ -123,7 +136,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 450),
-                child: SingleChildScrollView(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
                   child: Form(
                     key: _formKey,
@@ -289,40 +304,37 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 ),
               ),
                 ),
+                ),
               ),
             ),
           ),
+        ),
         ),
       ),
     );
   }
 
   Widget _buildLogo(ThemeData theme) {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
+    return Center(
+      child: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
           colors: [
-            theme.colorScheme.primary,
-            theme.colorScheme.secondary,
+            const Color(0xFF2563EB), // Blue 600
+            const Color(0xFF06B6D4), // Cyan 500
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.4),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+        ).createShader(bounds),
+        child: Text(
+          'Lumina AI',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 56, // Adjusted size
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            // Removed negative letterSpacing
           ),
-        ],
-      ),
-      child: const Icon(
-        Icons.auto_awesome,
-        color: Colors.white,
-        size: 40,
+        ),
       ),
     );
   }

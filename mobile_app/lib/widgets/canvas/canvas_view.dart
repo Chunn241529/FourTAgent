@@ -15,12 +15,14 @@ enum CanvasViewMode { markdown, html, source }
 
 class CanvasView extends StatefulWidget {
   final CanvasModel canvas;
-  final VoidCallback onClose;
+  final VoidCallback onClose; // Determines "Back" behavior (close current view)
+  final VoidCallback onHide;  // Determines "Hide" behavior (close entire panel)
 
   const CanvasView({
     super.key,
     required this.canvas,
     required this.onClose,
+    required this.onHide,
   });
 
   @override
@@ -313,9 +315,17 @@ class _CanvasViewState extends State<CanvasView> {
               ),
               child: Row(
                 children: [
-                  // LEFT SECTION - Fixed: Document icon + Title
-                  Icon(Icons.description_outlined, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.7)),
-                  const SizedBox(width: 8),
+                  // LEFT SECTION - Fixed: Back button + Title
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    tooltip: 'Quay lại',
+                    style: IconButton.styleFrom(
+                      padding: const EdgeInsets.all(4),
+                      minimumSize: const Size(32, 32),
+                    ),
+                    onPressed: widget.onClose,
+                  ),
+                  const SizedBox(width: 4),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 150, minWidth: 80),
                     child: GestureDetector(
@@ -477,15 +487,15 @@ class _CanvasViewState extends State<CanvasView> {
                     theme: theme,
                   ),
                   const SizedBox(width: 8),
-                  // Close button
+                  // Hide button
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
-                    tooltip: 'Đóng',
+                    tooltip: 'Ẩn Canvas',
                     style: IconButton.styleFrom(
                       padding: const EdgeInsets.all(6),
                       minimumSize: const Size(32, 32),
                     ),
-                    onPressed: widget.onClose,
+                    onPressed: widget.onHide,
                   ),
                 ],
               ),

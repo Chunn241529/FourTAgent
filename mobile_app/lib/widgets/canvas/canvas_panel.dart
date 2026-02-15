@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/canvas_provider.dart';
+import '../../providers/settings_provider.dart';
 import 'package:intl/intl.dart';
 import 'canvas_view.dart';
 
@@ -48,6 +49,7 @@ class CanvasPanel extends StatelessWidget {
                 return CanvasView(
                   canvas: provider.currentCanvas!,
                   onClose: () => provider.selectCanvas(null),
+                  onHide: () => context.read<SettingsProvider>().setShowCanvas(false),
                 );
               }
               return _CanvasPanelContent(provider: provider);
@@ -127,6 +129,11 @@ class _CanvasPanelContentState extends State<_CanvasPanelContent> {
                   icon: const Icon(Icons.refresh_rounded, size: 20),
                   onPressed: () => widget.provider.loadCanvases(),
                   tooltip: 'Làm mới',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => context.read<SettingsProvider>().setShowCanvas(false),
+                  tooltip: 'Đóng',
                 ),
               ],
             ),

@@ -33,6 +33,7 @@ class ChangePassword(BaseModel):
 class UpdateProfile(BaseModel):
     username: Optional[str] = None
     gender: Optional[str] = None
+    phone_number: Optional[str] = None
 
 
 class TaskPrompt(BaseModel):

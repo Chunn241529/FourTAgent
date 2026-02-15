@@ -49,10 +49,22 @@ dependencies:
   markdown: ^7.3.0
   flutter_widget_from_html: ^0.17.1
 
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icon/
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
 
-flutter:
-  uses-material-design: true
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon/icon.png"

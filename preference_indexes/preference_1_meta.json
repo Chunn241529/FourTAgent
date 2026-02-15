@@ -28,5 +28,10 @@
     "message_id": 11,
     "query": "kể truyện ma với canvas",
     "response": "Lumin sẽ kể một câu chuyện ma thật kinh dị và hấp dẫn cho anh nghe nhé! Nhưng trước tiên, Lumin muốn tạo một \"canvas\" để lưu lại câu chuyện này, như một cuốn nhật ký ma ám. Hãy cùng bắt đầu nhé!\n\n\nLumin đã tạo xong \"canvas\" với tiêu đề \"Câu chuyện ma ám\" để lưu lại câu chuyện ma mà chúng ta sẽ kể. Bây giờ, hãy cùng nhau bắt đầu câu chuyện nhé!\n\nLumin kể: Một đêm mưa gió, một người đàn ông tên là Anh Tú đang đi dạo gần khu rừng cổ xưa. Anh Tú nghe thấy tiếng gọi tên mình từ trong bóng tối..."
+  },
+  {
+    "message_id": 20,
+    "query": "OpenAI's GPT-oss models and their significance in the open-source community",
+    "response": "# OpenAI's GPT-OSS Models: A Game-Changer for Open-Source AI  \n\nOpenAI's recent release of the **GPT-OSS 120B** and **GPT-OSS 20B** models marks a pivotal moment in the open-source AI landscape. These models, licensed under **Apache 2.0**, are designed to democratize access to advanced AI capabilities while fostering collaboration among developers and researchers. Below is a detailed breakdown of their significance, features, and impact.  \n\n---\n\n## Licensing and Accessibility: Breaking Down Barriers  \n\nThe **Apache 2.0 license** is a cornerstone of the GPT-OSS models’ open-source strategy. Unlike restrictive licenses, Apache 2.0 allows users to **modify, distribute, and commercialize** the models freely, provided they retain the original license headers. This openness enables:  \n\n- **Broader access**: Smaller teams, startups, and academic institutions can leverage these models without licensing fees.  \n- **Collaborative innovation**: Developers can build upon the models, contributing i"
   }
 ]

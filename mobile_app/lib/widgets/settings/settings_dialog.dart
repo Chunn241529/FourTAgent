@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/cloud_files_screen.dart';
+import '../../screens/settings/profile_screen.dart';
 import '../common/custom_snackbar.dart';
 
 /// Settings popup dialog with 2-column layout
@@ -306,13 +307,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return Column(
       children: [
         _SettingsTile(
-          title: 'Email',
-          subtitle: authProvider.user?.email ?? 'Chưa đăng nhập',
-        ),
-        _SettingsTile(
-          title: 'Tên hiển thị',
-          subtitle: authProvider.user?.username ?? 'Chưa cập nhật',
-          onTap: () => _showEditNameDialog(authProvider),
+          title: 'Chỉnh sửa hồ sơ',
+          subtitle: 'Tên hiển thị, giới tính',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
+          },
         ),
         _SettingsTile(
           title: 'Đổi mật khẩu',

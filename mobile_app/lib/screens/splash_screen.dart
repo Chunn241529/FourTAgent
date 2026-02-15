@@ -119,16 +119,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2,
-                  ),
+                  color: Theme.of(context).colorScheme.surface,
                 ),
-                child: Icon(
-                  Icons.auto_awesome,
-                  size: 60,
-                  color: Theme.of(context).colorScheme.primary,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/icon/icon.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),

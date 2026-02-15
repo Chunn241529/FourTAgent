@@ -7,12 +7,12 @@ class AppTheme {
   static const Color _darkBgPrimary = Color(0xFF212121);     // Main background - dark gray
   static const Color _darkBgSecondary = Color(0xFF2F2F2F);   // Cards/surfaces - slightly lighter
   static const Color _darkBgTertiary = Color(0xFF171717);    // Even darker for contrast
-  static const Color _darkAccent = Color(0xFF10A37F);        // ChatGPT green accent
-  static const Color _darkAccentSecondary = Color(0xFF19C37D);
+  static const Color _darkAccent = Color(0xFF1E3A8A);        // Lumina Dark Blue (Xanh Đen)
+  static const Color _darkAccentSecondary = Color(0xFF1565C0);
   static const Color _darkTextPrimary = Color(0xFFEFEFEF);   // Bright white text
   static const Color _darkTextSecondary = Color(0xFF8E8E8E); // Muted gray text
   static const Color _darkBorder = Color(0xFF3F3F3F);        // Border color
-  static const Color _darkSuccess = Color(0xFF10A37F);
+  static const Color _darkSuccess = Color(0xFF10A37F);       // Success green
   static const Color _darkError = Color(0xFFEF4444);
   static const Color _darkInputBg = Color(0xFF40414F);       // Input field background - lighter
 
@@ -20,12 +20,12 @@ class AppTheme {
   static const Color _lightBgPrimary = Color(0xFFF7F7F8);    // Main background - light gray
   static const Color _lightBgSecondary = Color(0xFFFFFFFF);  // Cards/surfaces - white
   static const Color _lightBgTertiary = Color(0xFFECECEC);   // Slightly darker for contrast
-  static const Color _lightAccent = Color(0xFF10A37F);       // Same green accent
-  static const Color _lightAccentSecondary = Color(0xFF19C37D);
+  static const Color _lightAccent = Color(0xFF1E3A8A);       // Lumina Dark Blue (Xanh Đen)
+  static const Color _lightAccentSecondary = Color(0xFF1565C0);
   static const Color _lightTextPrimary = Color(0xFF1A1A1A);  // Dark text
   static const Color _lightTextSecondary = Color(0xFF6E6E80);// Muted text
   static const Color _lightBorder = Color(0xFFD1D5DB);       // Light border
-  static const Color _lightSuccess = Color(0xFF10A37F);
+  static const Color _lightSuccess = Color(0xFF10A37F);      // Success green
   static const Color _lightError = Color(0xFFDC2626);
   static const Color _lightInputBg = Color(0xFFFFFFFF);      // Input field - pure white
 

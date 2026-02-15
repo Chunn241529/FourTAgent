@@ -254,30 +254,31 @@ class _ChatScreenState extends State<ChatScreen> {
           // Header - subtle with no harsh borders
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: Row(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              child: Container(
+                width: 248,
+                child: Row(
               children: [
                 Container(
                   width: 40,
                   height: 40,
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF10B981), // Emerald green
-                        const Color(0xFF059669),
-                      ],
+                    color: theme.colorScheme.surface,
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.5),
+                      width: 1,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF10B981).withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
                   ),
-                  child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/icon/icon.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Text(
@@ -305,6 +306,8 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
           ),
+        ),
+      ),
           // New chat button - modern gradient style
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -314,14 +317,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF10B981),
-                      const Color(0xFF059669),
+                      theme.colorScheme.primary,
+                      theme.colorScheme.secondary,
                     ],
                   ),
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF10B981).withOpacity(0.25),
+                      color: theme.colorScheme.primary.withOpacity(0.25),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -421,7 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     height: 32,
                                     decoration: BoxDecoration(
                                       color: isSelected 
-                                          ? const Color(0xFF10B981).withOpacity(0.15)
+                                          ? theme.colorScheme.primary.withOpacity(0.15)
                                           : hoverColor,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
@@ -429,7 +432,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       Icons.chat_bubble_outline,
                                       size: 16,
                                       color: isSelected 
-                                          ? const Color(0xFF10B981)
+                                          ? theme.colorScheme.primary
                                           : theme.iconTheme.color?.withOpacity(0.6),
                                     ),
                                   ),
@@ -569,12 +572,25 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: Text(
-                    title ?? 'Lumina AI',
-                    key: ValueKey<String>(title ?? 'default'),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      if (conversationId == null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Image.asset('assets/icon/icon.png'),
+                          ),
+                        ),
+                      Text(
+                        title ?? 'Lumina AI',
+                        key: ValueKey<String>(title ?? 'default'),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -893,21 +909,24 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.secondary,
-                  ],
-                ),
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: Colors.white,
-                size: 40,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/icon/icon.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             const SizedBox(height: 24),

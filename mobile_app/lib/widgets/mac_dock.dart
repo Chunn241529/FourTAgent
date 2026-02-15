@@ -155,17 +155,26 @@ class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
       width: 50,
       height: 50,
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withAlpha(isDragging ? 150 : 255),
+        color: theme.colorScheme.surface.withAlpha(isDragging ? 150 : 255),
         shape: BoxShape.circle,
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(50),
+            color: Colors.black.withAlpha(20),
             blurRadius: 10,
-            spreadRadius: 2,
+            spreadRadius: 1,
           )
         ],
       ),
-      child: Icon(icon, color: theme.colorScheme.onPrimaryContainer),
+      child: ClipOval(
+        child: Image.asset(
+          'assets/icon/icon.png',
+          fit: BoxFit.cover,
+        ),
+      ),
     );
   }
 
@@ -242,10 +251,7 @@ class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
       onExit: (_) => setState(() => _hoveredIndex = null),
       child: GestureDetector(
         onTap: item.onTap,
-        child: Tooltip(
-          key: ValueKey('dock_tooltip_$index'),
-          message: item.label,
-          child: AnimatedContainer(
+        child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -265,7 +271,6 @@ class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
               ),
             ),
           ),
-        ),
       ),
     );
   }

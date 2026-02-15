@@ -12,6 +12,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     verified_devices = Column(JSON, nullable=False, default=[])
     gender = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
 
 
 class Task(Base):

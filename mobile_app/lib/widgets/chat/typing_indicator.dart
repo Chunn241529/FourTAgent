@@ -20,10 +20,11 @@ class TypingIndicator extends StatelessWidget {
               color: theme.colorScheme.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.auto_awesome,
-              size: 16,
-              color: theme.colorScheme.primary,
+            child: Image.asset(
+              'assets/icon/icon.png',
+              width: 16,
+              height: 16,
+              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(width: 12),
