@@ -6,27 +6,30 @@ DB_PATH = "server.db"
 
 def migrate():
     if not os.path.exists(DB_PATH):
-        print(f"Database {DB_PATH} not found.")
+        print(f"Database not found at {DB_PATH}")
         return
+
+    print(f"Migrating database at {DB_PATH}...")
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     try:
-        # Check if column exists
+        # Check if avatar column exists in users table
         cursor.execute("PRAGMA table_info(users)")
         columns = [info[1] for info in cursor.fetchall()]
 
-        if "phone_number" not in columns:
-            print("Adding phone_number column to users table...")
-            cursor.execute("ALTER TABLE users ADD COLUMN phone_number TEXT")
+        if "avatar" not in columns:
+            print("Adding 'avatar' column to 'users' table...")
+            cursor.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
             conn.commit()
-            print("Migration successful: phone_number added.")
+            print("Migration successful: 'avatar' column added.")
         else:
-            print("Column phone_number already exists.")
+            print("'avatar' column already exists in 'users' table.")
 
     except Exception as e:
         print(f"Migration failed: {e}")
+        conn.rollback()
     finally:
         conn.close()
 

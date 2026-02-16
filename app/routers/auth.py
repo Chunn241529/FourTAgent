@@ -375,6 +375,8 @@ def update_profile(
         user.gender = data.gender
     if data.phone_number is not None:
         user.phone_number = data.phone_number
+    if data.avatar is not None:
+        user.avatar = data.avatar
 
     db.commit()
     return {
@@ -384,6 +386,7 @@ def update_profile(
             "gender": user.gender,
             "email": user.email,
             "phone_number": user.phone_number,
+            "avatar": user.avatar,
         },
     }
 

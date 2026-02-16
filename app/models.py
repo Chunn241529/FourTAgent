@@ -13,6 +13,7 @@ class User(Base):
     verified_devices = Column(JSON, nullable=False, default=[])
     gender = Column(String, nullable=True)
     phone_number = Column(String, nullable=True)
+    avatar = Column(String, nullable=True)
 
 
 class Task(Base):
