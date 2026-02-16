@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../../models/conversation.dart';
@@ -261,34 +262,54 @@ class _ChatScreenState extends State<ChatScreen> {
                 width: 248,
                 child: Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: theme.colorScheme.surface,
-                    border: Border.all(
-                      color: theme.dividerColor.withOpacity(0.5),
-                      width: 1,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/icon/icon.png',
-                      fit: BoxFit.contain,
-                    ),
+                Expanded(
+                  child: Consumer<AuthProvider>(
+                    builder: (context, auth, _) {
+                      final user = auth.user;
+                      return Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: theme.colorScheme.surface,
+                              border: Border.all(
+                                color: theme.dividerColor.withOpacity(0.5),
+                                width: 1,
+                              ),
+                            ),
+                            child: CircleAvatar(
+                              backgroundColor: theme.colorScheme.primaryContainer,
+                              child: Text(
+                                user?.username.isNotEmpty == true
+                                    ? user!.username[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              user?.username ?? 'Lumina AI',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Lumina AI',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const Spacer(),
                 Container(
                   decoration: BoxDecoration(
                     color: hoverColor,

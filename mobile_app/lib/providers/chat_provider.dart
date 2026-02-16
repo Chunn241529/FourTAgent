@@ -644,6 +644,30 @@ class ChatProvider extends ChangeNotifier {
         final line = chunk.trim();
         if (line.isEmpty) return;
         
+        // Process image_generation_started IMMEDIATELY (outside batch)
+        // to prevent race condition where both started + generated land in same batch
+        if (line.contains('image_generation_started')) {
+          String? jsonStr;
+          if (line.startsWith('data: ')) {
+            jsonStr = line.substring(6).trim();
+          } else if (line.startsWith('data:')) {
+            jsonStr = line.substring(5).trim();
+          }
+          if (jsonStr != null) {
+            try {
+              final data = _parseJson(jsonStr);
+              if (data != null && data.containsKey('image_generation_started')) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  _messages[lastIndex] = _messages[lastIndex].copyWith(isGeneratingImage: true, generationError: null);
+                  notifyListeners(); // Notify immediately so Flutter renders loading state
+                }
+                return; // Don't add to batch — already processed
+              }
+            } catch (_) {}
+          }
+        }
+        
         // Add chunk to pending buffer
         pendingChunks.add(line);
         
