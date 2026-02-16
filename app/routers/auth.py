@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    File,
+)
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.services.device_detection import DeviceDetectionService
@@ -371,6 +380,8 @@ def update_profile(
 
     if data.username is not None:
         user.username = data.username
+    if data.full_name is not None:
+        user.full_name = data.full_name
     if data.gender is not None:
         user.gender = data.gender
     if data.phone_number is not None:
@@ -383,11 +394,69 @@ def update_profile(
         "message": "Profile updated",
         "user": {
             "username": user.username,
+            "full_name": user.full_name,
             "gender": user.gender,
             "email": user.email,
             "phone_number": user.phone_number,
             "avatar": user.avatar,
         },
+    }
+
+
+@router.post("/upload-avatar")
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: int = Depends(verify_jwt),
+    db: Session = Depends(get_db),
+):
+    """Upload ảnh đại diện cho user"""
+    import os
+    import uuid
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # Validate file type - detect from extension if content_type is generic
+    import mimetypes
+
+    content_type = file.content_type
+    if content_type in (None, "application/octet-stream") and file.filename:
+        guessed, _ = mimetypes.guess_type(file.filename)
+        if guessed:
+            content_type = guessed
+
+    allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    if content_type not in allowed_types:
+        raise HTTPException(400, f"File type not allowed: {content_type}")
+
+    # Validate file size (max 5MB)
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "File too large. Maximum 5MB")
+
+    # Save file
+    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
+    filename = f"{user_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    avatar_dir = os.path.join("storage", "avatars")
+    os.makedirs(avatar_dir, exist_ok=True)
+
+    filepath = os.path.join(avatar_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    # Build avatar URL
+    base_url = str(request.base_url).rstrip("/")
+    avatar_url = f"{base_url}/storage/avatars/{filename}"
+
+    # Update user avatar
+    user.avatar = avatar_url
+    db.commit()
+
+    return {
+        "message": "Avatar uploaded",
+        "avatar_url": avatar_url,
     }
 
 

@@ -266,46 +266,88 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Consumer<AuthProvider>(
                     builder: (context, auth, _) {
                       final user = auth.user;
-                      return Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: theme.colorScheme.surface,
-                              border: Border.all(
-                                color: theme.dividerColor.withOpacity(0.5),
-                                width: 1,
-                              ),
-                            ),
-                            child: CircleAvatar(
-                              backgroundColor: theme.colorScheme.primaryContainer,
-                              child: Text(
-                                user?.username.isNotEmpty == true
-                                    ? user!.username[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  color: theme.colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
+                      return InkWell(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => const SettingsDialog(),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: theme.colorScheme.surface,
+                                  border: Border.all(
+                                    color: theme.dividerColor.withOpacity(0.5),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: CircleAvatar(
+                                  backgroundColor: theme.colorScheme.primaryContainer,
+                                  backgroundImage: (user?.avatar != null && user!.avatar!.isNotEmpty)
+                                      ? NetworkImage(user.avatar!)
+                                      : null,
+                                  onBackgroundImageError: (user?.avatar != null && user!.avatar!.isNotEmpty)
+                                      ? (_, __) {}
+                                      : null,
+                                  child: (user?.avatar == null || user!.avatar!.isEmpty)
+                                      ? Text(
+                                          (user?.fullName?.isNotEmpty == true)
+                                              ? user!.fullName![0].toUpperCase()
+                                              : (user?.username.isNotEmpty == true
+                                                  ? user!.username[0].toUpperCase()
+                                                  : '?'),
+                                          style: TextStyle(
+                                            color: theme.colorScheme.primary,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
+                                        )
+                                      : null,
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              user?.username ?? 'Lumina AI',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.3,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      user?.fullName?.isNotEmpty == true
+                                          ? user!.fullName!
+                                          : (user?.username ?? 'Lumina AI'),
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.3,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (user?.fullName?.isNotEmpty == true &&
+                                        user?.username.isNotEmpty == true)
+                                      Text(
+                                        '@${user!.username}',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.textTheme.bodySmall?.color
+                                              ?.withOpacity(0.7),
+                                          fontSize: 11,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       );
                     },
                   ),
@@ -365,11 +407,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         children: const [
                           Icon(Icons.add, color: Colors.white, size: 20),
                           SizedBox(width: 8),
-                          Text(
-                            'Cuộc trò chuyện mới',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
+                          Flexible(
+                            child: Text(
+                              'Cuộc trò chuyện mới',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -794,9 +840,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         },
                         shouldRebuild: (prev, next) => prev != next,
                         builder: (context, snapshot, _) {
+                          final messages = context.read<ChatProvider>().messages;
+                          if (index >= messages.length) return const SizedBox.shrink();
                           return MessageBubble(
-                            key: ValueKey('msg_${snapshot.id ?? index}_${snapshot.content.length}'),
-                            message: context.read<ChatProvider>().messages[index],
+                            key: ValueKey('msg_${snapshot.id ?? index}'),
+                            message: messages[index],
                           );
                         },
                       );

@@ -9,6 +9,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     email = Column(String, unique=True, nullable=False)
+    full_name = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
     verified_devices = Column(JSON, nullable=False, default=[])
     gender = Column(String, nullable=True)

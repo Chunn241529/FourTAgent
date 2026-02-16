@@ -18,6 +18,7 @@ class ApiConfig {
   static const String devices = '/auth/devices';
   static const String changePassword = '/auth/change-password';
   static const String profile = '/auth/profile';
+  static const String uploadAvatar = '/auth/upload-avatar';
   static const String resendCode = '/auth/resend-code';
   static const String deleteAccount = '/auth/delete-account';
   

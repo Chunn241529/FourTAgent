@@ -65,6 +65,8 @@ run_server() {
         echo "=========================================="
         echo "  Phím tắt:"
         echo "    R - Restart server"
+        echo "    L - Chuyển sang Local mode"
+        echo "    T - Chuyển sang Tunnel mode"
         echo "    Q - Quit (thoát)"
         echo "=========================================="
         echo ""
@@ -91,6 +93,30 @@ stop_server() {
 # Hàm dừng server
 clean_terminal() {
     clear
+}
+
+# Hàm chuyển sang Local mode
+switch_to_local() {
+    if [ "$MODE" = "local" ]; then
+        echo "✅ Đang chạy Local mode rồi."
+        return
+    fi
+    echo "🔄 Đang chuyển sang Local mode..."
+    stop_tunnel
+    MODE="local"
+    echo "✅ Đã chuyển sang Local mode."
+}
+
+# Hàm chuyển sang Tunnel mode
+switch_to_tunnel() {
+    if [ "$MODE" = "tunnel" ]; then
+        echo "✅ Đang chạy Tunnel mode rồi."
+        return
+    fi
+    echo "🔄 Đang chuyển sang Tunnel mode..."
+    run_tunnel
+    MODE="tunnel"
+    echo "✅ Đã chuyển sang Tunnel mode."
 }
 
 # Trap để cleanup khi script bị kill
@@ -139,7 +165,7 @@ fi
 
 # Vòng lặp chính để lắng nghe phím tắt
 echo ""
-echo "Nhấn R để restart, Q để quit..."
+echo "Nhấn R để restart, L để Local, T để Tunnel, Q để quit..."
 while true; do
     # Đọc một ký tự từ input
     read -rsn1 key
@@ -153,7 +179,17 @@ while true; do
             run_server
             clean_terminal
             echo "Starting..."
-            echo "Nhấn R để restart, Q để quit..."
+            echo "Nhấn R để restart, L để Local, T để Tunnel, Q để quit..."
+            ;;
+        l|L)
+            echo ""
+            switch_to_local
+            echo "Nhấn R để restart, L để Local, T để Tunnel, Q để quit..."
+            ;;
+        t|T)
+            echo ""
+            switch_to_tunnel
+            echo "Nhấn R để restart, L để Local, T để Tunnel, Q để quit..."
             ;;
         q|Q)
             echo ""

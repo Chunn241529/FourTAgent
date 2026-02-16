@@ -6,6 +6,9 @@ class User {
   final String? gender;
   final String token;
   final String? phoneNumber;
+  final String? fullName;
+  final String? avatar;
+  final DateTime? createdAt;
 
   User({
     required this.id,
@@ -14,6 +17,9 @@ class User {
     this.gender,
     required this.token,
     this.phoneNumber,
+    this.fullName,
+    this.avatar,
+    this.createdAt,
   });
 
   factory User.fromJson(Map<String, dynamic> json, String token) {
@@ -24,6 +30,11 @@ class User {
       gender: json['gender'],
       token: token,
       phoneNumber: json['phone_number'],
+      fullName: json['full_name'],
+      avatar: json['avatar'],
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'])
+          : null,
     );
   }
 
@@ -35,6 +46,9 @@ class User {
       'gender': gender,
       'token': token,
       'phone_number': phoneNumber,
+      'full_name': fullName,
+      'avatar': avatar,
+      'created_at': createdAt?.toIso8601String(),
     };
   }
 }

@@ -202,20 +202,47 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Update profile
-  Future<bool> updateProfile({String? username, String? gender, String? phoneNumber}) async {
+  Future<bool> updateProfile({
+    String? username,
+    String? fullName,
+    String? gender,
+    String? phoneNumber,
+    String? avatar,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
       _user = await AuthService.updateProfile(
         username: username,
+        fullName: fullName,
         gender: gender,
         phoneNumber: phoneNumber,
+        avatar: avatar,
       );
       return true;
     } catch (e) {
       _error = e.toString();
       return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Upload avatar image
+  Future<String?> uploadAvatar(String filePath) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final avatarUrl = await AuthService.uploadAvatar(filePath);
+      // Refresh user from storage
+      _user = await StorageService.getUser();
+      return avatarUrl;
+    } catch (e) {
+      _error = e.toString();
+      return null;
     } finally {
       _isLoading = false;
       notifyListeners();

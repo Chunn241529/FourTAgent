@@ -26,7 +26,7 @@ class AuthWrapper extends StatelessWidget {
         // Navigate based on auth state
         if (authProvider.isAuthenticated) {
           debugPrint('AuthWrapper: Authenticated! Removing LoadingIndicator, showing DesktopHomeScreen');
-          return DesktopHomeScreen(key: UniqueKey()); 
+          return const DesktopHomeScreen(); 
         }
 
         debugPrint('AuthWrapper: Not authenticated. Showing LoginScreen');

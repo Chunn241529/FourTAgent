@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -442,24 +443,31 @@ class _MessageBubbleState extends State<MessageBubble> {
             children: [
               // AI Avatar with Spinner
               _AvatarSpinner(
-                // Show spinner only when streaming/generating but no content yet
                 isAnimating:
                     (widget.message.isStreaming &&
                         widget.message.content.isEmpty) ||
                     widget.message.isGeneratingImage,
                 child: Container(
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     gradient: LinearGradient(
                       colors: [
                         theme.colorScheme.primary,
-                        theme.colorScheme.secondary,
+                        Color.lerp(theme.colorScheme.primary,
+                            theme.colorScheme.tertiary, 0.6)!,
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: const Icon(
                     Icons.auto_awesome,
@@ -468,21 +476,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               // Message content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // AI name
-                    Text(
-                      'Lumina AI',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
 
                     // 1. Pre-Search Thinking (if any)
                     if (widget.message.thinking != null &&
@@ -632,27 +631,31 @@ class _MessageBubbleState extends State<MessageBubble> {
       softLineBreak: true,
       builders: {'code': CodeBlockBuilder(isDark: isDark)},
       styleSheet: MarkdownStyleSheet(
-        // Body text
+        // Body text - generous line height for readability
         p: theme.textTheme.bodyLarge?.copyWith(
-          height: 1.6,
+          height: 1.7,
           color: isDark ? Colors.grey[300] : Colors.grey[850],
+          letterSpacing: 0.1,
         ),
         // Headers with explicit dark mode colors
         h1: theme.textTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: isDark ? Colors.white : Colors.grey[900],
+          height: 1.3,
         ),
         h2: theme.textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: isDark ? Colors.grey[100] : Colors.grey[900],
+          height: 1.3,
         ),
         h3: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
           color: isDark ? Colors.grey[200] : Colors.grey[900],
+          height: 1.3,
         ),
         // Strong/bold text
         strong: TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
           color: isDark ? Colors.white : Colors.grey[900],
         ),
         // Emphasis/italic
@@ -664,46 +667,51 @@ class _MessageBubbleState extends State<MessageBubble> {
         a: TextStyle(
           color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
           decoration: TextDecoration.underline,
+          decorationColor: isDark
+              ? const Color(0xFF64B5F6).withOpacity(0.4)
+              : const Color(0xFF1976D2).withOpacity(0.4),
         ),
 
         // Code block
         codeblockDecoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(8),
+          color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isDark ? const Color(0xFF3D3D3D) : const Color(0xFFE0E0E0),
+            color: isDark ? const Color(0xFF2D2D44) : const Color(0xFFE0E0E0),
+            width: 0.5,
           ),
         ),
-        codeblockPadding: const EdgeInsets.all(12),
-        listIndent: 20,
+        codeblockPadding: const EdgeInsets.all(14),
+        listIndent: 24,
         // List bullets
         listBullet: theme.textTheme.bodyMedium?.copyWith(
           color: isDark ? Colors.grey[400] : Colors.grey[700],
         ),
         // Blockquote
         blockquote: theme.textTheme.bodyLarge?.copyWith(
-          color: isDark ? Colors.grey[300] : Colors.grey[800],
+          color: isDark ? Colors.grey[300] : Colors.grey[700],
           fontStyle: FontStyle.italic,
+          height: 1.6,
         ),
         blockquoteDecoration: BoxDecoration(
-          color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF0F4F8),
+          color: isDark
+              ? theme.colorScheme.primary.withOpacity(0.06)
+              : theme.colorScheme.primary.withOpacity(0.04),
           border: Border(
             left: BorderSide(
-              color: isDark
-                  ? const Color(0xFF64B5F6)
-                  : theme.colorScheme.primary,
+              color: theme.colorScheme.primary.withOpacity(isDark ? 0.5 : 0.6),
               width: 3,
             ),
           ),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(6),
         ),
-        blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        blockquotePadding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
         // Horizontal rule
         horizontalRuleDecoration: BoxDecoration(
           border: Border(
             top: BorderSide(
               color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              width: 1,
+              width: 0.5,
             ),
           ),
         ),
@@ -820,6 +828,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       children: [
         _ActionButton(
           icon: Icons.copy_outlined,
+          tooltip: 'Sao chép',
           onTap: () {
             Clipboard.setData(ClipboardData(text: widget.message.content));
             if (context.mounted) {
@@ -827,9 +836,10 @@ class _MessageBubbleState extends State<MessageBubble> {
             }
           },
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         _ActionButton(
           icon: isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+          tooltip: 'Hữu ích',
           isActive: isLiked,
           onTap: () {
             if (widget.message.id != null && context.mounted) {
@@ -837,9 +847,10 @@ class _MessageBubbleState extends State<MessageBubble> {
             }
           },
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         _ActionButton(
           icon: isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+          tooltip: 'Không hữu ích',
           isActive: isDisliked,
           onTap: () {
             if (widget.message.id != null && context.mounted) {
@@ -938,7 +949,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             .substring(lastIndex, match.start)
             .trim();
         if (segmentText.isNotEmpty) {
-          children.add(_ThinkingSegment(content: segmentText, isLast: false));
+          children.add(_ThinkingSegment(content: segmentText, isStreaming: widget.message.isStreaming));
         }
       }
 
@@ -970,7 +981,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (lastIndex < thinkingContent.length) {
       final segmentText = thinkingContent.substring(lastIndex).trim();
       if (segmentText.isNotEmpty) {
-        children.add(_ThinkingSegment(content: segmentText, isLast: true));
+        children.add(_ThinkingSegment(content: segmentText, isStreaming: widget.message.isStreaming));
       }
     }
 
@@ -985,35 +996,62 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool isActive;
+  final String? tooltip;
 
   const _ActionButton({
     required this.icon,
     required this.onTap,
     this.isActive = false,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(
-          icon,
-          size: 14,
-          color: isActive
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurface.withOpacity(0.4),
+    final isDark = theme.brightness == Brightness.dark;
+
+    Widget button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: theme.colorScheme.primary.withOpacity(0.1),
+        highlightColor: theme.colorScheme.primary.withOpacity(0.05),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: isActive
+                ? theme.colorScheme.primary.withOpacity(isDark ? 0.15 : 0.08)
+                : Colors.transparent,
+          ),
+          child: Icon(
+            icon,
+            size: 15,
+            color: isActive
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.4),
+          ),
         ),
       ),
     );
+
+    if (tooltip != null) {
+      button = Tooltip(
+        message: tooltip!,
+        preferBelow: true,
+        child: button,
+      );
+    }
+
+    return button;
   }
 }
 
 class _TypingIndicator extends StatefulWidget {
   final int dotCount;
+
   const _TypingIndicator({this.dotCount = 3});
 
   @override
@@ -1029,7 +1067,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1200),
     )..repeat();
   }
 
@@ -1041,41 +1079,63 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    // Modern accent color or just onSurface
-    final color = Theme.of(context).brightness == Brightness.dark
-        ? Colors.white
-        : Colors.black;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
 
     return Container(
-      // Reduced padding to fix alignment, removing left padding
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: List.generate(widget.dotCount, (index) {
-          return AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              // Creating a wave effect
-              double wave = (_controller.value + index * 0.2) % 1.0;
-              double opacity =
-                  0.2 +
-                  0.8 *
-                      (0.5 - (0.5 - wave).abs()) *
-                      2; // Triangle 0.2 -> 1.0 -> 0.2
-              opacity = opacity.clamp(0.2, 1.0);
+        children: [
+          ...List.generate(widget.dotCount, (index) {
+            return AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                // Staggered wave: each dot peaks at different times
+                final phase = (_controller.value + index * 0.25) % 1.0;
+                // Smooth bell curve for scale
+                final scale = 0.6 + 0.4 * math.sin(phase * math.pi);
+                final opacity = 0.3 + 0.7 * math.sin(phase * math.pi);
 
-              return Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsets.only(right: 4), // Space between dots
-                decoration: BoxDecoration(
-                  color: color.withOpacity(opacity),
-                  shape: BoxShape.circle,
-                ),
-              );
-            },
-          );
-        }),
+                return Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.only(right: 5),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            primaryColor.withOpacity(opacity),
+                            Color.lerp(primaryColor,
+                                    theme.colorScheme.tertiary, 0.5)!
+                                .withOpacity(opacity),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
+          if (widget.dotCount > 1) ...[
+            const SizedBox(width: 4),
+            Text(
+              'Đang trả lời',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: isDark
+                    ? Colors.grey[500]
+                    : Colors.grey[600],
+                fontStyle: FontStyle.italic,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1083,25 +1143,48 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
 class _ThinkingSegment extends StatefulWidget {
   final String content;
-  final bool isLast;
+  final bool isStreaming;
 
-  const _ThinkingSegment({required this.content, required this.isLast});
+  const _ThinkingSegment({
+    required this.content,
+    this.isStreaming = false,
+  });
 
   @override
   State<_ThinkingSegment> createState() => _ThinkingSegmentState();
 }
 
-class _ThinkingSegmentState extends State<_ThinkingSegment> {
-  bool _isExpanded = true;
+class _ThinkingSegmentState extends State<_ThinkingSegment>
+    with SingleTickerProviderStateMixin {
+  bool _isExpanded = false;
+  late AnimationController _shimmerController;
 
   @override
   void initState() {
     super.initState();
-    // If this is the last segment and it's not empty, keep it expanded.
-    // Otherwise, collapse it by default.
-    if (!widget.isLast || widget.content.trim().isEmpty) {
-      _isExpanded = false;
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    if (widget.isStreaming) {
+      _shimmerController.repeat();
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThinkingSegment oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isStreaming && !_shimmerController.isAnimating) {
+      _shimmerController.repeat();
+    } else if (!widget.isStreaming && _shimmerController.isAnimating) {
+      _shimmerController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1116,41 +1199,81 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
       children: [
         InkWell(
           onTap: () => setState(() => _isExpanded = !_isExpanded),
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isDark
+                  ? Colors.white.withOpacity(0.04)
+                  : Colors.black.withOpacity(0.03),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _isExpanded
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_right,
+                  Icons.psychology_outlined,
                   size: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.primary.withOpacity(0.7),
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  'Thinking Process',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
-                    fontStyle: FontStyle.italic,
-                    fontSize: 11,
+                Flexible(
+                  child: Text(
+                    'Quá trình suy nghĩ',
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.55),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+                if (widget.isStreaming) ...[
+                  const SizedBox(width: 6),
+                  AnimatedBuilder(
+                    animation: _shimmerController,
+                    builder: (context, child) {
+                      return Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: theme.colorScheme.primary.withOpacity(
+                            0.3 + 0.7 * math.sin(_shimmerController.value * math.pi),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _isExpanded ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 14,
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
                   ),
                 ),
               ],
             ),
           ),
         ),
-        if (_isExpanded)
-          Container(
-            margin: const EdgeInsets.only(left: 8, bottom: 4),
-            padding: const EdgeInsets.only(left: 8),
+        AnimatedCrossFade(
+          firstChild: const SizedBox.shrink(),
+          secondChild: Container(
+            margin: const EdgeInsets.only(left: 4, top: 8, bottom: 4),
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: isDark
+                  ? Colors.white.withOpacity(0.03)
+                  : const Color(0xFFF8F9FA),
               border: Border(
                 left: BorderSide(
-                  color: theme.colorScheme.onSurface.withOpacity(0.1),
-                  width: 1.5,
+                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  width: 2.5,
                 ),
               ),
             ),
@@ -1159,18 +1282,71 @@ class _ThinkingSegmentState extends State<_ThinkingSegment> {
               styleSheet: MarkdownStyleSheet(
                 p: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  height: 1.3,
+                  height: 1.5,
                   fontSize: 12,
                 ),
               ),
             ),
           ),
+          crossFadeState: _isExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 250),
+        ),
       ],
     );
   }
 }
 
+/// Custom painter for smooth animated spinner arc around avatar
+class _SpinnerArcPainter extends CustomPainter {
+  final double rotation;
+  final Color color;
+  final double strokeWidth;
 
+  _SpinnerArcPainter({
+    required this.rotation,
+    required this.color,
+    this.strokeWidth = 2.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    // Create gradient arc shader
+    paint.shader = SweepGradient(
+      startAngle: 0,
+      endAngle: math.pi * 2,
+      colors: [
+        Colors.transparent,
+        color.withOpacity(0.1),
+        color.withOpacity(0.6),
+        color,
+      ],
+      stops: const [0.0, 0.3, 0.7, 1.0],
+      transform: GradientRotation(rotation * math.pi * 2),
+    ).createShader(rect);
+
+    // Draw arc (270 degrees, leaving a gap)
+    canvas.drawArc(
+      rect.deflate(strokeWidth / 2),
+      rotation * math.pi * 2,
+      math.pi * 1.5,
+      false,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpinnerArcPainter oldDelegate) {
+    return oldDelegate.rotation != rotation || oldDelegate.color != color;
+  }
+}
 
 class _AvatarSpinner extends StatefulWidget {
   final bool isAnimating;
@@ -1183,18 +1359,24 @@ class _AvatarSpinner extends StatefulWidget {
 }
 
 class _AvatarSpinnerState extends State<_AvatarSpinner>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+    with TickerProviderStateMixin {
+  late AnimationController _rotationController;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _rotationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500), // Faster rotation
+      duration: const Duration(milliseconds: 1200),
+    );
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
     );
     if (widget.isAnimating) {
-      _controller.repeat();
+      _rotationController.repeat();
+      _pulseController.repeat(reverse: true);
     }
   }
 
@@ -1203,17 +1385,21 @@ class _AvatarSpinnerState extends State<_AvatarSpinner>
     super.didUpdateWidget(oldWidget);
     if (widget.isAnimating != oldWidget.isAnimating) {
       if (widget.isAnimating) {
-        _controller.repeat();
+        _rotationController.repeat();
+        _pulseController.repeat(reverse: true);
       } else {
-        _controller.stop();
-        _controller.reset();
+        _rotationController.stop();
+        _rotationController.reset();
+        _pulseController.stop();
+        _pulseController.reset();
       }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _rotationController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -1221,58 +1407,53 @@ class _AvatarSpinnerState extends State<_AvatarSpinner>
   Widget build(BuildContext context) {
     if (!widget.isAnimating) return widget.child;
 
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Glow Effect
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
-                blurRadius: 8,
-                spreadRadius: 2,
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_rotationController, _pulseController]),
+      builder: (context, child) {
+        final pulseValue = _pulseController.value;
+        final glowOpacity = 0.15 + 0.25 * pulseValue;
+        final glowSpread = 2.0 + 4.0 * pulseValue;
+
+        return SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Pulsing glow
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withOpacity(glowOpacity),
+                      blurRadius: 10,
+                      spreadRadius: glowSpread,
+                    ),
+                  ],
+                ),
               ),
+              // Spinning arc using CustomPainter
+              CustomPaint(
+                size: const Size(38, 38),
+                painter: _SpinnerArcPainter(
+                  rotation: _rotationController.value,
+                  color: primaryColor,
+                ),
+              ),
+              // Avatar on top
+              child!,
             ],
           ),
-        ),
-        // Rotating Loop
-        RotationTransition(
-          turns: _controller,
-          child: Container(
-            width: 34,
-            height: 34,
-            padding: const EdgeInsets.all(2), // The thickness of the Ring
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: SweepGradient(
-                colors: [
-                  Colors.transparent,
-                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  Theme.of(context).colorScheme.primary,
-                ],
-                stops: const [0.0, 0.5, 1.0],
-              ),
-            ),
-            // This creates a mask to make it a ring
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context).scaffoldBackgroundColor,
-                // Note: In message bubbles, we might be on a colored bg,
-                // but usually avatars are in a transparent row.
-                // Transparent hole is tricky with SweepGradient without CustomPainter.
-                // Let's rely on the Child covering the center.
-              ),
-            ),
-          ),
-        ),
-        // The Avatar stays on top
-        widget.child,
-      ],
+        );
+      },
+      child: widget.child,
     );
   }
 }
+
+

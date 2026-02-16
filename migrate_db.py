@@ -25,7 +25,15 @@ def migrate():
             conn.commit()
             print("Migration successful: 'avatar' column added.")
         else:
-            print("'avatar' column already exists in 'users' table.")
+            print("'avatar' column already exists.")
+
+        if "full_name" not in columns:
+            print("Adding 'full_name' column to 'users' table...")
+            cursor.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
+            conn.commit()
+            print("Migration successful: 'full_name' column added.")
+        else:
+            print("'full_name' column already exists.")
 
     except Exception as e:
         print(f"Migration failed: {e}")

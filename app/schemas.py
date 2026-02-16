@@ -32,6 +32,7 @@ class ChangePassword(BaseModel):
 
 class UpdateProfile(BaseModel):
     username: Optional[str] = None
+    full_name: Optional[str] = None
     gender: Optional[str] = None
     phone_number: Optional[str] = None
     avatar: Optional[str] = None

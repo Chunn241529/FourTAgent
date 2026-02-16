@@ -1,3 +1,4 @@
+import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/user.dart';
 import 'api_service.dart';
@@ -132,12 +133,21 @@ class AuthService {
     }
   }
 
-  /// Update profile (username, gender)
-  static Future<User> updateProfile({String? username, String? gender, String? phoneNumber}) async {
+  /// Update profile (username, gender, avatar)
+  /// Update profile (username, full name, gender, avatar)
+  static Future<User> updateProfile({
+    String? username,
+    String? fullName,
+    String? gender,
+    String? phoneNumber,
+    String? avatar,
+  }) async {
     final response = await ApiService.put(ApiConfig.profile, body: {
       if (username != null) 'username': username,
+      if (fullName != null) 'full_name': fullName,
       if (gender != null) 'gender': gender,
       if (phoneNumber != null) 'phone_number': phoneNumber,
+      if (avatar != null) 'avatar': avatar,
     });
 
     ApiService.parseResponse(response); // returns {"message": "...", "user": {...}}
@@ -149,14 +159,54 @@ class AuthService {
     final updatedUser = User(
       id: currentUser.id,
       email: currentUser.email,
-      username: username ?? currentUser.username, // updated username
-      gender: gender ?? currentUser.gender, // updated gender
-      phoneNumber: phoneNumber ?? currentUser.phoneNumber, // updated phone number
+      username: username ?? currentUser.username, 
+      fullName: fullName ?? currentUser.fullName, 
+      gender: gender ?? currentUser.gender,
+      phoneNumber: phoneNumber ?? currentUser.phoneNumber,
+      avatar: avatar ?? currentUser.avatar,
       token: currentUser.token,
     );
     
     await StorageService.saveUser(updatedUser);
     return updatedUser;
+  }
+
+  /// Upload avatar image file
+  static Future<String> uploadAvatar(String filePath) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.uploadAvatar}');
+    final token = await StorageService.getToken();
+    
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(await http.MultipartFile.fromPath('file', filePath));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    if (response.statusCode != 200) {
+      final data = ApiService.parseResponse(response);
+      throw ApiException(data['detail'] ?? 'Upload failed', response.statusCode);
+    }
+    
+    final data = ApiService.parseResponse(response);
+    final avatarUrl = data['avatar_url'] as String;
+    
+    // Update local user
+    final currentUser = await StorageService.getUser();
+    if (currentUser != null) {
+      final updatedUser = User(
+        id: currentUser.id,
+        email: currentUser.email,
+        username: currentUser.username,
+        gender: currentUser.gender,
+        phoneNumber: currentUser.phoneNumber,
+        avatar: avatarUrl,
+        token: currentUser.token,
+      );
+      await StorageService.saveUser(updatedUser);
+    }
+    
+    return avatarUrl;
   }
 
   /// Get verified devices

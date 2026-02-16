@@ -29,6 +29,9 @@ void main() {
   runApp(const FourTChatApp());
 }
 
+/// Global key for showing SnackBars from anywhere safely
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class FourTChatApp extends StatefulWidget {
   const FourTChatApp({super.key});
 
@@ -87,6 +90,7 @@ class _FourTChatAppState extends State<FourTChatApp> with WidgetsBindingObserver
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
+            scaffoldMessengerKey: rootScaffoldMessengerKey,
             title: 'Lumina AI',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
