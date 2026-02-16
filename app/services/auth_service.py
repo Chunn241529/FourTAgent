@@ -105,6 +105,7 @@ class AuthService:
                     "email": db_user.email,
                     "gender": db_user.gender,
                     "phone_number": db_user.phone_number,
+                    "avatar": db_user.avatar,
                     "status": 200,
                 }
             else:
@@ -239,6 +240,7 @@ class AuthService:
                 "email": db_user.email,
                 "gender": db_user.gender,
                 "phone_number": db_user.phone_number,
+                "avatar": db_user.avatar,
                 "status": 200,
             }
 
