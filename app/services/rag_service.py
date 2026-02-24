@@ -678,3 +678,52 @@ class RAGService:
 
         except Exception as e:
             logger.error(f"Error cleaning up RAG index: {e}")
+
+    @staticmethod
+    def cleanup_all_user_faiss(user_id: int) -> int:
+        """
+        Deletes all FAISS indices and metadata for a specific user.
+        Returns the number of conversation indices deleted.
+        """
+        count = 0
+        try:
+            # Pattern for this user's indices
+            index_pattern = os.path.join(
+                RAGConfig.INDEX_DIR, f"faiss_{user_id}_*.index"
+            )
+            meta_pattern = os.path.join(
+                RAGConfig.INDEX_DIR, f"metadata_{user_id}_*.json"
+            )
+
+            # Find files
+            index_files = glob.glob(index_pattern)
+            meta_files = glob.glob(meta_pattern)
+
+            # Delete Index Files
+            for f in index_files:
+                try:
+                    os.remove(f)
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to remove index {f}: {e}")
+
+            # Delete Metadata Files
+            for f in meta_files:
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    logger.error(f"Failed to remove metadata {f}: {e}")
+
+            # Clear cache for this user
+            keys_to_remove = [
+                k for k in RAGService._index_cache.keys() if k[0] == user_id
+            ]
+            for k in keys_to_remove:
+                del RAGService._index_cache[k]
+
+            logger.info(f"Cleaned up {count} FAISS indices for user {user_id}")
+            return count
+
+        except Exception as e:
+            logger.error(f"Error cleaning up all user FAISS indices: {e}")
+            return 0

@@ -104,7 +104,29 @@ class _CodeExecutionWidgetState extends State<CodeExecutionWidget> {
             ),
           ),
 
-          if (_isExpanded) ...[        
+          if (_isExpanded) ...[
+            // Input Code
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                      'Input Code:',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                         color: widget.isDark ? Colors.grey[500] : Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    CodeBlockWidget(
+                      code: widget.code,
+                      language: 'python',
+                      isDark: widget.isDark,
+                    ),
+                ],
+              ),
+            ),
+            
             // Output / Error
             Container(
                padding: const EdgeInsets.all(12),

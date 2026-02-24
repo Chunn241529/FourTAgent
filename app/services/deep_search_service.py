@@ -25,10 +25,21 @@ class DeepSearchService:
         )
 
     async def execute_deep_search(
-        self, topic: str, user_id: int, conversation_id: int, db: Any
+        self,
+        topic: str,
+        user_id: int,
+        conversation_id: int,
+        db: Any,
+        is_autonomous: bool = False,
     ) -> AsyncGenerator[str, None]:
         """
         Executes the Deep Search flow using Broad Search -> RAG Rerank -> Plan -> Execute. (Async)
+        Args:
+            topic: The search topic
+            user_id: User ID
+            conversation_id: Conversation ID
+            db: Database session
+            is_autonomous: If True, indicates this was triggered by an LLM tool call, so we skip saving the User message (Topic) again.
         """
         from app.models import (
             ChatMessage as ModelChatMessage,
@@ -78,6 +89,9 @@ class DeepSearchService:
         yield f"data: {json.dumps({'deep_search_update': {'status': 'planning', 'message': update_msg}}, separators=(',', ':'))}\n\n"
         queries = await self._generate_multi_queries(topic, history_context, client)
 
+        # Emit generated queries
+        yield f"data: {json.dumps({'deep_search_data': {'step': 'planning', 'type': 'queries', 'data': queries}}, separators=(',', ':'))}\n\n"
+
         # 3. Execute Broad Search
         update_msg = "Researching..."
         collected_updates.append(update_msg)
@@ -86,9 +100,35 @@ class DeepSearchService:
         all_results = []
         for i, query in enumerate(queries):
             logger.info(f"Searching ({i+1}/{len(queries)}): {query}")
+
+            # Emit search start
+            yield f"data: {json.dumps({'search_started': {'query': query}}, separators=(',', ':'))}\n\n"
+
             # Offload blocking DDGS search to thread
             results = await loop.run_in_executor(None, self._web_search_results, query)
             all_results.extend(results)
+
+            # Emit search complete
+            yield f"data: {json.dumps({'search_complete': {'query': query, 'result_count': len(results)}}, separators=(',', ':'))}\n\n"
+            await asyncio.sleep(0.1)  # Brief pause for UI update
+
+        # Emit all search results (titles/urls)
+        search_data = []
+        for r in all_results:
+            # Extract title/url from snippet string if possible, or just send raw snippets?
+            # _web_search_results returns strings: "Title: ...\nURL: ...\nContent: ..."
+            # Let's try to parse it for cleaner UI
+            lines = r.split("\n")
+            title = next(
+                (l.split("Title: ")[1] for l in lines if l.startswith("Title: ")),
+                "Unknown",
+            )
+            url = next(
+                (l.split("URL: ")[1] for l in lines if l.startswith("URL: ")), "#"
+            )
+            search_data.append({"title": title, "url": url})
+
+        yield f"data: {json.dumps({'deep_search_data': {'step': 'searching', 'type': 'results', 'data': search_data}}, separators=(',', ':'))}\n\n"
 
         # 4. RAG Reranking
         update_msg = "Analyzing and verifying specific details..."
@@ -98,6 +138,21 @@ class DeepSearchService:
         top_results = await loop.run_in_executor(
             None, lambda: self._rerank_results(topic, all_results, top_k=6)
         )
+
+        # Emit relevant sources
+        relevant_data = []
+        for r in top_results:
+            lines = r.split("\n")
+            title = next(
+                (l.split("Title: ")[1] for l in lines if l.startswith("Title: ")),
+                "Unknown",
+            )
+            url = next(
+                (l.split("URL: ")[1] for l in lines if l.startswith("URL: ")), "#"
+            )
+            relevant_data.append({"title": title, "url": url})
+
+        yield f"data: {json.dumps({'deep_search_data': {'step': 'reflecting', 'type': 'sources', 'data': relevant_data}}, separators=(',', ':'))}\n\n"
 
         del all_results
         gc.collect()
@@ -111,6 +166,8 @@ class DeepSearchService:
         collected_plan = report_plan
 
         yield f"data: {json.dumps({'plan': report_plan}, separators=(',', ':'))}\n\n"
+        # Also emit as data for the step
+        yield f"data: {json.dumps({'deep_search_data': {'step': 'planning_create', 'type': 'plan', 'data': report_plan}}, separators=(',', ':'))}\n\n"
 
         gc.collect()
 
@@ -148,16 +205,38 @@ class DeepSearchService:
         # --- SAVE HISTORY ---
         def save_history():
             try:
-                # Save User Message (Topic)
-                query_emb = EmbeddingService.get_embedding(topic)
-                user_msg = ModelChatMessage(
+                # Save User Message (Topic) - ONLY if not autonomous (Slash Command)
+                # If autonomous, the user message already exists and triggered the tool
+                user_msg = None
+                if not is_autonomous:
+                    query_emb = EmbeddingService.get_embedding(topic)
+                    user_msg = ModelChatMessage(
+                        user_id=user_id,
+                        conversation_id=conversation_id,
+                        content=topic,
+                        role="user",
+                        embedding=json.dumps(query_emb.tolist()),
+                    )
+                    db.add(user_msg)
+
+                # Save Tool Message (Plan & Sources) for context
+                # This ensures the LLM knows WHERE the info came from in future turns
+                sources_text = "\n".join(
+                    [f"- [{d['title']}]({d['url']})" for d in relevant_data]
+                )
+                tool_content = f"**Research Plan:**\n{collected_plan}\n\n**Verified Sources:**\n{sources_text}"
+
+                tool_msg = ModelChatMessage(
                     user_id=user_id,
                     conversation_id=conversation_id,
-                    content=topic,
-                    role="user",
-                    embedding=json.dumps(query_emb.tolist()),
+                    content=tool_content,
+                    role="tool",
+                    tool_name="deep_search",
+                    tool_call_id="call_"
+                    + datetime.now().strftime("%Y%m%d%H%M%S"),  # Dummy ID
+                    embedding=None,  # Context message, embedding optional/skipped for now
                 )
-                db.add(user_msg)
+                db.add(tool_msg)
 
                 # Save Assistant Message (Report)
                 ass_emb = EmbeddingService.get_embedding(final_report)
@@ -230,27 +309,29 @@ class DeepSearchService:
     async def _generate_multi_queries(
         self, topic: str, history_context: str, client: ollama.AsyncClient
     ) -> List[str]:
-        system_prompt = "You are a search expert. Generate 4 distinct search queries (English or Vietnamese based on topic) to research the topic comprehensively."
+        system_prompt = "Bạn là Chuyên gia Nghiên cứu (Senior Research Analyst). Nhiệm vụ là phân tích yêu cầu và tạo 4 truy vấn tìm kiếm tối ưu, khai thác sâu chủ đề."
         prompt = f"""
         Topic: {topic}
         Context:
         {history_context}
 
-        Generate 4 search queries.
+        Tạo 4 truy vấn tìm kiếm (Search Queries) để nghiên cứu toàn diện chủ đề này.
         
-        **LANGUAGE RULE**:
-        - Use **ENGLISH** for Technical topics (Coding, Science, Global Tech), International News, or General Knowledge.
-        - Use **VIETNAMESE** for Vietnam-specific topics (Local News, Laws, Culture, Locations).
-        - If uncertain, mix both.
+        **QUY TẮC NGÔN NGỮ (QUAN TRỌNG)**:
+        - Kỹ thuật, Lập trình, Khoa học, Quốc tế -> Dùng **TIẾNG ANH**.
+        - Tin tức VN, Pháp luật, Địa danh, Văn hóa VN -> Dùng **TIẾNG VIỆT**.
+        - Nếu chủ đề rộng -> Kết hợp 2 Tiếng Anh, 2 Tiếng Việt.
         
-        Structure:
-        1. Basic concept/definition (Concise)
-        2. Key features/components (Comprehensive)
-        3. Advanced/Technical details (Specific)
-        4. Current trends/comparisons (Up-to-date)
+        **CẤU TRÚC PHÂN TÍCH**:
+        1. Query 1: Khái niệm cốt lõi / Definitional (Tìm hiểu bản chất)
+        2. Query 2: Chi tiết kỹ thuật / Technical Specs (Đi sâu vào thành phần)
+        3. Query 3: So sánh & Đánh giá / Comparative (So với đối thủ/giải pháp khác)
+        4. Query 4: Ứng dụng & Thực tiễn / Use-cases (Ví dụ thực tế/Tutorial)
         
-        Ensure queries are concise (Keywords preferred).
-        Return ONLY the list of 4 queries, one per line. No numbering.
+        Yêu cầu:
+        - Truy vấn ngắn gọn, chứa từ khóa trọng tâm (Keywords).
+        - KHÔNG đánh số thứ tự đầu dòng.
+        - Trả về đúng 4 dòng.
         """
         response = await client.chat(
             model=self.model_name,
@@ -269,16 +350,26 @@ class DeepSearchService:
     async def _generate_report_plan(
         self, topic: str, context: str, client: ollama.AsyncClient
     ) -> str:
-        system_prompt = (
-            "You are a helpful assistant. Create a momentary plan to answer the user."
-        )
+        system_prompt = "Bạn là Trợ lý Tổng hợp Thông tin Chiến lược. Nhiệm vụ là lập dàn ý chi tiết để trả lời người dùng dựa trên dữ liệu đã thu thập."
         prompt = f"""
         Topic: {topic}
-        Context (Abstract):
-        {context[:5000]}...
         
-        Briefly outline how you will answer this request based on the context.
-        Keep it simple and direct. No complex markdown checklists.
+        Research Context (Dữ liệu đã tìm được):
+        {context[:8000]}...
+        
+        Hãy lập dàn ý (Plan) để viết câu trả lời cuối cùng.
+        Dàn ý cần logic, chặt chẽ, đi thẳng vào vấn đề người dùng hỏi.
+        
+        Cấu trúc gợi ý:
+        1. **Tóm tắt/Câu trả lời trực tiếp**: Trả lời ngay câu hỏi của user.
+        2. **Phân tích chi tiết**: Các điểm chính rút ra từ Research Context.
+        3. **Số liệu/Dẫn chứng**: Nếu có trong context.
+        4. **Kết luận/Lời khuyên hành động**.
+
+        Yêu cầu:
+        - Viết bằng Tiếng Việt.
+        - Dùng gạch đầu dòng (-). KHÔNG dùng checkbox.
+        - Ngắn gọn, rõ ràng.
         """
         response = await client.chat(
             model=self.model_name,

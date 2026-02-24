@@ -33,5 +33,10 @@
     "message_id": 20,
     "query": "OpenAI's GPT-oss models and their significance in the open-source community",
     "response": "# OpenAI's GPT-OSS Models: A Game-Changer for Open-Source AI  \n\nOpenAI's recent release of the **GPT-OSS 120B** and **GPT-OSS 20B** models marks a pivotal moment in the open-source AI landscape. These models, licensed under **Apache 2.0**, are designed to democratize access to advanced AI capabilities while fostering collaboration among developers and researchers. Below is a detailed breakdown of their significance, features, and impact.  \n\n---\n\n## Licensing and Accessibility: Breaking Down Barriers  \n\nThe **Apache 2.0 license** is a cornerstone of the GPT-OSS models’ open-source strategy. Unlike restrictive licenses, Apache 2.0 allows users to **modify, distribute, and commercialize** the models freely, provided they retain the original license headers. This openness enables:  \n\n- **Broader access**: Smaller teams, startups, and academic institutions can leverage these models without licensing fees.  \n- **Collaborative innovation**: Developers can build upon the models, contributing i"
+  },
+  {
+    "message_id": 26,
+    "query": "Vẽ ảnh 1 con mèo",
+    "response": "Tôi đã tạo xong ảnh mèo theo yêu cầu của bạn! Ảnh có kích thước 768x763, sử dụng seed số 6264004744962629. Bạn có thể xem ảnh ngay lập tức hoặc yêu cầu chỉnh sửa nếu cần."
   }
 ]

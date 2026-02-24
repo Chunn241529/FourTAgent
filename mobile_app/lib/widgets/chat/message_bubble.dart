@@ -200,7 +200,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // Display image if present
                     if (widget.message.imageBase64 != null &&
                         widget.message.imageBase64!.isNotEmpty)
                       Builder(
@@ -226,18 +225,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                             base64Data = base64Data.split(',').last;
                           }
 
-                          // Decode to check validity (optional, but good for safety)
-                          try {
-                            base64Decode(base64Data);
-                          } catch (e) {
-                            return const SizedBox.shrink();
-                          }
-
                           if (isImage) {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
+                                // Optimized: use memory image gracefully without heavy try-catch decoding if possible
                                 child: Image.memory(
                                   base64Decode(base64Data),
                                   width: 200,
@@ -442,37 +435,40 @@ class _MessageBubbleState extends State<MessageBubble> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // AI Avatar with Spinner
-              _AvatarSpinner(
-                isAnimating:
-                    (widget.message.isStreaming &&
-                        widget.message.content.isEmpty) ||
-                    widget.message.isGeneratingImage,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary,
-                        Color.lerp(theme.colorScheme.primary,
-                            theme.colorScheme.tertiary, 0.6)!,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primary.withOpacity(0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: _AvatarSpinner(
+                  isAnimating:
+                      (widget.message.isStreaming &&
+                          widget.message.content.isEmpty) ||
+                      widget.message.isGeneratingImage,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDark ? Colors.black : Colors.white,
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withOpacity(0.2),
+                        width: 0.5,
                       ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    color: Colors.white,
-                    size: 16,
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withOpacity(0.15),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: Image.asset(
+                          'assets/icon/icon.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -514,23 +510,14 @@ class _MessageBubbleState extends State<MessageBubble> {
                       ),
                     ],
 
-                    // 2. Deep Search Indicator (status updates)
+                  // 2. Deep Search Indicator (status updates)
                     if (widget.message.deepSearchUpdates.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: _buildDeepSearchIndicator(widget.message),
                       ),
 
-                    // 3. Plan Indicator (collapsible)
-                    if (widget.message.plan != null &&
-                        widget.message.plan!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: PlanIndicator(
-                          plan: widget.message.plan!,
-                          isStreaming: widget.message.isStreaming,
-                        ),
-                      ),
+
 
                     // 4. Post-Search Thinking (if any)
                     if (widget.message.thinking != null &&
@@ -736,7 +723,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           return Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.only(bottom: 8),
               child: SearchIndicator(
                 activeSearches: isCompleted ? [] : [query],
                 completedSearches: isCompleted ? [query] : [],
@@ -881,6 +868,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       elapsedTime: DateTime.now().difference(message.timestamp),
       sources: _extractSources(message),
       recentActions: message.completedSearches.take(5).toList(),
+      plan: message.plan,
     );
 
     return DeepSearchIndicator(
@@ -888,6 +876,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       completedSteps: completedSteps,
       searchType: searchType,
       metadata: metadata,
+      deepSearchData: message.deepSearchData,
     );
   }
 

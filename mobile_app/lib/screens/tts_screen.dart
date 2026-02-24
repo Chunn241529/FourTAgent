@@ -41,68 +41,138 @@ class _TtsScreenState extends State<TtsScreen> {
 
   Widget _buildTopBar(ThemeData theme, bool isDark) {
     return Container(
-      margin: const EdgeInsets.all(20),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
+              : [const Color(0xFF667EEA), const Color(0xFF764BA2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? const Color(0xFF667EEA) : const Color(0xFF667EEA))
+                .withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.record_voice_over,
-              size: 18,
-              color: theme.colorScheme.primary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.record_voice_over,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "TTS Engine",
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      "Advanced Text-to-Speech Synthesis & Voice Lab",
+                      style: TextStyle(fontSize: 13, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Text(
-            "TTS Engine",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const Spacer(),
-          _buildTabChip(0, "Synthesis", theme),
-          const SizedBox(width: 8),
-          _buildTabChip(1, "Voice Lab", theme),
+          const SizedBox(height: 20),
+          _buildTabBar(theme),
         ],
       ),
     );
   }
 
-  Widget _buildTabChip(int index, String label, ThemeData theme) {
-    final isSelected = _selectedTab == index;
+  Widget _buildTabBar(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          _buildTabButton(0, Icons.graphic_eq, "Synthesis"),
+          const SizedBox(width: 4),
+          _buildTabButton(1, Icons.science, "Voice Lab"),
+        ],
+      ),
+    );
+  }
 
-    return InkWell(
-      onTap: () => setState(() => _selectedTab = index),
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primary.withOpacity(0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            color: isSelected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.5),
+  Widget _buildTabButton(int index, IconData icon, String label) {
+    final isSelected = _selectedTab == index;
+    final theme = Theme.of(context);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedTab = index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected
+                    ? (theme.brightness == Brightness.dark
+                        ? const Color(0xFF667EEA)
+                        : const Color(0xFF764BA2))
+                    : Colors.white70,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected
+                      ? (theme.brightness == Brightness.dark
+                          ? const Color(0xFF667EEA)
+                          : const Color(0xFF764BA2))
+                      : Colors.white70,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -219,14 +289,20 @@ class _SynthesisViewState extends State<SynthesisView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 500),
-      child: Row(
-        children: [
-          Expanded(child: _buildEditorPanel(theme)),
-          const SizedBox(width: 12),
-          SizedBox(width: 280, child: _buildControlPanel(theme)),
-        ],
+    // Reduced height to prevent touching bottom edge
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1150, maxHeight: 500),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Row(
+            children: [
+              Expanded(child: _buildEditorPanel(theme)),
+              const SizedBox(width: 12),
+              SizedBox(width: 280, child: _buildControlPanel(theme)),
+            ],
+          ),
+        ),
       ),
     );
   }

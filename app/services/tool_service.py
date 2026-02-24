@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Union
 import json
 import ollama
+from sqlalchemy.orm import Session
 
 # NOTE: We don't import web_search/web_fetch from ollama anymore
 # Using our own custom implementations (safe_web_search, safe_web_fetch) instead
@@ -20,14 +21,24 @@ from app.services.cloud_file_service import CloudFileService
 logger = logging.getLogger(__name__)
 
 
+from app.services.embedding_service import EmbeddingService
+import numpy as np
+
 # Global Caches to optimize search/fetch
 GLOBAL_URL_CACHE = set()
 GLOBAL_CONTENT_STORAGE = {}
 
 
-def fallback_web_search(query: str, max_results: int = 3) -> str:
+def cosine_similarity(v1: np.ndarray, v2: np.ndarray) -> float:
+    """Tính độ tương đồng cosine giữa hai vector"""
+    if np.all(v1 == 0) or np.all(v2 == 0):
+        return 0.0
+    return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+
+
+def fallback_web_search(query: str, max_results: int = 5) -> str:
     """
-    Fast web search using DuckDuckGo.
+    Fast web search using DuckDuckGo with Semantic Ranking.
     Returns JSON string with search results.
     """
     try:
@@ -35,27 +46,51 @@ def fallback_web_search(query: str, max_results: int = 3) -> str:
 
         logger.info(f"DuckDuckGo search for: {query}")
 
-        results = []
+        # Get query embedding for semantic search
+        query_embedding = EmbeddingService.get_embedding(query)
+
+        raw_results = []
+        # Fetch more results to filter down
         with ddgs.DDGS() as ddg_client:
-            search_results = ddg_client.text(query, max_results=max_results)
+            search_results = ddg_client.text(query, max_results=max_results * 3)
 
             for result in search_results:
-                results.append(
-                    {
-                        "title": result.get("title", ""),
-                        "url": result.get("href", ""),
-                        "content": result.get("body", ""),
-                    }
+                title = result.get("title", "No Title")
+                href = result.get("href", "#")
+                body = result.get("body", "")
+
+                # Semantic Scoring
+                content_for_embedding = f"{title}. {body}"
+                doc_embedding = EmbeddingService.get_embedding(content_for_embedding)
+                score = cosine_similarity(query_embedding, doc_embedding)
+
+                raw_results.append(
+                    {"title": title, "href": href, "body": body, "score": score}
                 )
 
-        return json.dumps({"results": results}, ensure_ascii=False)
+        if not raw_results:
+            return "No results found."
+
+        # Sort by semantic score descending
+        raw_results.sort(key=lambda x: x["score"], reverse=True)
+        top_results = raw_results[:max_results]
+
+        # Format as Markdown for LLM readability
+        markdown_results = ""
+        for i, result in enumerate(top_results):
+            markdown_results += f"## {result['title']} (Score: {result['score']:.2f})\n"
+            markdown_results += f"URL: {result['href']}\n"
+            markdown_results += f"Content: {result['body']}\n"
+            markdown_results += "---\n"
+
+        return markdown_results
 
     except Exception as e:
         logger.error(f"DuckDuckGo search error: {e}")
-        return json.dumps({"results": [], "error": str(e)}, ensure_ascii=False)
+        return f"Error searching: {str(e)}"
 
 
-def fallback_web_fetch(url: str) -> str:
+def fallback_web_fetch(url: str, query: str = None) -> str:
     """
     Fallback web fetch using requests + BeautifulSoup when ollama web_fetch fails.
     Returns cleaned text content from the URL with quality extraction.
@@ -67,16 +102,39 @@ def fallback_web_fetch(url: str) -> str:
             logger.info(f"Using cached content for: {url}")
             return GLOBAL_CONTENT_STORAGE[url]
 
-        import requests
         from bs4 import BeautifulSoup
 
-        logger.info(f"Using requests+BS4 fallback fetch for: {url}")
+        logger.info(f"Using fallback fetch for: {url}")
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
+        response = None
+        try:
+            # Try using cloudscraper to bypass Cloudflare and other bot protections
+            import cloudscraper
 
-        response = requests.get(url, headers=headers, timeout=10)
+            scraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "desktop": True}
+            )
+            response = scraper.get(url, timeout=15)
+        except ImportError:
+            # Fallback to requests with robust headers if cloudscraper is not installed
+            import requests
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Cache-Control": "max-age=0",
+            }
+            response = requests.get(url, headers=headers, timeout=15)
+
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -151,7 +209,50 @@ def fallback_web_fetch(url: str) -> str:
 
         # Clean up excessive whitespace
         lines = [line.strip() for line in text_content.split("\n") if line.strip()]
-        cleaned_text = "\n".join(lines)
+
+        if query:
+            # Semantic filtering if a query is provided
+            logger.info(f"Filtering fetch results semantically for query: {query}")
+            query_embedding = EmbeddingService.get_embedding(query)
+
+            # Group lines into small chunks (e.g. 3 lines) to preserve local context
+            chunks = []
+            current_chunk = []
+            for line in lines:
+                current_chunk.append(line)
+                if (
+                    len(current_chunk) >= 5
+                    or line.startswith("## ")
+                    or line.startswith("```")
+                ):
+                    chunks.append("\\n".join(current_chunk))
+                    current_chunk = []
+            if current_chunk:
+                chunks.append("\\n".join(current_chunk))
+
+            scored_chunks = []
+            for chunk in chunks:
+                if len(chunk.strip()) > 30:  # Only score meaningful chunks
+                    chunk_embedding = EmbeddingService.get_embedding(chunk)
+                    score = cosine_similarity(query_embedding, chunk_embedding)
+                    if score > 0.45:  # Relevance threshold
+                        scored_chunks.append((score, chunk))
+
+            # Sort chunks by relevance and keep top N
+            scored_chunks.sort(key=lambda x: x[0], reverse=True)
+            top_chunks = [
+                c[1] for c in scored_chunks[:15]
+            ]  # Keep top 15 most relevant chunks
+
+            # Maintain original order if possible (simplified here by just joining top hits)
+            cleaned_text = "\\n\\n...\\n\\n".join(top_chunks)
+            if not cleaned_text:
+                cleaned_text = (
+                    "Nội dung trang web không có thông tin liên quan đến câu hỏi theo đánh giá ngữ nghĩa. Dưới đây là phần đầu trang:\\n"
+                    + "\\n".join(lines[:20])
+                )
+        else:
+            cleaned_text = "\n".join(lines)
 
         # Limit to reasonable size (reduced for faster processing)
         if len(cleaned_text) > 8000:
@@ -184,14 +285,14 @@ def safe_web_search(query: str) -> str:
     return fallback_web_search(query)
 
 
-def safe_web_fetch(url: str) -> str:
+def safe_web_fetch(url: str, query: str = None) -> str:
     """
-    Web fetch using BeautifulSoup4 for clean text extraction.
+    Web fetch using BeautifulSoup4 for clean text extraction, with optional semantic filtering.
     """
-    return fallback_web_fetch(url)
+    return fallback_web_fetch(url, query)
 
 
-def read_file_server(path: str) -> str:
+def read_file_server(path: str, user_id: int = None) -> str:
     """
     Read content of a local file.
     """
@@ -365,13 +466,18 @@ class ToolService:
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     def _create_canvas_wrapper(
-        self, title: str, content: str, type: str = "markdown", user_id: int = None
+        self,
+        title: str,
+        content: str,
+        type: str = "markdown",
+        user_id: int = None,
+        db: Session = None,
     ):
         if user_id is None:
             return json.dumps(
                 {"error": "User ID required for canvas operations"}, ensure_ascii=False
             )
-        result = canvas_service.create_canvas(user_id, title, content, type)
+        result = canvas_service.create_canvas(user_id, title, content, type, db)
         if result:
             return json.dumps(
                 {"success": True, "canvas": {"id": result.id, "title": result.title}},
@@ -385,12 +491,13 @@ class ToolService:
         content: str = None,
         title: str = None,
         user_id: int = None,
+        db: Session = None,
     ):
         if user_id is None:
             return json.dumps(
                 {"error": "User ID required for canvas operations"}, ensure_ascii=False
             )
-        result = canvas_service.update_canvas(canvas_id, user_id, content, title)
+        result = canvas_service.update_canvas(canvas_id, user_id, content, title, db)
         if result:
             return json.dumps(
                 {
@@ -404,12 +511,14 @@ class ToolService:
             {"error": "Failed to update canvas or not found"}, ensure_ascii=False
         )
 
-    def _read_canvas_wrapper(self, canvas_id: int, user_id: int = None):
+    def _read_canvas_wrapper(
+        self, canvas_id: int, user_id: int = None, db: Session = None
+    ):
         if user_id is None:
             return json.dumps(
                 {"error": "User ID required for canvas operations"}, ensure_ascii=False
             )
-        result = canvas_service.get_canvas(canvas_id, user_id)
+        result = canvas_service.get_canvas(canvas_id, user_id, db)
         if result:
             return json.dumps(
                 {
@@ -491,7 +600,11 @@ class ToolService:
                             "url": {
                                 "type": "string",
                                 "description": "The URL to fetch content from",
-                            }
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Optional original question or query to filter the extracted content (e.g., 'What are the main features mentioned here?').",
+                            },
                         },
                         "required": ["url"],
                     },
@@ -785,7 +898,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "generate_image",
-                    "description": "Generate an image using Stable Diffusion. You MUST convert the user's description into a detailed, ENGLISH, comma-separated tag-based prompt suitable for Stable Diffusion. After success, respond naturally without showing file paths - just confirm the image was created.",
+                    "description": "Generate an image using Stable Diffusion. ONLY use when user EXPLICITLY asks to create, draw, or generate an image. Do NOT use this for informational queries. You MUST convert the user's description into a detailed, ENGLISH, comma-separated tag-based prompt suitable for Stable Diffusion. After success, respond naturally without showing file paths - just confirm the image was created.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -934,6 +1047,14 @@ class ToolService:
                     ]:
                         tool_args["user_id"] = context["user_id"]
 
+                if "db" in context:
+                    if tool_name in [
+                        "create_canvas",
+                        "update_canvas",
+                        "read_canvas",
+                    ]:
+                        tool_args["db"] = context["db"]
+
             tool_func = self.tools_map[tool_name]
 
             # Execute in thread pool
@@ -990,6 +1111,14 @@ class ToolService:
                         "cloud_create_folder",
                     ]:
                         tool_args["user_id"] = context["user_id"]
+
+                if "db" in context:
+                    if tool_name in [
+                        "create_canvas",
+                        "update_canvas",
+                        "read_canvas",
+                    ]:
+                        tool_args["db"] = context["db"]
 
             tool_func = self.tools_map[tool_name]
 

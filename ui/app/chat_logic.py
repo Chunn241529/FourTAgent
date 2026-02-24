@@ -296,19 +296,91 @@ class ChatLogic:
             for msg in data:
                 role = msg.get("role", "unknown")
                 content = msg.get("content", "")
+                thinking = msg.get("thinking", "")
+                tool_calls = msg.get("tool_calls", [])
+                code_executions = msg.get("code_executions", [])
+                generated_images = msg.get("generated_images", [])
+
                 print(f"Loading message: role={role}, content_length={len(content)}")
 
                 if role == "user":
-                    chat_display.append(f"<br><b>&gt;&gt;&gt; {content}</b><br>")
-                elif role == "assistant":
-                    # Render markdown for assistant messages
-                    html_content = markdown.markdown(
-                        content, extensions=["fenced_code", "tables", "codehilite"]
+                    chat_display.append(
+                        f"<br><div style='color: #4ec9b0; margin-top: 10px;'><b>👤 Bạn:</b> {content}</div><br>"
                     )
-                    chat_display.append(f"{html_content}<br>")
+                elif role == "assistant" or role == "tool":
+                    header = (
+                        "🤖 <b>Lumin AI:</b><br>"
+                        if role == "assistant"
+                        else "🔧 <b>Tool:</b><br>"
+                    )
+                    chat_display.append(header)
+
+                    # 1. Render Thinking
+                    if thinking:
+                        thinking_html = markdown.markdown(
+                            thinking, extensions=["fenced_code", "tables", "codehilite"]
+                        )
+                        chat_display.append(
+                            f"<div style='margin-left: 10px; border-left: 3px solid #858585; padding-left: 10px; color: #858585; font-size: 13px;'>"
+                            f"<i>🤔 Suy nghĩ:</i><br>{thinking_html}</div><br>"
+                        )
+
+                    # 2. Render Tool Calls
+                    if tool_calls and isinstance(tool_calls, list):
+                        for tc in tool_calls:
+                            func = tc.get("function", {})
+                            name = func.get("name", "Unknown Tool")
+                            args = func.get("arguments", "{}")
+
+                            # Custom styling for common tools
+                            emoji = "🔧"
+                            if name == "web_search":
+                                emoji = "🔍"
+                            elif "file" in name:
+                                emoji = "📄"
+                            elif "canvas" in name:
+                                emoji = "🎨"
+                            elif "music" in name:
+                                emoji = "🎵"
+
+                            chat_display.append(
+                                f"<div style='background: #252526; padding: 10px; border-radius: 8px; border: 1px solid #3e3e42; margin-bottom: 5px; color: #4ec9b0;'>"
+                                f"<b>{emoji} Đã sử dụng {name}</b><br>"
+                                f"<span style='color: #ce9178; font-family: monospace; font-size: 12px;'>{args}</span>"
+                                f"</div>"
+                            )
+
+                    # 3. Render Code Executions
+                    if code_executions and isinstance(code_executions, list):
+                        for ce in code_executions:
+                            code = ce.get("code", "")
+                            out = ce.get("output", "")
+                            chat_display.append(
+                                f"<div style='background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px;'>"
+                                f"<b style='color: #dcdcaa;'>📟 Code Execution:</b><br>"
+                                f"<pre style='color: #9cdcfe;'>{code}</pre>"
+                                f"<b style='color: #4ec9b0;'>&gt; Kết quả:</b><br>"
+                                f"<pre style='color: #ce9178;'>{out}</pre>"
+                                f"</div>"
+                            )
+
+                    # 4. Render Markdown Content
+                    if content:
+                        html_content = markdown.markdown(
+                            content, extensions=["fenced_code", "tables", "codehilite"]
+                        )
+                        chat_display.append(
+                            f"<div style='padding: 5px 0;'>{html_content}</div>"
+                        )
+
+                    # 5. Render Images
+                    if generated_images and isinstance(generated_images, list):
+                        for img_base64 in generated_images:
+                            chat_display.append(
+                                f"<div style='margin-top: 10px;'><img src='data:image/jpeg;base64,{img_base64}' width='300'></div><br>"
+                            )
                 else:
-                    # Handle any other roles
-                    print(f"Unknown role: {role}")
+                    # Fallback
                     html_content = markdown.markdown(
                         content, extensions=["fenced_code", "tables", "codehilite"]
                     )

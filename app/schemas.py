@@ -104,6 +104,7 @@ class ChatMessage(BaseModel):
     generated_images: Optional[Union[list, str]] = None  # List of base64 images
     thinking: Optional[str] = None  # AI thinking content
     deep_search_updates: Optional[Union[list, str]] = None  # Deep search logs
+    code_executions: Optional[Union[list, str]] = None  # Code execution history
 
     class Config:
         from_attributes = True

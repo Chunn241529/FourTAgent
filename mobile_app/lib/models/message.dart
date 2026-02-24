@@ -48,12 +48,16 @@ class Message {
     List<String>? generatedImages,
     List<Map<String, String>>? codeExecutions,
     this.deepSearchStartIndex,
+    Map<String, dynamic>? deepSearchData,
   }) : activeSearches = activeSearches ?? [],
        completedSearches = completedSearches ?? [],
        completedFileActions = completedFileActions ?? [],
        deepSearchUpdates = deepSearchUpdates ?? [],
        generatedImages = generatedImages ?? [],
-       codeExecutions = codeExecutions ?? [];
+       codeExecutions = codeExecutions ?? [],
+       deepSearchData = deepSearchData ?? {};
+
+  final Map<String, dynamic> deepSearchData; // e.g. {'planning': {'queries': [...]}, 'searching': {'results': [...]}}
 
   factory Message.fromJson(Map<String, dynamic> json) {
     // Reconstruct completed searches from tool calls
@@ -102,6 +106,9 @@ class Message {
           ? (json['code_executions'] as List).map((e) => Map<String, String>.from(e)).toList()
           : null,
       deepSearchStartIndex: json['deep_search_start_index'],
+      deepSearchData: json['deep_search_data'] != null
+          ? Map<String, dynamic>.from(json['deep_search_data'])
+          : null,
     );
     
     // Auto-fix for history loading:
@@ -177,6 +184,7 @@ class Message {
       'generated_images': generatedImages,
       'code_executions': codeExecutions,
       'deep_search_updates': deepSearchUpdates,
+      'deep_search_data': deepSearchData,
     };
   }
 
@@ -200,6 +208,7 @@ class Message {
     List<String>? generatedImages,
     List<Map<String, String>>? codeExecutions,
     int? deepSearchStartIndex,
+    Map<String, dynamic>? deepSearchData,
   }) {
     return Message(
       id: id ?? this.id,
@@ -225,6 +234,7 @@ class Message {
       generatedImages: generatedImages ?? this.generatedImages,
       codeExecutions: codeExecutions ?? this.codeExecutions,
       deepSearchStartIndex: deepSearchStartIndex ?? this.deepSearchStartIndex,
+      deepSearchData: deepSearchData ?? this.deepSearchData,
     );
   }
 }

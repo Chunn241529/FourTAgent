@@ -24,16 +24,21 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   bool _isUserScrolling = false;
   bool _isNearBottom = true;
-  bool _forceCanvasTool = false; // Forces LLM to use canvas tool
+  String? _selectedTool; // Tool state: image, canvas, deep_research
   bool _sidebarCollapsed = false; // Sidebar collapse state
+  
+  late ChatProvider _chatProvider;
+  late CanvasProvider _canvasProvider;
 
   @override
   void initState() {
     super.initState();
+    _chatProvider = context.read<ChatProvider>();
+    _canvasProvider = context.read<CanvasProvider>();
     _scrollController.addListener(_onScroll);
     // Load conversations when screen is first displayed
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadConversations();
+      _chatProvider.loadConversations();
       
       // Set music callback for voice mode and tool actions
       final musicPlayer = context.read<MusicPlayerProvider>();
@@ -70,12 +75,12 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     // Add listener for pending tool calls
-    context.read<ChatProvider>().addListener(_handleProviderUpdate);
+    _chatProvider.addListener(_handleProviderUpdate);
     // Add listener for canvas updates
-    context.read<CanvasProvider>().addListener(_handleCanvasUpdate);
+    _canvasProvider.addListener(_handleCanvasUpdate);
     
     // Register callback for socket events
-    context.read<ChatProvider>().setOnCanvasUpdate((canvasId) {
+    _chatProvider.setOnCanvasUpdate((canvasId) {
        if (mounted) {
          print('>>> ChatScreen: Received canvas update $canvasId');
          print('DEBUG: Init with canvasId=$canvasId');
@@ -99,8 +104,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    context.read<ChatProvider>().removeListener(_handleProviderUpdate);
-    context.read<CanvasProvider>().removeListener(_handleCanvasUpdate);
+    _chatProvider.removeListener(_handleProviderUpdate);
+    _canvasProvider.removeListener(_handleCanvasUpdate);
     super.dispose();
   }
 
@@ -147,6 +152,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _scrollToBottom({bool isStreaming = false}) {
+    if (!mounted) return;
     // Only auto-scroll if user hasn't scrolled up (and isn't at the very bottom)
     if (_isUserScrolling) return;
     
@@ -188,27 +194,34 @@ class _ChatScreenState extends State<ChatScreen> {
           width: _sidebarCollapsed ? 60 : 280,
           clipBehavior: Clip.hardEdge,
           decoration: const BoxDecoration(),
-          child: _sidebarCollapsed 
-              ? _buildCollapsedSidebar(context, theme)
-              : _buildConversationSidebar(context, theme),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            child: SizedBox(
+              width: _sidebarCollapsed ? 60 : 280,
+              child: _sidebarCollapsed 
+                  ? _buildCollapsedSidebar(context, theme)
+                  : _buildConversationSidebar(context, theme),
+            ),
+          ),
         ),
         const VerticalDivider(width: 1, thickness: 1),
         // Main content area
         Expanded(
-          child: Consumer<CanvasProvider>(
-            builder: (context, canvasProvider, _) {
-              final showCanvas = context.watch<SettingsProvider>().showCanvas;
-              if (showCanvas) {
-                 print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
-              }
-              
-              return Column(
-                children: [
-                  // Header - always full width above canvas
-                  _buildChatHeader(context, theme),
-                  // Chat + Canvas row below header
-                  Expanded(
-                    child: Row(
+          child: Column(
+            children: [
+              // Header - always full width above canvas
+              _buildChatHeader(context, theme),
+              // Chat + Canvas row below header
+              Expanded(
+                child: Consumer<CanvasProvider>(
+                  builder: (context, canvasProvider, _) {
+                    final showCanvas = context.watch<SettingsProvider>().showCanvas;
+                    if (showCanvas) {
+                       print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
+                    }
+                    
+                    return Row(
                       children: [
                         // Chat messages area
                         Expanded(
@@ -222,11 +235,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: CanvasPanel(),
                           ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-            },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -474,8 +487,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             borderRadius: BorderRadius.circular(10),
                             onTap: () => context.read<ChatProvider>().selectConversation(conversation),
                             hoverColor: hoverColor,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
+                            child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(10),
@@ -635,30 +647,27 @@ class _ChatScreenState extends State<ChatScreen> {
                   onPressed: () => setState(() => _sidebarCollapsed = true),
                 ),
               const SizedBox(width: 8),
-              // Title with animation
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Row(
-                    children: [
-                      if (conversationId == null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Image.asset('assets/icon/icon.png'),
-                          ),
+                child: Row(
+                  children: [
+                    if (conversationId == null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Image.asset('assets/icon/icon.png'),
                         ),
-                      Text(
+                      ),
+                    Flexible(
+                      child: Text(
                         title ?? 'Lumina AI',
-                        key: ValueKey<String>(title ?? 'default'),
                         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               // Canvas toggle moved to Settings
@@ -812,14 +821,22 @@ class _ChatScreenState extends State<ChatScreen> {
           if (chatProvider.currentConversation != null && chatProvider.messages.isNotEmpty)
             Positioned.fill(
               bottom: 120, // Space for input
-              child: Selector<ChatProvider, int>(
-                // Only rebuild when message count changes (not on every stream update)
-                selector: (_, provider) => provider.messages.length,
-                builder: (context, messageCount, _) {
+              child: Selector<ChatProvider, (int, bool)>(
+                // Only rebuild when message count or streaming state changes
+                selector: (_, provider) => (provider.messages.length, provider.isStreaming),
+                builder: (context, data, _) {
+                  final messageCount = data.$1;
+                  final isStreaming = data.$2;
+                  
                   return ListView.builder(
                     controller: _scrollController,
                     reverse: false, // Start from top
-                    padding: const EdgeInsets.only(top: 16, bottom: 24, left: 24, right: 24),
+                    padding: EdgeInsets.only(
+                      top: 16, 
+                      bottom: isStreaming ? MediaQuery.of(context).size.height * 0.4 : 24, 
+                      left: 24, 
+                      right: 24,
+                    ),
                     itemCount: messageCount,
                     itemBuilder: (context, index) {
                       // Use Selector for individual message to minimize rebuilds
@@ -861,13 +878,17 @@ class _ChatScreenState extends State<ChatScreen> {
               right: 0,
               top: 0,
               // Input is at Alignment(0, 0.4), approx 70% down. 
-              // Reserve bottom 40% of screen for valid margin to avoid overlap.
-              bottom: MediaQuery.of(context).size.height * 0.4, 
-              child: Center(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _buildWelcomeView(theme),
+              // Make bottom aligned just above the input.
+              bottom: MediaQuery.of(context).size.height * 0.3 + 80, 
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildWelcomeView(theme),
+                    ),
                   ),
                 ),
               ),
@@ -887,8 +908,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: MessageInput(
                   voiceModeEnabled: chatProvider.voiceModeEnabled,
                   onVoiceModeChanged: (enabled) => chatProvider.setVoiceMode(enabled),
-                  forceCanvasTool: _forceCanvasTool,
-                  onCanvasTap: () => setState(() => _forceCanvasTool = !_forceCanvasTool),
+                  selectedTool: _selectedTool,
+                  onToolSelected: (tool) => setState(() => _selectedTool = tool),
                   onSend: (message) async {
                     // Auto-create conversation if none exists
                     if (chatProvider.currentConversation == null) {
@@ -897,9 +918,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     if (!mounted) return;
                     
                     final musicPlayer = context.read<MusicPlayerProvider>();
+                    String messageToSend = message;
+                    if (_selectedTool == 'image') {
+                      messageToSend += ' (Vui lòng tạo hình ảnh)';
+                    } else if (_selectedTool == 'deep_research') {
+                      messageToSend += ' (Vui lòng dùng công cụ deep research)';
+                    }
                     
                     chatProvider.sendMessage(
-                      message, // Send original message
+                      messageToSend, // Send message with tool cues
                       displayContent: message, 
                       onMusicPlay: (url, title, thumbnail, duration) {
                         musicPlayer.playFromUrl(
@@ -909,10 +936,13 @@ class _ChatScreenState extends State<ChatScreen> {
                           duration: duration,
                         );
                       },
-                      forceCanvas: _forceCanvasTool,
+                      forceTool: _selectedTool,
                     );
                     
-                    // Scroll to bottom after user sends
+                    // Clear selected tool after send if desired. But typically keep it or clear it. We will clear it.
+                    // setState(() {
+                    //   _selectedTool = null;
+                    // });
                     _isUserScrolling = false;
                     Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
                   },
@@ -925,10 +955,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     
                     final musicPlayer = context.read<MusicPlayerProvider>();
 
-                    // Append " dùng canvas" to message for API only, not shown in UI
-                    final messageToSend = _forceCanvasTool 
-                        ? '$message dùng canvas' 
-                        : message;
+                    // Append cues
+                    String messageToSend = message;
+                    if (_selectedTool == 'image') {
+                      messageToSend += ' (Vui lòng tạo hình ảnh)';
+                    } else if (_selectedTool == 'deep_research') {
+                      messageToSend += ' (Vui lòng dùng công cụ deep research)';
+                    } else if (_selectedTool == 'canvas') {
+                      messageToSend += ' dùng canvas';
+                    }
 
                     chatProvider.sendMessage(
                       messageToSend,
@@ -942,9 +977,13 @@ class _ChatScreenState extends State<ChatScreen> {
                           duration: duration,
                         );
                       },
+                      forceTool: _selectedTool,
                     );
 
                     // Scroll to bottom after user sends
+                    // setState(() {
+                    //   _selectedTool = null;
+                    // });
                     _isUserScrolling = false;
                     Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
                   },
@@ -971,70 +1010,29 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildWelcomeView(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.colorScheme.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.shadow.withOpacity(0.1),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/icon/icon.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Xin chào!',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Xin chào!',
-              style: theme.textTheme.headlineMedium,
+            textAlign: TextAlign.left,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Chúng ta nên bắt đầu từ đâu nhỉ?',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Tôi có thể giúp gì cho bạn?',
-              style: theme.textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            // Suggestions
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                _buildSuggestionChip(
-                  'Bạn có thể làm gì?',
-                  Icons.help_outline,
-                  theme,
-                ),
-                _buildSuggestionChip(
-                  'Vẽ ảnh 1 con mèo',
-                  Icons.image,
-                  theme,
-                ),
-                _buildSuggestionChip(
-                  'Mở 1 bài nhạc bất kỳ',
-                  Icons.music_note,
-                  theme,
-                ),
-              ],
-            ),
-          ],
-        ),
+            textAlign: TextAlign.left,
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }

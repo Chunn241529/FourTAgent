@@ -82,15 +82,17 @@ class ChatService {
     String? file,
     bool voiceEnabled = false,
     String? voiceId,
-    bool forceCanvas = false,
+    String? forceTool,
   }) async* {
     // userId is handled by backend via token
     
     final body = <String, dynamic>{
       'message': message,
       'voice_enabled': voiceEnabled,
-      'force_canvas_tool': forceCanvas,
     };
+    if (forceTool != null) {
+      body['force_tool'] = forceTool;
+    }
     if (voiceId != null) {
       body['voice_id'] = voiceId;
     }

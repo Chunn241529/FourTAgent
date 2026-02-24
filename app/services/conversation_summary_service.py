@@ -22,7 +22,7 @@ class ConversationSummaryService:
     def should_update_summary(conversation_id: int, db: Session) -> bool:
         """
         Check if conversation summary should be updated.
-        Update every 10 messages after reaching 20.
+        Update every 8 messages after reaching 15.
         """
         message_count = (
             db.query(ModelChatMessage)
@@ -30,8 +30,8 @@ class ConversationSummaryService:
             .count()
         )
 
-        # Update at 20, 30, 40, ... messages
-        if message_count >= 20 and (message_count % 10 == 0):
+        # Update at 15, 23, 31, ... messages
+        if message_count >= 15 and (message_count % 8 == 0):
             return True
         return False
 

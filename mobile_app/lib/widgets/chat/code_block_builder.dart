@@ -39,13 +39,13 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
     }
 
     if (isBlock) {
-      return _CodeBlockWidget(
+      return CodeBlockWidget(
         code: code,
         language: language,
         isDark: isDark,
       );
     } else {
-      return _InlineCodeWidget(
+      return InlineCodeWidget(
         code: code,
         isDark: isDark,
       );
@@ -53,11 +53,11 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   }
 }
 
-class _InlineCodeWidget extends StatelessWidget {
+class InlineCodeWidget extends StatelessWidget {
   final String code;
   final bool isDark;
 
-  const _InlineCodeWidget({required this.code, required this.isDark});
+  const InlineCodeWidget({super.key, required this.code, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -83,22 +83,23 @@ class _InlineCodeWidget extends StatelessWidget {
   }
 }
 
-class _CodeBlockWidget extends StatefulWidget {
+class CodeBlockWidget extends StatefulWidget {
   final String code;
   final String? language;
   final bool isDark;
 
-  const _CodeBlockWidget({
+  const CodeBlockWidget({
+    super.key,
     required this.code,
     this.language,
     required this.isDark,
   });
 
   @override
-  State<_CodeBlockWidget> createState() => _CodeBlockWidgetState();
+  State<CodeBlockWidget> createState() => _CodeBlockWidgetState();
 }
 
-class _CodeBlockWidgetState extends State<_CodeBlockWidget> {
+class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   bool _copied = false;
 
   void _copyCode() {

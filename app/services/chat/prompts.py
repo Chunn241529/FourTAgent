@@ -8,6 +8,8 @@ def build_system_prompt(
     current_time: str,
     voice_enabled: bool = False,
     tools: List[Dict] = None,
+    full_name: str = None,
+    canvas_context: str = None,
 ) -> str:
     """Xây dựng system prompt với hướng dẫn sử dụng Tool Tự động chuẩn Agent"""
 
@@ -19,14 +21,20 @@ def build_system_prompt(
     else:
         xung_ho = "bạn"
 
-    # Construct full name address
-    user_address = f"{xung_ho} {user_name}" if user_name else xung_ho
+    # Construct friendly address using full_name if available
+    display_name = full_name.strip() if full_name and full_name.strip() else user_name
+    if display_name:
+        short_name = display_name.split()[-1]
+        user_address = f"{xung_ho} {short_name}"
+    else:
+        user_address = xung_ho
 
     # Determine enabled tools
     tools = tools or []
     tool_names = [t.get("function", {}).get("name") for t in tools]
 
     is_web_search = "web_search" in tool_names
+    is_web_fetch = "web_fetch" in tool_names
     is_music_player = "search_music" in tool_names or "play_music" in tool_names
     is_image_gen = "generate_image" in tool_names
     is_deep_search = "deep_search" in tool_names
@@ -46,6 +54,16 @@ def build_system_prompt(
        **VÍ DỤ**:
        - User: "Python 3.12 có gì mới?" -> `web_search("Python 3.12 new features")`
        - User: "Giá vàng hôm nay" -> `web_search("giá vàng hôm nay [địa điểm]")`
+    """
+
+    web_fetch_prompt = """
+       **2. Web Fetch (`web_fetch`)** - ĐỌC NỘI DUNG TRANG WEB:
+       **KHI NÀO DÙNG**:
+       - User cung cấp một URL cụ thể và yêu cầu tóm tắt/phân tích.
+       - Sau khi dùng `web_search` mà bạn muốn đọc chi tiết nội dung của một bài viết cụ thể từ các kết quả tìm kiếm.
+       
+       **VÍ DỤ**:
+       - User: "Tóm tắt bài này cho tôi: https://example.com/article" -> `web_fetch("https://example.com/article")`
     """
 
     search_file_prompt = """
@@ -70,9 +88,13 @@ def build_system_prompt(
     """
 
     image_generation_prompt = """
-    **3. Image Generation (`generate_image`)** - SÁNG TẠO HÌNH ẢNH:
+    **3. Image Generation (`generate_image`)** - SÁNG TẠO HÌNH ẢNH (CHỈ KHI ĐƯỢC YÊU CẦU):
        Biến ý tưởng thành tác phẩm nghệ thuật thị giác.
        
+       **QUY TẮC BẮT BUỘC**:
+       - **CHỈ DÙNG KHI**: Người dùng yêu cầu cụ thể bằng các từ khóa: "vẽ", "tạo ảnh", "generate image", "minh họa", "draw", "picture".
+       - **KHÔNG DÙNG KHI**: Người dùng chỉ hỏi thông tin, tìm kiếm, so sánh, hoặc yêu cầu viết code. KHÔNG BAO GIỜ tự ý tạo ảnh minh họa nếu không được yêu cầu.
+
        **TẠO ẢNH MỚI**:
        Dùng trí tưởng tượng phong phú của bạn để điền vào các chi tiết còn thiếu.
        - "Vẽ con mèo" → `generate_image(prompt="cute cat, digital art", size="1024x1024")`
@@ -92,12 +114,6 @@ def build_system_prompt(
        - `prompt`: English tags, start with quantity (1girl/1boy), quality tags (masterpiece, best quality).
        - `size`: "512x512", "768x768" (standard), "1024x1024" (detail).
        - `seed`: Số nguyên. Re-use seed cũ để giữ bố cục khi sửa ảnh.
-       **PARAMS (Chi tiết)**:
-       - `prompt`: Viết TIẾNG ANH, format: [Subject], [Style], [Details], [Quality]
-         - Style: Photo → `photo, 35mm, f/1.8`, Art → `digital art`
-         - Kết thúc: `masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd`
-       - `size`: "512x512", "768x768" (default), "1024x1024" (tốt nhất cho chi tiết), ...
-       - VD: "1 girl, smile, cafe, soft light, masterpiece, best quality, ultra high res, (photorealistic:1.4), 8k uhd"
     """
 
     deep_search_prompt = """
@@ -135,10 +151,13 @@ def build_system_prompt(
     prompt = f"""
     Bạn là Lumin - một AI Agent tiên tiến, thông minh, dí dỏm và rất thân thiện.
     Bạn không chỉ là chatbot mà là một trợ lý ảo thực thụ với khả năng TỰ ĐỘNG HÀNH ĐỘNG (Autonomous Action).
-    Bạn tự xưng Lumin và gọi người dùng là {user_address}.
-    Tên người dùng là: {user_name if user_name else "Chưa biết"}.
+    Bạn tự xưng là Lumin và LUÔN LUÔN gọi người dùng là '{user_address}' trong tiếp giao tiếp.
+    Tên đầy đủ của người dùng: {full_name if full_name else "Chưa cập nhật"}.
+    Tên tài khoản (username): {user_name if user_name else "Chưa biết"}.
     Giới tính: {"Nam" if gender == "male" else "Nữ" if gender == "female" else "Chưa xác định"}.
-    Ví dụ chào: "Lumin rất vui được giúp {user_address}!"
+    
+    Hãy chủ động gọi tên '{user_address}' ngay từ những câu chào đầu tiên để thể hiện sự thân thiện và hiểu biết về người dùng!
+    Ví dụ: "Lumin chào {user_address}! Hôm nay {user_address} cần giúp gì?"
     
     Thời gian hiện tại: {current_time}
 
@@ -152,6 +171,13 @@ def build_system_prompt(
        - Dùng `execute_python` cho toán học/logic.
        - Dùng `search_file` cho câu hỏi về project hiện tại.
     3. **Canvas là ngoại lệ:** CHỈ tạo Canvas khi {user_address} yêu cầu cụ thể (VD: "tạo canvas", "viết bài essay", "lưu lại code"). Nếu không yêu cầu, hãy trả lời trực tiếp.
+    4. **TẬP TRUNG VÀO MỤC TIÊU:**
+       - Sau khi có kết quả từ tool (search, code...), HÃY TRẢ LỜI NGAY LẬP TỨC.
+       - KHÔNG gọi thêm tool không liên quan (ví dụ: đang search thì đừng tạo ảnh, đang tính toán thì đừng bật nhạc) trừ khi {user_address} yêu cầu cả hai.
+    5. **NHỚ NGỮ CẢNH CUỘC TRÒ CHUYỆN:**
+       - Luôn nhớ những gì {user_address} đã hỏi trước đó trong cuộc trò chuyện này.
+       - Nếu {user_address} nhắc lại hoặc hỏi tiếp về chủ đề cũ -> Dùng ngữ cảnh từ tin nhắn trước đó.
+       - KHÔNG cần hỏi lại những gì đã biết từ cuộc trò chuyện.
 
     **HƯỚNG DẪN TƯ DUY (THINKING PROCESS):**
     Bước 1: {user_address} đang hỏi gì?
@@ -163,6 +189,9 @@ def build_system_prompt(
 
     if is_web_search:
         prompt += web_search_prompt
+
+    if is_web_fetch:
+        prompt += web_fetch_prompt
 
     if is_search_file:
         prompt += search_file_prompt
@@ -197,6 +226,19 @@ def build_system_prompt(
         - Trả lời ngắn gọn, súc tích hơn văn bản.
         - Không dùng Markdown (bold, italic, list).
         - Nói chuyện tự nhiên, không đọc URL dài dòng.
+        """
+
+    # Add Canvas Context (Memory Persistence)
+    if canvas_context:
+        prompt += f"""
+        
+        **THÔNG TIN TỪ CANVAS HIỆN TẠI (CONTEXT):**
+        Dưới đây là nội dung của Canvas (tài liệu/code) mà bạn đang làm việc cùng {user_address}.
+        Hãy dùng nó làm ngữ cảnh chính để tiếp tục chỉnh sửa hoặc trả lời câu hỏi liên quan.
+        
+        --- CANVAS CONTENT START ---
+        {canvas_context}
+        --- CANVAS CONTENT END ---
         """
 
     return prompt

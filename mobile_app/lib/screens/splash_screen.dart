@@ -78,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     }
 
     // Small delay to show the status
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (_isDisposed) return;
 
     // Navigate to AuthWrapper

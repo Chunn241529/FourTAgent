@@ -79,7 +79,7 @@ def generate_title_suggestion(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            options={"num_predict": 50, "temperature": 0.3},
+            options={"num_predict": 50, "temperature": 0.3, "num_ctx": 16384},
             stream=False,
             think=False,
         )

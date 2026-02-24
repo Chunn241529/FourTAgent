@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import os
 import logging
 import asyncio
@@ -7,8 +8,6 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 
 from fastapi import HTTPException, UploadFile
-
-# from fastapi.responses import StreamingResponse # Unused import in original? No, it was imported. Keeping it.
 from fastapi.responses import StreamingResponse
 import aiohttp
 import ollama
@@ -30,6 +29,7 @@ from app.services.tool_service import ToolService
 
 # Import new modules
 from app.services.chat import utils, voice, models, prompts, memory
+from app.services.conversation_summary_service import ConversationSummaryService
 
 logger = logging.getLogger(__name__)
 tool_service = ToolService()
@@ -69,7 +69,7 @@ class ChatService:
         db: Session,
         voice_enabled: bool = False,
         voice_id: Optional[str] = None,
-        force_canvas_tool: bool = False,
+        force_tool: Optional[str] = None,
     ):
         """Xử lý chat chính với RAG integration - với debug chi tiết"""
 
@@ -87,7 +87,10 @@ class ChatService:
         )
 
         # Check for Deep Search slash command ONLY
-        is_deep_search = message.message.strip().startswith("/deepsearch")
+        is_deep_search = (
+            message.message.strip().startswith("/deepsearch")
+            or force_tool == "deep_research"
+        )
 
         if is_deep_search:
             from app.services.deep_search_service import DeepSearchService
@@ -136,6 +139,27 @@ class ChatService:
             f"Tools passed to model: {[t['function']['name'] for t in tools] if tools else 'None'}"
         )
 
+        # Get Latest Canvas Context (Memory Persistence)
+        # Only inject if we have tools (not a basic chat) or if specifically relevant
+        canvas_context = ""
+        # if "create_canvas" in [t['function']['name'] for t in tools]: # Or always inject? Always inject is safer for memory.
+        try:
+            from app.services.canvas_service import canvas_service
+
+            latest_canvas = canvas_service.get_latest_canvas(user_id)
+            if latest_canvas:
+                # Limit content length to avoid overflowing context window
+                content_preview = latest_canvas.content
+                if content_preview and len(content_preview) > 5000:
+                    content_preview = (
+                        content_preview[:5000] + "\n...[Content Truncated]"
+                    )
+
+                canvas_context = f"Title: {latest_canvas.title}\nType: {latest_canvas.type}\nContent:\n{content_preview}"
+                logger.info(f"Injected canvas context for canvas id {latest_canvas.id}")
+        except Exception as e:
+            logger.error(f"Failed to inject canvas context: {e}")
+
         # System prompt
         system_prompt = prompts.build_system_prompt(
             user_name=user.username,
@@ -143,10 +167,14 @@ class ChatService:
             current_time=current_time,
             voice_enabled=voice_enabled,
             tools=tools,
+            full_name=user.full_name,
+            canvas_context=canvas_context,
         )
 
-        if force_canvas_tool:
+        if force_tool == "canvas":
             system_prompt += "\n\n**[CANVAS MODE ACTIVE]** BẠN PHẢI sử dụng tool `create_canvas` hoặc `update_canvas` ngay lập tức để trả lời. Toàn bộ nội dung trả lời (văn bản, code, báo cáo) PHẢI nằm trong canvas. Không viết nội dung chính vào khung chat, chỉ đưa ra một câu thông báo ngắn như 'Lumin đã tạo/cập nhật canvas cho bạn!'."
+        elif force_tool == "image":
+            system_prompt += "\n\n**[IMAGE GENERATION MODE ACTIVE]** BẠN PHẢI sử dụng tool `generate_image` để tạo ảnh ngay lập tức để trả lời yêu cầu tạo/vẽ của người dùng."
 
         # Get RAG context (Non-blocking)
         loop = asyncio.get_running_loop()
@@ -438,7 +466,20 @@ class ChatService:
 
             # Add Summary
             if summary:
-                enhanced_system_prompt += f"\n\n**Conversation Summary**:\n{summary}"
+                enhanced_system_prompt += (
+                    f"\n\n**TÓM TẮT CUỘC TRÒ CHUYỆN TRƯỚC ĐÓ:**\n{summary}"
+                )
+
+            # Add Working Memory context directly to system prompt (for better recall)
+            if working_memory:
+                context_lines = []
+                for msg in working_memory:
+                    role_label = "Người dùng" if msg.role == "user" else "Lumin"
+                    context_lines.append(f"- {role_label}: {msg.content}")
+                enhanced_system_prompt += (
+                    f"\n\n**TIN NHẮN GẦN ĐÂY TRONG CUỘC TRÒ CHUYỆN:**\n"
+                    + "\n".join(context_lines)
+                )
 
             # Add Semantic Memory as Context (Reference Only)
             if semantic_messages:
@@ -463,8 +504,6 @@ class ChatService:
                     try:
                         gen_imgs = json.loads(msg.generated_images)
                         if gen_imgs and isinstance(gen_imgs, list):
-                            # Ensure limit to avoid context overflow (max 1 recent image set?)
-                            # For now, append all. Ollama handles base64 in "images" list.
                             msg_dict["images"] = gen_imgs
                             logger.info(
                                 f"Injected {len(gen_imgs)} generated images into message history for Vision Model"
@@ -472,6 +511,33 @@ class ChatService:
                     except Exception as e:
                         logger.warning(f"Failed to inject generated images: {e}")
 
+                # INJECT CODE EXECUTIONS FROM HISTORY (Fix for "Poor Memory")
+                if msg.code_executions:
+                    try:
+                        # Check if it's string first
+                        executions = msg.code_executions
+                        if isinstance(executions, str):
+                            executions = json.loads(executions)
+
+                        if executions and isinstance(executions, list):
+                            code_context = "\n\n**[History] Code Executed:**\n"
+                            for exec_item in executions:
+                                code = exec_item.get("code", "")
+                                output = exec_item.get("output", "")
+                                code_context += f"```python\n{code}\n```\n**Output:**\n```\n{output}\n```\n"
+
+                            if msg_dict.get("content"):
+                                msg_dict["content"] += code_context
+                            else:
+                                msg_dict["content"] = code_context
+
+                            logger.info(
+                                f"Injected {len(executions)} code executions into message context"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to inject code executions: {e}")
+
+                # Handle assistant messages with tool calls
                 if msg.role == "assistant" and msg.tool_calls:
                     try:
                         msg_dict["tool_calls"] = (
@@ -479,15 +545,29 @@ class ChatService:
                             if isinstance(msg.tool_calls, str)
                             else msg.tool_calls
                         )
+                        logger.debug(
+                            f"Injected tool_calls into assistant message history"
+                        )
                     except:
                         pass
+                # Handle tool response messages - ensure proper format
                 elif msg.role == "tool":
                     msg_dict["tool_call_id"] = msg.tool_call_id
                     msg_dict["name"] = msg.tool_name
+                    logger.debug(
+                        f"Injected tool response: name={msg.tool_name}, content_len={len(msg.content) if msg.content else 0}"
+                    )
 
                 messages.append(msg_dict)
 
             logger.info(f"Using {len(working_memory)} messages from working memory")
+            logger.info(f"Summary: {summary[:100] if summary else 'None'}...")
+
+            # DEBUG: Log first few messages content
+            for i, m in enumerate(messages[:5]):
+                logger.debug(
+                    f"MSG[{i}] role={m.get('role')}, content_len={len(m.get('content', ''))}"
+                )
 
             # Add current user message
             messages.append({"role": "user", "content": full_prompt})
@@ -504,6 +584,7 @@ class ChatService:
 
                 options = {
                     "temperature": 0.2,
+                    "num_ctx": 16384,  # Expanded context to handle system prompt + large tool results
                 }
 
                 max_iterations = 10
@@ -691,6 +772,63 @@ class ChatService:
                             args_str = tool_call["function"]["arguments"]
                             should_skip = False
 
+                            # --- GUARD: Prevent unrequested generate_image calls ---
+                            if function_name == "generate_image":
+                                # Check user intent: Direct keywords or Action+Object pattern
+                                query_lower = effective_query.lower()
+
+                                # 1. Strong keywords (implies creation)
+                                strong_keywords = [
+                                    "vẽ",
+                                    "tạo ảnh",
+                                    "generate image",
+                                    "create image",
+                                    "minh họa",
+                                    "illustrate",
+                                    "sketch",
+                                    "logo",
+                                    "icon",
+                                    "avatar",
+                                    "draw",
+                                    "paint",
+                                    "render",
+                                    "đeo",
+                                    "thêm",
+                                    "sửa",
+                                    "đổi",
+                                    "biến",
+                                    "edit",
+                                    "add",
+                                    "modify",
+                                    "change",
+                                    "wearing",
+                                ]
+                                has_strong = any(
+                                    k in query_lower for k in strong_keywords
+                                )
+
+                                # 2. Contextual Pattern: Action + Object
+                                # Matches "make a picture", "design an art", "generate photo"
+                                action_pattern = r"(generate|create|make|produce|design).{0,20}(image|picture|photo|art|drawing)"
+                                has_pattern = re.search(action_pattern, query_lower)
+
+                                is_img_request = has_strong or (has_pattern is not None)
+
+                                if not is_img_request:
+                                    logger.warning(
+                                        f"⛔ Blocking implicit generate_image call. User query '{effective_query}' does not contain image keywords."
+                                    )
+                                    # Feed back to model so it knows to stop and answer text
+                                    messages.append(
+                                        {
+                                            "role": "tool",
+                                            "content": "SYSTEM ALERT: User did NOT ask for an image. STOP generating images. Please synthesize the information you have and Answer the user's question directly in text.",
+                                            "tool_name": function_name,
+                                            "tool_call_id": tool_call.get("id"),
+                                        }
+                                    )
+                                    should_skip = True
+
                             # Show status message BEFORE execution
                             if function_name == "web_search":
                                 try:
@@ -769,7 +907,11 @@ class ChatService:
                                     async for (
                                         sse_chunk
                                     ) in deep_search_service.execute_deep_search(
-                                        topic, user_id, conversation_id, db
+                                        topic,
+                                        user_id,
+                                        conversation_id,
+                                        db,
+                                        is_autonomous=True,
                                     ):
                                         # Extract data for persistence if available
                                         if isinstance(
@@ -914,7 +1056,7 @@ class ChatService:
                                     tool_service.execute_tool_async(
                                         function_name,
                                         args_str,
-                                        context={"user_id": user_id},
+                                        context={"user_id": user_id, "db": db},
                                     )
                                 )
                                 tool_call_to_task_mapping.append(tool_call)
@@ -985,6 +1127,9 @@ class ChatService:
                                     # Prepare event data
                                     # args_str might be JSON string
                                     try:
+                                        logger.info(
+                                            f"DEBUG: execute_python args_str type: {type(args_str)}, content: {args_str}"
+                                        )
                                         # args_str might be JSON string or already a dict
                                         if isinstance(args_str, dict):
                                             code_input = args_str.get("code", "")
@@ -997,8 +1142,14 @@ class ChatService:
                                                 code_input = (
                                                     "Code not available (parse error)"
                                                 )
+                                        logger.info(
+                                            f"DEBUG: Extracted code_input: {code_input[:100]}..."
+                                        )
                                     except:
                                         code_input = "Code not available"
+                                        logger.error(
+                                            "DEBUG: Failed to extract code_input"
+                                        )
 
                                     event_data = {
                                         "code_execution_result": {
@@ -1040,6 +1191,7 @@ class ChatService:
                                                 "prompt": result_data.get(
                                                     "generated_prompt"
                                                 ),
+                                                "user_request": effective_query,  # Remind LLM what user asked
                                             },
                                             ensure_ascii=False,
                                         )
@@ -1056,39 +1208,30 @@ class ChatService:
                             if not error:
                                 # Handle search specific logic (sending status)
                                 if function_name == "web_search":
+                                    # New Markdown format handling
                                     try:
-                                        # Parse args for query
+                                        # Result is now a string (Markdown) or JSON string (if from legacy)
+                                        # We just pass it through, but let's try to extract count for UI event
+                                        result_str = str(result)
+
+                                        # Count results by counting "## " headers
+                                        result_count = result_str.count("## ")
+
+                                        # Extract query from args
                                         if isinstance(args_str, str):
                                             args = json.loads(args_str)
                                         else:
                                             args = args_str
 
-                                        result_data = (
-                                            json.loads(result)
-                                            if isinstance(result, str)
-                                            else result
-                                        )
-                                        result_count = (
-                                            len(result_data.get("results", []))
-                                            if isinstance(result_data, dict)
-                                            else 0
-                                        )
-
-                                        # Clean query: remove newlines and truncate
                                         query = args.get("query", "")
-                                        query = (
-                                            query.replace("\n", " ")
-                                            .replace("\r", " ")
-                                            .strip()
-                                        )
+                                        query = query.replace("\n", " ").strip()
                                         if len(query) > 100:
                                             query = query[:100] + "..."
 
-                                        # Use separators to ensure compact JSON
                                         yield f"data: {json.dumps({'search_complete': {'query': query, 'count': result_count}}, separators=(',', ':'))}\n\n"
                                     except Exception as e:
                                         logger.debug(
-                                            f"Could not parse search results for count: {e}"
+                                            f"Error processing search result for UI: {e}"
                                         )
 
                                 elif function_name == "search_music":
@@ -1302,6 +1445,10 @@ class ChatService:
                                 ),
                             )
 
+                        # CRITICAL FIX: Reset last message ID so the NEXT assistant response (after tools)
+                        # is saved as a NEW message, ensuring correct history order (Assistant -> Tool -> Assistant).
+                        last_saved_assistant_msg_id = None
+
                         continue
                     else:
                         break
@@ -1320,6 +1467,32 @@ class ChatService:
                     logger.warning(
                         f"Failed to update FAISS index at end of stream: {e}"
                     )
+
+                # Update conversation summary for hierarchical memory
+                try:
+                    if ConversationSummaryService.should_update_summary(
+                        conversation_id, db
+                    ):
+                        logger.info(
+                            f"Updating summary for conversation {conversation_id}"
+                        )
+                        new_summary = (
+                            ConversationSummaryService.update_summary_incremental(
+                                conversation_id, [], db
+                            )
+                        )
+                        if new_summary:
+                            conversation_obj = db.query(ModelConversation).get(
+                                conversation_id
+                            )
+                            if conversation_obj:
+                                conversation_obj.summary = new_summary
+                                db.commit()
+                                logger.info(
+                                    f"Summary updated: {len(new_summary)} chars"
+                                )
+                except Exception as e:
+                    logger.warning(f"Failed to update conversation summary: {e}")
 
                 # Get the last assistant message ID to send to client
                 last_ass_msg = (
@@ -1404,7 +1577,12 @@ class ChatService:
             effective_query, None, conversation_id, db
         )
         system_prompt = prompts.build_system_prompt(
-            xung_ho, current_time, False, voice_enabled
+            user_name=user.username,
+            gender=user.gender,
+            current_time=current_time,
+            voice_enabled=voice_enabled,
+            tools=tools,
+            full_name=user.full_name,
         )
 
         # 3. Resume streaming

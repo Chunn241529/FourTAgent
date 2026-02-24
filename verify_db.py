@@ -1,15 +1,35 @@
 import sqlite3
 import os
 
-DB_PATH = "server.db"
+sys_path_setup = False
+
+
+def get_db_path():
+    global sys_path_setup
+    if not sys_path_setup:
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        sys_path_setup = True
+    
+    from app.db import SQLALCHEMY_DATABASE_URL
+    
+    if SQLALCHEMY_DATABASE_URL.startswith("sqlite:///"):
+        path = SQLALCHEMY_DATABASE_URL.replace("sqlite:///", "")
+        return path
+    elif SQLALCHEMY_DATABASE_URL.startswith("sqlite:////"):
+        path = SQLALCHEMY_DATABASE_URL.replace("sqlite:////", "/")
+        return path
+    return SQLALCHEMY_DATABASE_URL
 
 
 def verify():
-    if not os.path.exists(DB_PATH):
-        print(f"Database not found at {DB_PATH}")
+    db_path = get_db_path()
+    
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}")
         return
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     try:

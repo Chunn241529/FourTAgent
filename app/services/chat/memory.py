@@ -28,6 +28,12 @@ def get_hierarchical_memory(
     conversation = db.query(ModelConversation).get(conversation_id)
     summary = conversation.summary if conversation and conversation.summary else ""
 
+    # Fallback: If no summary exists, get more recent messages as context
+    use_fallback_messages = False
+    if not summary:
+        logger.info("No summary found, using fallback with more recent messages")
+        use_fallback_messages = True
+
     # 0. Closure Detection: If user is ending conversation, minimize context
     closure_keywords = [
         "cảm ơn",
@@ -45,12 +51,25 @@ def get_hierarchical_memory(
         logger.info("Closure detected, resetting working and semantic memory")
         return summary, [], []
 
-    # 2. Working memory (last 10 messages for better flow)
+    # Get message count to dynamically adjust working memory
+    message_count = (
+        db.query(ModelChatMessage)
+        .filter(ModelChatMessage.conversation_id == conversation_id)
+        .count()
+    )
+    logger.info(f"Conversation {conversation_id}: {message_count} total messages")
+
+    # Dynamic working memory: 20 base + 5 for every 15 messages (max 40)
+    base_working = 20
+    extra_working = (message_count // 15) * 5
+    working_memory_limit = min(base_working + extra_working, 40)
+
+    # 2. Working memory (dynamic limit based on conversation length)
     working_memory = (
         db.query(ModelChatMessage)
         .filter(ModelChatMessage.conversation_id == conversation_id)
         .order_by(ModelChatMessage.timestamp.desc())
-        .limit(10)
+        .limit(working_memory_limit)
         .all()
     )
     working_memory = list(reversed(working_memory))  # Chronological order
@@ -107,7 +126,7 @@ def get_hierarchical_memory(
                 D, I = index.search(q_emb, k=min(5, len(valid_candidates)))
 
                 # Filter by threshold
-                threshold = 0.45  # Slightly lower than 0.5 to be more inclusive
+                threshold = 0.35  # Higher threshold for more relevant context
                 for score, idx in zip(D[0], I[0]):
                     if score >= threshold and idx >= 0:
                         semantic_messages.append(valid_candidates[idx])
@@ -115,14 +134,20 @@ def get_hierarchical_memory(
                 logger.info(
                     f"Semantic memory: {len(semantic_messages)} relevant messages (threshold={threshold})"
                 )
+                if semantic_messages:
+                    logger.info(f"First semantic msg: role={semantic_messages[0].role}, content={semantic_messages[0].content[:50]}...")
     except Exception as e:
         logger.warning(f"Error getting semantic memory: {e}")
         # Return empty list to ensure semantic_messages is always a list
 
     # 4. Return components separately
     logger.info(
-        f"Hierarchical memory: summary={bool(summary)}, semantic={len(semantic_messages)}, working={len(working_memory)}"
+        f"Hierarchical memory: summary={bool(summary)}, semantic={len(semantic_messages)}, working={len(working_memory)}, limit={working_memory_limit}"
     )
+
+    # Debug: log first working message
+    if working_memory:
+        logger.info(f"First working msg: role={working_memory[0].role}, content={working_memory[0].content[:50]}...")
 
     return summary, semantic_messages, working_memory
 
@@ -201,6 +226,7 @@ def save_message_to_db(
         )
         db.add(db_msg)
         db.commit()
+        logger.info(f"Message saved: id={db_msg.id}, role={role}, conv_id={conversation_id}, content_len={len(content)}")
         return db_msg
     except Exception as e:
         logger.error(f"Error saving message to DB: {e}")

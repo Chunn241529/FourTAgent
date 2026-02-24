@@ -24,10 +24,12 @@ rag_service = RAGService()
 logger = logging.getLogger(__name__)
 
 
-def _parse_message_fields(msg: ModelChatMessage, feedback: Optional[str] = None) -> dict:
+def _parse_message_fields(
+    msg: ModelChatMessage, feedback: Optional[str] = None
+) -> dict:
     """Helper to parse JSON fields from message model"""
     msg_dict = msg.__dict__.copy()
-    
+
     if msg.embedding and isinstance(msg.embedding, str):
         try:
             msg_dict["embedding"] = json.loads(msg.embedding)
@@ -40,15 +42,42 @@ def _parse_message_fields(msg: ModelChatMessage, feedback: Optional[str] = None)
         except (json.JSONDecodeError, TypeError, ValueError):
             msg_dict["generated_images"] = []
 
-    if msg.deep_search_updates and isinstance(msg.deep_search_updates, str):
-        try:
-            msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            msg_dict["deep_search_updates"] = []
+    if msg.deep_search_updates:
+        if isinstance(msg.deep_search_updates, str):
+            try:
+                msg_dict["deep_search_updates"] = json.loads(msg.deep_search_updates)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                msg_dict["deep_search_updates"] = []
+        else:
+            msg_dict["deep_search_updates"] = msg.deep_search_updates
+    else:
+        msg_dict["deep_search_updates"] = []
+
+    if msg.tool_calls:
+        if isinstance(msg.tool_calls, str):
+            try:
+                msg_dict["tool_calls"] = json.loads(msg.tool_calls)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                msg_dict["tool_calls"] = []
+        else:
+            msg_dict["tool_calls"] = msg.tool_calls
+    else:
+        msg_dict["tool_calls"] = None
+
+    if msg.code_executions:
+        if isinstance(msg.code_executions, str):
+            try:
+                msg_dict["code_executions"] = json.loads(msg.code_executions)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                msg_dict["code_executions"] = []
+        else:
+            msg_dict["code_executions"] = msg.code_executions
+    else:
+        msg_dict["code_executions"] = []
 
     if feedback:
         msg_dict["feedback"] = feedback
-        
+
     return msg_dict
 
 
@@ -74,7 +103,7 @@ def _rebuild_faiss_index(db: Session, user_id: int, conversation_id: int) -> boo
                     embs.append(emb_data)
                 except (json.JSONDecodeError, TypeError, ValueError):
                     continue
-        
+
         index.reset()
         if len(embs) > 0:
             index.add(np.array(embs, dtype="float32"))
@@ -106,10 +135,8 @@ def get_messages(
 
     messages = (
         db.query(ModelChatMessage)
-        .filter(
-            ModelChatMessage.conversation_id == conversation_id
-        )
-        .order_by(ModelChatMessage.timestamp.asc())
+        .filter(ModelChatMessage.conversation_id == conversation_id)
+        .order_by(ModelChatMessage.timestamp.asc(), ModelChatMessage.id.asc())
         .all()
     )
 

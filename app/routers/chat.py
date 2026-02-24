@@ -32,7 +32,7 @@ async def queued_chat_stream(
     db: Session,
     voice_enabled: bool = False,
     voice_id: Optional[str] = None,
-    force_canvas_tool: bool = False,
+    force_tool: Optional[str] = None,
 ):
     """
     Wrapper that manages queue for chat requests.
@@ -69,7 +69,7 @@ async def queued_chat_stream(
             db=db,
             voice_enabled=voice_enabled,
             voice_id=voice_id,
-            force_canvas_tool=force_canvas_tool,
+            force_tool=force_tool,
         )
 
         # Stream the response directly - no double-wrapping
@@ -92,7 +92,9 @@ async def chat(
     conversation_id: Optional[int] = None,
     voice_enabled: bool = Body(False),  # Accept from JSON Body
     voice_id: Optional[str] = Body(None),
-    force_canvas_tool: bool = Body(False),  # Force LLM to use canvas tool
+    force_tool: Optional[str] = Body(
+        None
+    ),  # Force LLM to use a specific tool ('canvas', 'image', 'deep_research')
     # Also accept from Query for backward compatibility/flexibility
     q_voice_enabled: bool = Query(False, alias="voice_enabled"),
     q_voice_id: Optional[str] = Query(None, alias="voice_id"),
@@ -106,7 +108,7 @@ async def chat(
     final_voice_id = voice_id or q_voice_id
 
     logger.info(
-        f"Chat request: voice_enabled={final_voice_enabled} (Body={voice_enabled}, Query={q_voice_enabled}), force_canvas={force_canvas_tool}"
+        f"Chat request: voice_enabled={final_voice_enabled} (Body={voice_enabled}, Query={q_voice_enabled}), force_tool={force_tool}"
     )
 
     # Wrap message in ChatMessageIn for service compatibility
@@ -125,7 +127,7 @@ async def chat(
             db=db,
             voice_enabled=final_voice_enabled,
             voice_id=final_voice_id,
-            force_canvas_tool=force_canvas_tool,
+            force_tool=force_tool,
         ),
         media_type="text/event-stream",
     )

@@ -79,7 +79,6 @@ class DeepSearchConfig {
           label: 'Sáng tạo',
           gradientColors: [const Color(0xFFEA580C), const Color(0xFFF97316)],
         );
-      case DeepSearchType.general:
       default:
         return DeepSearchConfig(
           primaryColor: isDark
@@ -112,8 +111,10 @@ class DeepSearchStepData {
   final List<String> sources;
   final List<String> actions;
   final bool isExpanded;
+  final String? planContent;
+  final dynamic content;
 
-  const DeepSearchStepData({
+  DeepSearchStepData({
     required this.id,
     required this.title,
     required this.subtitle,
@@ -123,6 +124,8 @@ class DeepSearchStepData {
     this.sources = const [],
     this.actions = const [],
     this.isExpanded = false,
+    this.planContent,
+    this.content,
   });
 }
 
@@ -134,11 +137,14 @@ class DeepSearchMetadata {
   final List<String> sources;
   final List<String> recentActions;
 
+  final String? plan;
+
   const DeepSearchMetadata({
     this.totalSearches = 0,
     this.elapsedTime = Duration.zero,
     this.sources = const [],
     this.recentActions = const [],
+    this.plan,
   });
 }
 
@@ -397,6 +403,7 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
+                      stops: const [0.0, 1.0],
                     )
                   : null,
               color: isCompleted
@@ -436,7 +443,7 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
             ],
           ),
         ),
-        if (widget.step.actions.isNotEmpty || widget.step.searchCount > 0)
+        if (widget.step.actions.isNotEmpty || widget.step.searchCount > 0 || widget.step.planContent != null)
           RotationTransition(
             turns: _rotateAnimation,
             child: Icon(
@@ -449,6 +456,27 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
     );
   }
 
+
+  Widget _buildInfoRow(
+    ThemeData theme,
+    IconData icon,
+    String text,
+    Color color,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
   Widget _buildExpandedContent(ThemeData theme) {
     return Container(
       margin: const EdgeInsets.only(top: 12),
@@ -460,16 +488,44 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.step.searchCount > 0) ...[
+          // 1. Render Specific Step Content if available
+          if (widget.step.content != null) ...[
+             // PLANNING: List of Queries
+             if (widget.step.id == 'planning' && widget.step.content is List)
+               ..._buildQueriesList(theme, widget.step.content),
+             
+             // SEARCHING: List of Results
+             if (widget.step.id == 'searching' && widget.step.content is List)
+               ..._buildResultsList(theme, widget.step.content),
+               
+             // REFLECTING: List of Sources
+             if (widget.step.id == 'reflecting' && widget.step.content is List)
+               ..._buildSourcesList(theme, widget.step.content),
+             
+             // PLANNING CREATE: Markdown Plan (handled mostly by planContent but checking data too)
+             if (widget.step.id == 'planning_create' && widget.step.content is String)
+                _buildPlanText(theme, widget.step.content),
+                
+             const SizedBox(height: 12),
+          ],
+
+          // 2. Existing fallback rendering (Plan, Actions, Sources from Metadata)
+          if (widget.step.planContent != null && widget.step.content == null) ...[
+             _buildPlanText(theme, widget.step.planContent!),
+             const SizedBox(height: 12),
+          ],
+          
+          if (widget.step.searchCount > 0 && widget.step.id == 'searching' && widget.step.content == null) ...[
             _buildInfoRow(
               theme,
               Icons.search_rounded,
-              '${widget.step.searchCount} truy vấn',
+              '${widget.step.searchCount} truy vấn', // Changed text to be shorter
               widget.config.primaryColor,
             ),
             const SizedBox(height: 8),
           ],
-          if (widget.step.actions.isNotEmpty) ...[
+          
+          if (widget.step.actions.isNotEmpty && widget.step.content == null) ...[
             Text(
               'Hành động',
               style: theme.textTheme.labelMedium?.copyWith(
@@ -501,9 +557,10 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
                 );
               }).toList(),
             ),
+             const SizedBox(height: 8),
           ],
-          if (widget.step.sources.isNotEmpty) ...[
-            const SizedBox(height: 8),
+          
+          if (widget.step.sources.isNotEmpty && widget.step.content == null) ...[
             Text(
               'Nguồn tham khảo',
               style: theme.textTheme.labelMedium?.copyWith(
@@ -514,61 +571,207 @@ class _DeepSearchStepCardState extends State<DeepSearchStepCard>
             const SizedBox(height: 6),
             ...widget.step.sources
                 .take(3)
-                .map(
-                  (source) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.link_rounded,
-                          size: 14,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.4,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            source,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                .map((source) => _buildSourceItem(theme, source)),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(
-    ThemeData theme,
-    IconData icon,
-    String text,
-    Color color,
-  ) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 6),
-        Text(
-          text,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w500,
+  Widget _buildPlanText(ThemeData theme, String text) {
+      return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'RESEARCH PLAN',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: widget.config.backgroundColor.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: widget.config.primaryColor.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                  height: 1.4,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+      );
+  }
+
+  List<Widget> _buildQueriesList(ThemeData theme, List dynamicList) {
+      final list = dynamicList.cast<String>();
+      return [
+          Text(
+              'Truy vấn tìm kiếm',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ...list.map((q) => Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+              ),
+              child: Row(
+                  children: [
+                      Icon(Icons.search, size: 14, color: widget.config.primaryColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(
+                              q, 
+                              style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                          ),
+                      ),
+                  ],
+              ),
+          )),
+      ];
+  }
+
+  List<Widget> _buildResultsList(ThemeData theme, List dynamicList) {
+      return [
+           Text(
+              'Kết quả tìm kiếm (${dynamicList.length})',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...dynamicList.take(5).map((item) {
+                final map = Map<String, dynamic>.from(item);
+                final title = map['title'] ?? 'Unknown';
+                final url = map['url'] ?? '#';
+                return _buildResultCard(theme, title, url);
+            }),
+             if (dynamicList.length > 5)
+                Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                        '+ ${dynamicList.length - 5} kết quả khác',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                    ),
+                ),
+      ];
+  }
+  
+  List<Widget> _buildSourcesList(ThemeData theme, List dynamicList) {
+      return [
+           Text(
+              'Nguồn đã kiểm chứng (${dynamicList.length})',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...dynamicList.map((item) {
+                final map = Map<String, dynamic>.from(item);
+                final title = map['title'] ?? 'Unknown';
+                final url = map['url'] ?? '#';
+                return _buildResultCard(theme, title, url, isVerified: true);
+            }),
+      ];
+  }
+
+  Widget _buildResultCard(ThemeData theme, String title, String url, {bool isVerified = false}) {
+      return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+              color: isVerified ? Colors.green.withValues(alpha: 0.05) : theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: isVerified ? Colors.green.withValues(alpha: 0.3) : theme.colorScheme.outline.withValues(alpha: 0.1)
+              ),
           ),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                  Row(
+                      children: [
+                          Icon(
+                              isVerified ? Icons.verified_user_outlined : Icons.public, 
+                              size: 14, 
+                              color: isVerified ? Colors.green : theme.colorScheme.primary
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                              child: Text(
+                                  title,
+                                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                              ),
+                          ),
+                      ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                      url,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          decoration: TextDecoration.underline,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+          ),
+      );
+  }
+
+  Widget _buildSourceItem(ThemeData theme, String source) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            Icon(
+              Icons.link_rounded,
+              size: 14,
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: 0.4,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                source,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.6,
+                  ),
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-      ],
-    );
+      );
   }
 }
 
@@ -577,6 +780,7 @@ class DeepSearchIndicator extends StatefulWidget {
   final List<String> completedSteps;
   final DeepSearchType searchType;
   final DeepSearchMetadata? metadata;
+  final Map<String, dynamic>? deepSearchData;
 
   const DeepSearchIndicator({
     super.key,
@@ -584,6 +788,7 @@ class DeepSearchIndicator extends StatefulWidget {
     required this.completedSteps,
     this.searchType = DeepSearchType.general,
     this.metadata,
+    this.deepSearchData,
   });
 
   @override
@@ -612,8 +817,27 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator> {
     final updates = [...widget.completedSteps, ...widget.activeSteps];
     if (updates.isEmpty) return const SizedBox.shrink();
 
-    final lastStatus = updates.last.toLowerCase();
-    final currentStage = _getCurrentStage(lastStatus);
+    // Fix: Determine stage by scanning ALL updates to find the highest stage reached.
+    // This prevents backward jumps if a later status update is generic or unmapped.
+    int maxStage = 0;
+    bool reflectedSoFar = false;
+
+    for (final update in updates) {
+      final s = update.toLowerCase();
+      // Check if this specific update is a reflection step
+      if (s.contains('reflecting') || 
+          s.contains('kiểm chứng') || 
+          s.contains('analyzing')) {
+        reflectedSoFar = true;
+      }
+      
+      final stage = _parseStage(s, reflectedSoFar);
+      if (stage > maxStage) {
+        maxStage = stage;
+      }
+    }
+    
+    final currentStage = maxStage;
     final isStreaming = widget.activeSteps.isNotEmpty;
     final isCompleted =
         currentStage >= 5 ||
@@ -749,11 +973,11 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator> {
 
   Widget _buildMetadataBar(ThemeData theme, DeepSearchConfig config) {
     final meta = widget.metadata!;
-    final showTime = meta.elapsedTime.inSeconds > 0;
+    // Removed timer per user request
     final showSearches = meta.totalSearches > 0;
     final showSources = meta.sources.isNotEmpty;
 
-    if (!showTime && !showSearches && !showSources)
+    if (!showSearches && !showSources)
       return const SizedBox.shrink();
 
     return Padding(
@@ -779,18 +1003,7 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator> {
                   config.primaryColor,
                 ),
               ),
-            if (showSearches && showTime) _buildDivider(theme),
-            if (showTime)
-              Expanded(
-                child: _buildMetaItem(
-                  theme,
-                  Icons.timer_outlined,
-                  _formatDuration(meta.elapsedTime),
-                  'Thời gian',
-                  config.secondaryColor,
-                ),
-              ),
-            if (showTime && showSources) _buildDivider(theme),
+            if (showSearches && showSources) _buildDivider(theme),
             if (showSources)
               Expanded(
                 child: _buildMetaItem(
@@ -852,67 +1065,74 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator> {
     );
   }
 
-  String _formatDuration(Duration duration) {
-    if (duration.inHours > 0)
-      return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
-    if (duration.inMinutes > 0)
-      return '${duration.inMinutes}m ${duration.inSeconds.remainder(60)}s';
-    return '${duration.inSeconds}s';
-  }
+
 
   Widget _buildSteps(
     DeepSearchConfig config,
     int currentStage,
     bool isCompleted,
   ) {
-    final steps = [
+    // Helper to get content safely
+    dynamic getContent(String step, String type) {
+        if (widget.deepSearchData != null && widget.deepSearchData!.containsKey(step)) {
+            return widget.deepSearchData![step][type];
+        }
+        return null;
+    }
+
+    final correctSteps = [
       DeepSearchStepData(
         id: 'planning',
-        title: 'Phân tích',
-        subtitle: 'Phân tích yêu cầu',
+        title: 'Chiến lược',
+        subtitle: 'Xác định truy vấn tìm kiếm',
         icon: Icons.analytics_outlined,
         status: _getStepStatus(0, currentStage, isCompleted),
         isExpanded: _expandedSteps.contains('planning'),
+        content: getContent('planning', 'queries'),
       ),
-      DeepSearchStepData(
-        id: 'planning_create',
-        title: 'Lập kế hoạch',
-        subtitle: 'Xây dựng chiến lược tìm kiếm',
-        icon: Icons.lightbulb_outline,
-        status: _getStepStatus(1, currentStage, isCompleted),
-        isExpanded: _expandedSteps.contains('planning_create'),
-      ),
-      DeepSearchStepData(
+       DeepSearchStepData(
         id: 'searching',
         title: 'Tìm kiếm',
-        subtitle: 'Thu thập thông tin',
+        subtitle: 'Quét dữ liệu từ internet',
         icon: Icons.travel_explore,
-        status: _getStepStatus(2, currentStage, isCompleted),
+        status: _getStepStatus(1, currentStage, isCompleted),
+        content: getContent('searching', 'results'),
+        isExpanded: _expandedSteps.contains('searching'),
         searchCount: widget.metadata?.totalSearches ?? 0,
         actions: widget.metadata?.recentActions ?? [],
-        sources: widget.metadata?.sources ?? [],
-        isExpanded: _expandedSteps.contains('searching'),
       ),
-      DeepSearchStepData(
+       DeepSearchStepData(
         id: 'reflecting',
-        title: 'Kiểm chứng',
-        subtitle: 'Xác minh thông tin',
+        title: 'Đánh giá',
+        subtitle: 'Lọc & Kiểm chứng nguồn tin',
         icon: Icons.fact_check_outlined,
-        status: _getStepStatus(3, currentStage, isCompleted),
+        status: _getStepStatus(2, currentStage, isCompleted),
+        content: getContent('reflecting', 'sources'),
         isExpanded: _expandedSteps.contains('reflecting'),
+        sources: widget.metadata?.sources ?? [],
       ),
-      DeepSearchStepData(
-        id: 'synthesizing',
-        title: 'Tổng hợp',
-        subtitle: 'Tạo kết quả cuối cùng',
-        icon: Icons.auto_stories_outlined,
-        status: _getStepStatus(4, currentStage, isCompleted),
-        isExpanded: _expandedSteps.contains('synthesizing'),
+       DeepSearchStepData(
+        id: 'planning_create',
+        title: 'Tổng kết',
+        subtitle: 'Tổng hợp thông tin',
+        icon: Icons.format_list_bulleted,
+        status: _getStepStatus(3, currentStage, isCompleted),
+        planContent: widget.metadata?.plan,
+        content: getContent('planning_create', 'plan'),
+        isExpanded: _expandedSteps.contains('planning_create'),
       ),
+      //  DeepSearchStepData(
+      //   id: 'synthesizing',
+      //   title: 'Tổng hợp',
+      //   subtitle: 'Hoàn thiện nội dung',
+      //   icon: Icons.auto_stories_outlined,
+      //   status: _getStepStatus(4, currentStage, isCompleted),
+      //   isExpanded: _expandedSteps.contains('synthesizing'),
+      // ),
     ];
 
     return Column(
-      children: steps
+      children: correctSteps
           .map(
             (step) => DeepSearchStepCard(
               key: ValueKey(step.id),
@@ -927,27 +1147,35 @@ class _DeepSearchIndicatorState extends State<DeepSearchIndicator> {
     );
   }
 
-  int _getCurrentStage(String lastStatus) {
-    if (lastStatus.contains('planning') &&
-        !lastStatus.contains('search') &&
-        !lastStatus.contains('lập kế hoạch')) {
+  int _parseStage(String status, bool hasReflected) {
+    if (status.contains('planning') &&
+        !status.contains('search') &&
+        !status.contains('lập kế hoạch')) {
+       // Planning -> 0
+      if (hasReflected) return 4;
       return 0;
-    } else if (lastStatus.contains('lập kế hoạch') ||
-        lastStatus.contains('create plan')) {
+    } else if (status.contains('searching') ||
+        status.contains('tìm kiếm') ||
+        status.contains('researching') || 
+        status.contains('gathering')) {
+       // Searching -> 1
       return 1;
-    } else if (lastStatus.contains('searching') ||
-        lastStatus.contains('tìm kiếm') ||
-        lastStatus.contains('researching')) {
+    } else if (status.contains('reflecting') ||
+        status.contains('analyzing') ||
+        status.contains('kiểm chứng') ||
+        status.contains('chi tiết')) {
+       // Reflecting -> 2
       return 2;
-    } else if (lastStatus.contains('reflecting') ||
-        lastStatus.contains('analyzing') ||
-        lastStatus.contains('kiểm chứng') ||
-        lastStatus.contains('chi tiết')) {
+    } else if (status.contains('lập kế hoạch') ||
+        status.contains('create plan') || 
+        status.contains('planning_create')) {
+       // Create Plan -> 3
       return 3;
-    } else if (lastStatus.contains('synthesizing') ||
-        lastStatus.contains('tổng hợp')) {
+    } else if (status.contains('synthesizing') ||
+        status.contains('tổng hợp')) {
+       // Synthesizing -> 4
       return 4;
-    } else if (lastStatus.contains('done') || lastStatus.contains('complete')) {
+    } else if (status.contains('done') || status.contains('complete')) {
       return 5;
     }
     return -1;

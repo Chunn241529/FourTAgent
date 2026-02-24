@@ -301,7 +301,7 @@ class ChatProvider extends ChangeNotifier {
         print('>>> Audio chunk playback complete');
         
         // Small delay between chunks
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 50));
         
         // Clean up temp file
         try {
@@ -370,7 +370,46 @@ class ChatProvider extends ChangeNotifier {
       final allMessages = await ChatService.getMessages(conversation.id);
       
       // Filter out tool execution results and system messages from UI
-      _messages = allMessages.where((m) => m.role != 'tool' && m.role != 'system').toList();
+      final displayableMessages = allMessages.where((m) => m.role != 'tool' && m.role != 'system').toList();
+      
+      // Merge consecutive assistant messages to prevent double bubbles on reload
+      List<Message> mergedMessages = [];
+      for (var msg in displayableMessages) {
+        if (mergedMessages.isNotEmpty && 
+            mergedMessages.last.role == 'assistant' && 
+            msg.role == 'assistant') {
+          final last = mergedMessages.last;
+          
+          dynamic newToolCalls = last.toolCalls;
+          if (msg.toolCalls != null) {
+              if (newToolCalls == null) {
+                  newToolCalls = msg.toolCalls;
+              } else if (newToolCalls is List && msg.toolCalls is List) {
+                  newToolCalls = [...newToolCalls, ...msg.toolCalls];
+              } else {
+                  newToolCalls = msg.toolCalls; // Fallback
+              }
+          }
+          
+          String newThinking = [last.thinking ?? '', msg.thinking ?? ''].where((s) => s.isNotEmpty).join('\n');
+          String newContent = [last.content, msg.content].where((s) => s.isNotEmpty).join('\n\n');
+          
+          mergedMessages[mergedMessages.length - 1] = last.copyWith(
+             content: newContent,
+             thinking: newThinking.isEmpty ? null : newThinking,
+             toolCalls: newToolCalls,
+             activeSearches: [...last.activeSearches, ...msg.activeSearches].toSet().toList(),
+             completedSearches: [...last.completedSearches, ...msg.completedSearches].toSet().toList(),
+             completedFileActions: [...last.completedFileActions, ...msg.completedFileActions].toSet().toList(),
+             generatedImages: [...last.generatedImages, ...msg.generatedImages].toSet().toList(),
+             codeExecutions: [...last.codeExecutions, ...msg.codeExecutions],
+          );
+        } else {
+          mergedMessages.add(msg);
+        }
+      }
+      
+      _messages = mergedMessages;
       
       // Enrich messages with tool call markers for UI
       _enrichMessagesWithToolMarkers();
@@ -495,7 +534,7 @@ class ChatProvider extends ChangeNotifier {
     String? file,
     void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
     bool? voiceEnabled,
-    bool forceCanvas = false,
+    String? forceTool,
   }) async {
     if (content.trim().isEmpty) return;
 
@@ -523,7 +562,7 @@ class ChatProvider extends ChangeNotifier {
     _messages.add(userMessage);
     notifyListeners();
 
-    await _initiateStreamResponse(content, file: file, onMusicPlay: onMusicPlay, voiceEnabled: voiceEnabled, forceCanvas: forceCanvas);
+    await _initiateStreamResponse(content, file: file, onMusicPlay: onMusicPlay, voiceEnabled: voiceEnabled, forceTool: forceTool);
   }
 
   /// Initialise assistant message placeholder and start streaming
@@ -532,7 +571,7 @@ class ChatProvider extends ChangeNotifier {
     String? file,
     void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
     bool? voiceEnabled,
-    bool forceCanvas = false,
+    String? forceTool,
   }) async {
     // Stop any existing stream
     stopStreaming();
@@ -563,7 +602,7 @@ class ChatProvider extends ChangeNotifier {
         file: file,
         voiceEnabled: voiceEnabled ?? _voiceModeEnabled,
         voiceId: _currentVoiceId,  // Use selected voice
-        forceCanvas: forceCanvas,
+        forceTool: forceTool,
       );
 
       final completer = Completer<void>();
@@ -674,9 +713,9 @@ class ChatProvider extends ChangeNotifier {
         // Cancel previous batch timer
         batchTimer?.cancel();
         
-        // Process batch after 30ms delay - balances smooth streaming with performance
-        // Shorter than before to reduce perceived lag
-        batchTimer = Timer(const Duration(milliseconds: 22), () {
+        // Process batch after 50ms delay - balances smooth streaming with performance
+        // Reduces the update frequency to ~20 FPS, which fixes UI lag and layout overflow cascades
+        batchTimer = Timer(const Duration(milliseconds: 20), () {
           if (pendingChunks.isEmpty) return;
           
           bool shouldNotify = false;
@@ -797,6 +836,22 @@ class ChatProvider extends ChangeNotifier {
               }
             }
 
+            // Handle search_started (NEW)
+            if (data['search_started'] != null) {
+              final query = data['search_started']['query'] as String?;
+              if (query != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
+                  if (!currentActive.contains(query)) {
+                    currentActive.add(query);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive);
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
+
             // Handle search_complete
             if (data['search_complete'] != null) {
               final query = data['search_complete']['query'] as String?;
@@ -805,9 +860,13 @@ class ChatProvider extends ChangeNotifier {
                 if (lastIndex >= 0) {
                   final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
                   final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                  
                   if (currentActive.contains(query)) {
                     currentActive.remove(query);
-                    if (!currentCompleted.contains(query)) currentCompleted.add(query);
+                  }
+                  
+                  if (!currentCompleted.contains(query)) {
+                    currentCompleted.add(query);
                     _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive, completedSearches: currentCompleted);
                     shouldNotify = true;
                   }
@@ -888,6 +947,37 @@ class ChatProvider extends ChangeNotifier {
                 _messages[lastIndex] = _messages[lastIndex].copyWith(plan: data['plan'] as String);
                 shouldNotify = true;
               }
+            }
+
+            // Handle deep_search_data (NEW - Detailed step info)
+            if (data['deep_search_data'] != null) {
+               final deepData = data['deep_search_data'];
+               final step = deepData['step'] as String?;
+               final type = deepData['type'] as String?;
+               final content = deepData['data'];
+               
+               if (step != null && type != null && content != null) {
+                  final lastIndex = _messages.length - 1;
+                  if (lastIndex >= 0) {
+                     // Create a deep copy of existing data to avoid mutation issues
+                     final currentData = Map<String, dynamic>.from(_messages[lastIndex].deepSearchData);
+                     
+                     // Initialize step map if not exists
+                     if (!currentData.containsKey(step)) {
+                        currentData[step] = {};
+                     }
+                     
+                     // Update specific type data for this step
+                     // planning -> queries: List<String>
+                     // searching -> results: List<{title, url}>
+                     // reflecting -> sources: List<{title, url}>
+                     // planning_create -> plan: String
+                     currentData[step][type] = content;
+                     
+                     _messages[lastIndex] = _messages[lastIndex].copyWith(deepSearchData: currentData);
+                     shouldNotify = true;
+                  }
+               }
             }
 
             // Handle music_play

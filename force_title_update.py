@@ -1,29 +1,15 @@
 import sys
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-# Hardcode DB path
-SQLALCHEMY_DATABASE_URL = "sqlite:///./server.db"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from app.db import SessionLocal
+from app.models import Conversation
 
 
 def force_update():
-    # Import app modules locally
-    sys.path.append(os.getcwd())
+    db = SessionLocal()
     try:
-        from app.models import Conversation
-
-        # Verify if model has title
-        if not hasattr(Conversation, "title"):
-            print("ERROR: Conversation model does NOT have 'title' attribute!")
-            return
-
-        print("Conversation model has 'title' attribute.")
-
-        engine = create_engine(SQLALCHEMY_DATABASE_URL)
-        SessionLocal = sessionmaker(bind=engine)
-        db = SessionLocal()
-
         # Get first conversation
         conv = db.query(Conversation).first()
         if not conv:
@@ -45,6 +31,8 @@ def force_update():
 
     except Exception as e:
         print(f"Error: {e}")
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":
