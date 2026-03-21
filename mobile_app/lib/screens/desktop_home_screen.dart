@@ -6,6 +6,7 @@ import '../providers/settings_provider.dart';
 import '../widgets/settings/settings_dialog.dart';
 import 'ai_subtitle_screen.dart';
 import 'tts_screen.dart';
+import 'affiliate/affiliate_screen.dart';
 import 'chat/chat_screen.dart';
 import '../widgets/music/floating_music_player.dart';
 import '../widgets/mac_dock.dart';
@@ -60,6 +61,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
     ChatScreen(), // 0: Chat
     TtsScreen(), // 1: TTS
     AiSubtitleScreen(), // 2: Studio
+    AffiliateScreen(), // 3: Affiliate Auto
   ];
 
   @override
@@ -101,6 +103,13 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 label: 'Translator',
                 isSelected: _selectedIndex == 2,
                 onTap: () => setState(() => _selectedIndex = 2),
+              ),
+              DockItem(
+                icon: Icons.auto_awesome_outlined,
+                selectedIcon: Icons.auto_awesome,
+                label: 'Affiliate',
+                isSelected: _selectedIndex == 3,
+                onTap: () => setState(() => _selectedIndex = 3),
               ),
             ],
             actionItems: [

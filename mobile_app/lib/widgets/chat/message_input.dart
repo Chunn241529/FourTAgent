@@ -481,46 +481,46 @@ class _MessageInputState extends State<MessageInput> {
 
                   const SizedBox(width: 8),
 
-                  // Mode Dropdown (Nhanh, Tư duy, Tư duy sâu)
-                  PopupMenuButton<String>(
-                    tooltip: 'Chế độ mô hình',
-                    offset: const Offset(0, -120), // Show above
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    onSelected: (value) {
-                       // TODO: Implement logic
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Nhanh',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.keyboard_arrow_down, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
-                        ],
-                      ),
-                    ),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'fast',
-                        child: Text('Nhanh', style: theme.textTheme.bodyMedium),
-                      ),
-                      PopupMenuItem(
-                        value: 'thinking',
-                        child: Text('Tư duy', style: theme.textTheme.bodyMedium),
-                      ),
-                      PopupMenuItem(
-                        value: 'deep_thinking',
-                        child: Text('Tư duy sâu', style: theme.textTheme.bodyMedium),
-                      ),
-                    ],
-                  ),
+                  // // Mode Dropdown (Nhanh, Tư duy, Tư duy sâu)
+                  // PopupMenuButton<String>(
+                  //   tooltip: 'Chế độ mô hình',
+                  //   offset: const Offset(0, -120), // Show above
+                  //   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  //   onSelected: (value) {
+                  //      // TODO: Implement logic
+                  //   },
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.all(8.0),
+                  //     child: Row(
+                  //       mainAxisSize: MainAxisSize.min,
+                  //       children: [
+                  //         Text(
+                  //           'Nhanh',
+                  //           style: theme.textTheme.bodySmall?.copyWith(
+                  //             fontWeight: FontWeight.w600,
+                  //             color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  //           ),
+                  //         ),
+                  //         const SizedBox(width: 4),
+                  //         Icon(Icons.keyboard_arrow_down, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                  //       ],
+                  //     ),
+                  //   ),
+                  //   itemBuilder: (context) => [
+                  //     PopupMenuItem(
+                  //       value: 'fast',
+                  //       child: Text('Nhanh', style: theme.textTheme.bodyMedium),
+                  //     ),
+                  //     PopupMenuItem(
+                  //       value: 'thinking',
+                  //       child: Text('Tư duy', style: theme.textTheme.bodyMedium),
+                  //     ),
+                  //     PopupMenuItem(
+                  //       value: 'deep_thinking',
+                  //       child: Text('Tư duy sâu', style: theme.textTheme.bodyMedium),
+                  //     ),
+                  //   ],
+                  // ),
 
                   const Spacer(),
                   

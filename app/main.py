@@ -17,6 +17,7 @@ from app.routers.generate import router as generate_router
 from app.routers.updates import router as updates_router
 from app.routers.canvas import router as canvas_router
 from app.routers.cloud_files import router as cloud_files_router
+from app.routers.affiliate import router as affiliate_router
 from app.utils import verify_jwt
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
@@ -197,6 +198,7 @@ app.include_router(generate_router)
 app.include_router(updates_router)
 app.include_router(canvas_router)
 app.include_router(cloud_files_router)
+app.include_router(affiliate_router)
 
 
 def main():

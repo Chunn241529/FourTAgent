@@ -9,4 +9,8 @@ soundfile
 openai-whisper
 numpy
 lmdeploy
-
+# Affiliate Automation
+litellm
+aiohttp
+moviepy
+playwright
