@@ -163,6 +163,12 @@ def main():
     if not run_command(install_command):
         print("⚠️  Có lỗi khi cài đặt PyTorch, thử cài đặt không指定 version...")
         run_command([python_in_venv, "-m", "pip", "install", "torch", "torchvision", "torchaudio"], check=False)
+
+    # 6. Cài đặt Playwright Chromium (cho Affiliate Scraper)
+    print("\nĐang cài đặt Playwright Chromium browser...")
+    if not run_command([python_in_venv, "-m", "playwright", "install", "chromium"], check=False):
+        print("⚠️  Không thể cài đặt Playwright Chromium. Bạn có thể cài thủ công:")
+        print(f"   {python_in_venv} -m playwright install chromium")
     
     print("\n✅ Quá trình cài đặt hoàn tất!")
     print(f"Môi trường đã được thiết lập tại: {current_dir}")

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class DeepSearchService:
     def __init__(self):
         self.tool_service = ToolService()
-        self.model_name = "Lumina-small"  # Correction: Default fast model
+        self.model_name = "Lumina:latest"  # Correction: Default fast model
         self.reasoning_model = (
             "Lumina:latest"  # Correction: Smart model for planning/synthesis
         )

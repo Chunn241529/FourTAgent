@@ -39,6 +39,12 @@ class AffiliateService {
     return data['products'] ?? [];
   }
 
+  /// Delete a saved product.
+  static Future<void> deleteProduct(String platform, String productId) async {
+    final response = await ApiService.delete('/affiliate/products/$platform/$productId');
+    ApiService.parseResponse(response);
+  }
+
   /// Generate a viral script for a product.
   static Future<Map<String, dynamic>> generateScript({
     required String productId,
@@ -88,6 +94,38 @@ class AffiliateService {
     return ApiService.parseResponse(response);
   }
 
+  /// Start an AI video generation job.
+  static Future<Map<String, dynamic>> generateAiVideo({
+    required String prompt,
+    String? imageUrl,
+    String? modelImageUrl,
+    required String model,
+    required String apiKey,
+  }) async {
+    final response = await ApiService.post(
+      '/affiliate/generate-ai-video',
+      body: {
+        'prompt': prompt,
+        if (imageUrl != null) 'image_url': imageUrl,
+        if (modelImageUrl != null) 'model_image_url': modelImageUrl,
+        'model': model,
+        'api_key': apiKey,
+      },
+    );
+    return ApiService.parseResponse(response);
+  }
+
+  /// Check AI video job status.
+  static Future<Map<String, dynamic>> checkAiVideoStatus({
+    required String jobId,
+    required String apiKey,
+  }) async {
+    final response = await ApiService.get(
+      '/affiliate/ai-video-jobs/$jobId/status?api_key=$apiKey',
+    );
+    return ApiService.parseResponse(response);
+  }
+
   /// Get available smart reup transforms.
   static Future<Map<String, String>> getTransforms() async {
     final response = await ApiService.get('/affiliate/smart-reup/transforms');
@@ -95,9 +133,11 @@ class AffiliateService {
     return Map<String, String>.from(data['transforms'] ?? {});
   }
 
-  /// Upload video for smart reup processing.
+  /// Upload video or use existing path/id for smart reup processing.
   static Future<Map<String, dynamic>> smartReupVideo({
-    required File videoFile,
+    File? videoFile,
+    String? sourcePath,
+    String? productId,
     required List<String> transforms,
   }) async {
     final token = await StorageService.getToken();
@@ -107,7 +147,16 @@ class AffiliateService {
     if (token != null) {
       request.headers['Authorization'] = 'Bearer $token';
     }
-    request.files.add(await http.MultipartFile.fromPath('file', videoFile.path));
+
+    if (videoFile != null) {
+      request.files.add(await http.MultipartFile.fromPath('file', videoFile.path));
+    }
+    if (sourcePath != null) {
+      request.fields['source_path'] = sourcePath;
+    }
+    if (productId != null) {
+      request.fields['product_id'] = productId;
+    }
     request.fields['transforms'] = transforms.join(',');
 
     final streamedResponse = await request.send();
@@ -117,6 +166,68 @@ class AffiliateService {
       return jsonDecode(response.body);
     }
     throw Exception('Smart reup failed: ${response.statusCode} ${response.body}');
+  }
+
+  /// Smart Reup Douyin - paste Douyin URL or upload local video.
+  static Future<String> smartReupDouyin({
+    String? url,
+    File? videoFile,
+    List<String>? transforms,
+    Map<String, double>? cropSettings,
+    String audioMode = 'strip',  // 'strip' | 'shift'
+    String logoRemoval = 'none',  // 'none' | 'manual' | 'ai'
+  }) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup-douyin');
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (videoFile != null) {
+      request.files.add(await http.MultipartFile.fromPath('file', videoFile.path));
+    }
+    if (url != null) {
+      request.fields['url'] = url;
+    }
+    if (transforms != null && transforms.isNotEmpty) {
+      request.fields['transforms'] = transforms.join(',');
+    }
+    if (cropSettings != null) {
+      request.fields['crop_settings_json'] = jsonEncode(cropSettings);
+    }
+    request.fields['audio_mode'] = audioMode;
+    request.fields['logo_removal'] = logoRemoval;
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['job_id'] as String;
+    }
+    throw Exception('Smart Reup Douyin failed: ${response.statusCode} ${response.body}');
+  }
+
+  /// Upload custom model image for AI Video generation.
+  static Future<Map<String, dynamic>> uploadModelImage(File imageFile) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/upload-model-image');
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Model image upload failed: ${response.statusCode} ${response.body}');
   }
 
   /// Get LLM provider status.

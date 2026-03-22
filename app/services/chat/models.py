@@ -127,7 +127,7 @@ def select_model(
             except Exception as e:
                 logger.warning(f"Error checking recent images for vision switch: {e}")
 
-        return "Lumina", tools, False
+        return "Lumina:latest", tools, False
 
 
 def should_use_rag(query: str) -> bool:

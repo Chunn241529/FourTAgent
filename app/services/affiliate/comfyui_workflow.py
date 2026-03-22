@@ -118,6 +118,97 @@ def build_img2img_workflow(
     return workflow
 
 
+def build_inpaint_workflow(
+    input_image_path: str,
+    mask_image_path: str,
+    denoise_strength: float = 0.7,
+    checkpoint: str = "sd_xl_base_1.0.safetensors",
+    positive_prompt: str = "high quality, sharp, clean background, no watermark, no text",
+    negative_prompt: str = "watermark, text, logo, blurry, low quality",
+    seed: int = -1,
+) -> Dict[str, Any]:
+    """
+    Build a ComfyUI inpainting workflow JSON for logo/watermark removal.
+    Requires a mask image where white = areas to regenerate.
+    """
+    if seed == -1:
+        import random
+        seed = random.randint(0, 2**32 - 1)
+
+    workflow = {
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": seed,
+                "steps": 20,
+                "cfg": 7.0,
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "denoise": denoise_strength,
+                "model": ["4", 0],
+                "positive": ["6", 0],
+                "negative": ["7", 0],
+                "latent_image": ["2", 0],
+            },
+        },
+        "4": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": checkpoint,
+            },
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": positive_prompt,
+                "clip": ["4", 1],
+            },
+        },
+        "7": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": negative_prompt,
+                "clip": ["4", 1],
+            },
+        },
+        "8": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["3", 0],
+                "vae": ["4", 2],
+            },
+        },
+        "9": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "filename_prefix": "inpaint",
+                "images": ["8", 0],
+            },
+        },
+        "2": {
+            "class_type": "VAEEncodeForInpaint",
+            "inputs": {
+                "pixels": ["11", 0],
+                "mask": ["12", 0],
+                "vae": ["4", 2],
+            },
+        },
+        "11": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": os.path.basename(input_image_path),
+            },
+        },
+        "12": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": os.path.basename(mask_image_path),
+            },
+        },
+    }
+    return workflow
+
+
 class ComfyUIClient:
     """
     Client for interacting with ComfyUI's HTTP API.
@@ -314,6 +405,62 @@ class ComfyUIClient:
         # Copy first output to target path
         shutil.copy2(output_images[0], output_path)
         logger.info(f"[ComfyUI] Processed image saved to {output_path}")
+        return True
+
+    async def process_inpaint(
+        self,
+        input_path: str,
+        mask_path: str,
+        output_path: str,
+        denoise: float = 0.7,
+    ) -> bool:
+        """
+        Full pipeline for inpainting: upload image + mask → run inpaint workflow → save result.
+
+        Args:
+            input_path: Path to input image
+            mask_path: Path to mask image (white = areas to regenerate)
+            output_path: Where to save the processed image
+            denoise: Denoise strength for inpainting
+
+        Returns:
+            True if successful
+        """
+        if not await self.is_available():
+            logger.warning("[ComfyUI] Server not available for inpaint")
+            return False
+
+        # Upload image and mask
+        uploaded_image = await self.upload_image(input_path)
+        uploaded_mask = await self.upload_image(mask_path)
+        if not uploaded_image or not uploaded_mask:
+            logger.error("[ComfyUI] Failed to upload image or mask for inpaint")
+            return False
+
+        # Build and queue inpaint workflow
+        workflow = build_inpaint_workflow(
+            input_image_path=uploaded_image,
+            mask_image_path=uploaded_mask,
+            denoise_strength=denoise,
+        )
+        prompt_id = await self.queue_prompt(workflow)
+        if not prompt_id:
+            return False
+
+        # Wait for completion (inpainting takes longer, use 180s timeout)
+        success = await self.wait_for_completion(prompt_id, timeout=180)
+        if not success:
+            return False
+
+        # Get output
+        output_images = await self.get_output_images(prompt_id)
+        if not output_images:
+            logger.error("[ComfyUI] No output images found for inpaint")
+            return False
+
+        # Copy first output to target path
+        shutil.copy2(output_images[0], output_path)
+        logger.info(f"[ComfyUI] Inpainted image saved to {output_path}")
         return True
 
 

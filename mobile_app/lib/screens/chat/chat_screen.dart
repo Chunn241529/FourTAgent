@@ -920,9 +920,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     final musicPlayer = context.read<MusicPlayerProvider>();
                     String messageToSend = message;
                     if (_selectedTool == 'image') {
-                      messageToSend += ' (Vui lòng tạo hình ảnh)';
+                      messageToSend += ' (Dùng công cụ tạo hình ảnh)';
                     } else if (_selectedTool == 'deep_research') {
-                      messageToSend += ' (Vui lòng dùng công cụ deep research)';
+                      messageToSend += ' (Dùng công cụ deep research)';
                     }
                     
                     chatProvider.sendMessage(

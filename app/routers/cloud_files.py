@@ -8,13 +8,14 @@ from fastapi import (
     Query,
     status,
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from app.utils import verify_jwt
 from app.services.cloud_file_service import CloudFileService
 from typing import List, Dict, Optional
 import os
 import shutil
 import io
+import mimetypes
 
 router = APIRouter(
     prefix="/cloud",
@@ -137,3 +138,41 @@ async def delete_item(path: str, user_id: int = Depends(verify_jwt)):
         raise HTTPException(status_code=404, detail="File or directory not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/files/stream")
+async def stream_file(path: str, user_id: int = Depends(verify_jwt)):
+    """
+    Stream a binary file (video, image, etc.) with proper Content-Type.
+    Uses FileResponse for efficient serving with range request support.
+    """
+    try:
+        file_info = CloudFileService.get_file_info(user_id, path)
+        if file_info["type"] != "file":
+            raise HTTPException(status_code=400, detail="Path is not a file")
+
+        secure_path = CloudFileService._get_secure_path(user_id, path)
+
+        if not os.path.exists(secure_path):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Auto-detect MIME type
+        mime_type, _ = mimetypes.guess_type(secure_path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        return FileResponse(
+            path=secure_path,
+            media_type=mime_type,
+            filename=os.path.basename(secure_path),
+        )
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

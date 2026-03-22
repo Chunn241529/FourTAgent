@@ -271,11 +271,25 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
                     itemBuilder: (context, index) {
                       final file = _files[index];
                       final isDir = file.type == 'directory';
+                      final isVideo = CloudFileService.isVideoFile(file.name);
+                      final isImage = CloudFileService.isImageFile(file.name);
                       
                       return ListTile(
                         leading: Icon(
-                          isDir ? Icons.folder : Icons.insert_drive_file,
-                          color: isDir ? Colors.amber : Colors.blueGrey,
+                          isDir
+                              ? Icons.folder
+                              : isVideo
+                                  ? Icons.videocam
+                                  : isImage
+                                      ? Icons.image
+                                      : Icons.insert_drive_file,
+                          color: isDir
+                              ? Colors.amber
+                              : isVideo
+                                  ? Colors.deepPurple
+                                  : isImage
+                                      ? Colors.teal
+                                      : Colors.blueGrey,
                         ),
                         title: Text(file.name),
                         subtitle: isDir ? null : Text('${file.size} bytes'),

@@ -44,6 +44,10 @@ class SettingsProvider extends ChangeNotifier {
   bool _autoUpdate = true;
   bool get autoUpdate => _autoUpdate;
 
+  // AI Video API Key
+  String _aiVideoApiKey = '';
+  String get aiVideoApiKey => _aiVideoApiKey;
+
   SettingsProvider() {
     _loadSettings();
   }
@@ -67,6 +71,7 @@ class SettingsProvider extends ChangeNotifier {
     _permissionFileAccess = prefs.getBool('permissionFileAccess') ?? false;
     _autoUpdate = prefs.getBool('autoUpdate') ?? true;
     _showCanvas = prefs.getBool('showCanvas') ?? false;
+    _aiVideoApiKey = prefs.getString('aiVideoApiKey') ?? '';
     
     notifyListeners();
   }
@@ -156,6 +161,13 @@ class SettingsProvider extends ChangeNotifier {
     _improveModel = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('improveModel', enabled);
+    notifyListeners();
+  }
+
+  Future<void> setAiVideoApiKey(String key) async {
+    _aiVideoApiKey = key;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('aiVideoApiKey', key);
     notifyListeners();
   }
 }

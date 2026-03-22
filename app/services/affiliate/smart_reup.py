@@ -44,13 +44,20 @@ class SmartReupService:
     TRANSFORMS = {
         "metadata": "Strip & replace EXIF/metadata",
         "mirror": "Horizontal flip (mirror)",
-        "crop": "Slight crop & rescale (1-3%)",
-        "color": "Color grade / brightness shift",
+        "flip_h": "Horizontal flip (left-right)",
+        "crop": "Scale 97% + pad (alters pixel hash)",
+        "manual_crop": "Per-edge crop with user-specified percentages",
+        "zoom": "Zoom in 3-5% to change composition (most effective for pHash)",
+        "color": "Color grade / brightness shift (eq filter)",
+        "noise": "Add subtle noise to alter pixel hash",
+        "recode": "Re-encode at different quality to change compression artifacts",
         "ai_filter": "AI style transfer via ComfyUI (subtle denoise)",
         "speed": "Slight speed change (+/- 1-2%)",
-        "pitch": "Audio pitch shift",
-        "overlay": "Add dynamic frame/border overlay",
+        "pitch": "Audio pitch shift via rubberband",
+        "strip_audio": "Remove audio track entirely",
+        "overlay": "Add black border/padding",
         "pip": "Picture-in-Picture effect",
+        "trim_end": "Cắt N giây cuối video (mặc định 4s)",
     }
 
     def __init__(self):
@@ -80,7 +87,7 @@ class SmartReupService:
         Args:
             input_path: Path to input video file
             transforms: List of transform names to apply
-                        Default: ["metadata", "mirror", "crop", "speed", "pitch"]
+                        Default: ["metadata", "mirror", "zoom", "color", "speed", "pitch", "recode"]
             output_dir: Output directory (default: REUP_STORAGE)
 
         Returns:
@@ -94,7 +101,9 @@ class SmartReupService:
             return {"output_path": None, "transforms_applied": [], "error": f"Input file not found: {input_path}"}
 
         if transforms is None:
-            transforms = ["metadata", "mirror", "crop", "speed", "pitch"]
+            transforms = ["metadata", "mirror", "zoom", "color", "speed", "pitch"]
+        else:
+            transforms = self.reorder_transforms(transforms)
 
         output_dir = output_dir or REUP_STORAGE
         os.makedirs(output_dir, exist_ok=True)
@@ -123,6 +132,25 @@ class SmartReupService:
                     success = await self._comfyui_transform(current_path, next_path)
                 elif transform == "overlay":
                     success = await self._add_overlay(current_path, next_path)
+                elif transform == "flip_h":
+                    success = await self._flip_horizontal_video(current_path, next_path)
+                elif transform == "strip_audio":
+                    success = await self._strip_audio(current_path, next_path)
+                elif transform == "zoom":
+                    success = await self._zoom_video(current_path, next_path)
+                elif transform == "noise":
+                    success = await self._add_noise(current_path, next_path)
+                elif transform == "recode":
+                    success = await self._recode_video(current_path, next_path)
+                elif transform == "trim_end":
+                    success = await self._trim_end(current_path, next_path)
+                elif transform == "manual_crop":
+                    # manual_crop requires crop_settings, handled separately in smart_reup_douyin_task
+                    logger.warning("[SmartReup] manual_crop requires crop_settings, skipping")
+                    continue
+                elif transform == "ai_logo_removal":
+                    # ai_logo_removal is handled separately in smart_reup_douyin_task
+                    continue
                 else:
                     logger.warning(f"[SmartReup] Unknown transform: {transform}")
                     continue
@@ -159,19 +187,28 @@ class SmartReupService:
 
     # --- FFmpeg-based transforms ---
 
-    async def _run_ffmpeg(self, args: List[str]) -> bool:
-        """Run FFmpeg command."""
-        cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"] + args
+    async def _run_ffmpeg(self, args: List[str], log_level: str = "error") -> bool:
+        """Run FFmpeg command. log_level: 'error' or 'info' for debugging."""
+        cmd = ["ffmpeg", "-y", "-hide_banner"]
+        if log_level == "info":
+            cmd += ["-loglevel", "info"]
+        else:
+            cmd += ["-loglevel", "error"]
+        cmd += args
+        logger.info(f"[SmartReup] FFmpeg cmd: {' '.join(cmd)}")
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr = await proc.communicate()
+            stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                logger.error(f"[SmartReup] FFmpeg error: {stderr.decode()}")
+                err = stderr.decode()
+                logger.error(f"[SmartReup] FFmpeg error (code {proc.returncode}): {err}")
                 return False
+            if log_level == "info":
+                logger.info(f"[SmartReup] FFmpeg stdout: {stdout.decode()}")
             return True
         except FileNotFoundError:
             logger.error("[SmartReup] FFmpeg not found. Please install FFmpeg.")
@@ -198,13 +235,51 @@ class SmartReupService:
             output_path,
         ])
 
-    async def _crop_rescale(self, input_path: str, output_path: str, percent: float = 2.0) -> bool:
-        """Slightly crop and rescale to alter pixel hash."""
-        # Crop 2% from each edge, then scale back to original size
-        crop_factor = (100 - percent * 2) / 100
+    async def _flip_horizontal_video(self, input_path: str, output_path: str) -> bool:
+        """Horizontal flip (left-right mirror)."""
         return await self._run_ffmpeg([
             "-i", input_path,
-            "-vf", f"crop=iw*{crop_factor}:ih*{crop_factor},scale=iw/{crop_factor}:ih/{crop_factor}",
+            "-vf", "hflip",
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    async def _crop_rescale(self, input_path: str, output_path: str, percent: float = 2.0) -> bool:
+        """Scale down slightly to alter pixel hash. Uses scale+pad to maintain resolution."""
+        crop_pct = 1.0 - (percent / 100.0)
+        # Scale down then pad back to original size - changes pixel hash
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-vf", f"scale=iw*{crop_pct}:ih*{crop_pct},pad=iw:ih:(ow-iw)/2:(oh-ih)/2",
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    async def _manual_crop(
+        self,
+        input_path: str,
+        output_path: str,
+        crop_settings: Dict[str, float],
+    ) -> bool:
+        """
+        Crop specific edges by percentage.
+        crop_settings values are percentages (0-10) for top, right, bottom, left.
+        """
+        top_pct = crop_settings.get("top", 0)
+        bottom_pct = crop_settings.get("bottom", 0)
+        right_pct = crop_settings.get("right", 0)
+        left_pct = crop_settings.get("left", 0)
+
+        # Compute scaled dimensions from percentage crop, then pad to center
+        # crop_w = iw * (1 - (left + right) / 100)
+        # crop_h = ih * (1 - (top + bottom) / 100)
+        w_expr = f"iw*(1-({left_pct}+{right_pct})/100)"
+        h_expr = f"ih*(1-({top_pct}+{bottom_pct})/100)"
+        x_expr = f"({w_expr})/2"
+        y_expr = f"({h_expr})/2"
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-vf", f"crop={w_expr}:{h_expr}:{x_expr}:{y_expr}",
             "-c:a", "copy",
             output_path,
         ])
@@ -218,21 +293,118 @@ class SmartReupService:
             output_path,
         ])
 
-    async def _speed_change(self, input_path: str, output_path: str, factor: float = 1.02) -> bool:
-        """Slight speed change (+2% by default)."""
-        atempo = 1 / factor  # Inverse for audio
+    async def _zoom_video(self, input_path: str, output_path: str, scale: float = 1.04) -> bool:
+        """
+        Zoom in slightly (default 4%) and center crop back to original size.
+        This is one of the most effective techniques for bypassing pHash.
+        """
         return await self._run_ffmpeg([
             "-i", input_path,
-            "-filter:v", f"setpts={1/factor}*PTS",
-            "-filter:a", f"atempo={factor}",
+            "-vf", f"scale={scale}*iw:{scale}*ih:force_original_aspect_ratio=increase,crop=iw:ih",
+            "-c:a", "copy",
             output_path,
         ])
 
-    async def _pitch_shift(self, input_path: str, output_path: str) -> bool:
-        """Subtle audio pitch shift using rubberband."""
+    async def _add_noise(self, input_path: str, output_path: str) -> bool:
+        """
+        Add subtle Gaussian noise to alter pixel hash.
+        noise=alls=0.3:all=random adds very subtle noise.
+        """
         return await self._run_ffmpeg([
             "-i", input_path,
-            "-af", "asetrate=44100*1.02,aresample=44100",
+            "-vf", "noise=alls=1:allf=t",
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    async def _recode_video(self, input_path: str, output_path: str, crf: int = 23) -> bool:
+        """
+        Re-encode the video at a different quality to change compression artifacts.
+        Using a different CRF and preset changes the bitstream enough to alter pHash.
+        """
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", str(crf),
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    async def _speed_change(self, input_path: str, output_path: str, factor: float = 1.02) -> bool:
+        """Slight speed change (+2% by default). Video-only if no audio."""
+        has_audio = await self._has_audio_stream(input_path)
+        if has_audio:
+            return await self._run_ffmpeg([
+                "-i", input_path,
+                "-filter:v", f"setpts={1/factor}*PTS",
+                "-af", f"atempo={factor}",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "18",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                output_path,
+            ])
+        else:
+            # No audio - just change video speed
+            return await self._run_ffmpeg([
+                "-i", input_path,
+                "-filter:v", f"setpts={1/factor}*PTS",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "18",
+                output_path,
+            ])
+
+    async def _pitch_shift(self, input_path: str, output_path: str, semitones: float = 1.5) -> bool:
+        """
+        Subtle audio pitch shift by semitones. Skips if no audio stream.
+        Uses actual sample rate from input instead of hardcoded 44100.
+        """
+        if not await self._has_audio_stream(input_path):
+            logger.info("[SmartReup] No audio stream, skipping pitch shift")
+            # Copy file as-is since there's nothing to pitch-shift
+            return await self._run_ffmpeg([
+                "-i", input_path,
+                "-c:v", "copy",
+                output_path,
+            ])
+        sample_rate = await self._get_audio_sample_rate(input_path)
+        ratio = 2 ** (semitones / 12)
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-af", f"asetrate={sample_rate}*{ratio},aresample={sample_rate}",
+            "-c:v", "copy",
+            output_path,
+        ])
+
+    async def _trim_end(self, input_path: str, output_path: str, seconds: float = 4.0) -> bool:
+        """
+        Cắt N giây cuối video.
+        Lấy duration bằng ffprobe, rồi dùng -t để giới hạn thời lượng.
+        """
+        duration = await self._get_video_duration(input_path)
+        if duration <= seconds:
+            logger.warning(f"[SmartReup] Video too short ({duration:.1f}s) to trim {seconds}s, skipping")
+            return await self._run_ffmpeg([
+                "-i", input_path,
+                "-c", "copy",
+                output_path,
+            ])
+        new_duration = duration - seconds
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-t", f"{new_duration:.3f}",
+            "-c", "copy",
+            output_path,
+        ])
+
+    async def _strip_audio(self, input_path: str, output_path: str) -> bool:
+        """Remove audio track entirely."""
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-an",
             "-c:v", "copy",
             output_path,
         ])
@@ -323,6 +495,7 @@ class SmartReupService:
                 "-i", input_path,
                 "-map", "0:v",
                 "-map", "1:a?",
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
                 "-c:v", "libx264",
                 "-c:a", "copy",
                 "-pix_fmt", "yuv420p",
@@ -341,6 +514,228 @@ class SmartReupService:
             logger.error(f"[SmartReup] ComfyUI transform failed: {e}", exc_info=True)
             return False
 
+    async def _ai_logo_removal(self, input_path: str, output_path: str) -> bool:
+        """
+        Extract frames -> generate mask for watermark areas -> inpaint via ComfyUI -> reassemble.
+        For simplicity, creates a heuristic mask covering the bottom-right corner
+        (common Douyin watermark location). In production, use SAM or AI-assisted
+        watermark detection for precise masks.
+        """
+        from .comfyui_workflow import comfyui_client
+
+        if not await comfyui_client.is_available():
+            logger.warning("[SmartReup] ComfyUI not available for logo removal")
+            return False
+
+        try:
+            frames_dir = os.path.join(REUP_STORAGE, f"logo_frames_{uuid.uuid4().hex[:8]}")
+            os.makedirs(frames_dir, exist_ok=True)
+
+            # Extract all frames at original fps
+            extract_ok = await self._run_ffmpeg([
+                "-i", input_path,
+                f"{frames_dir}/frame_%04d.png",
+            ])
+            if not extract_ok:
+                return False
+
+            processed_dir = os.path.join(REUP_STORAGE, f"logo_processed_{uuid.uuid4().hex[:8]}")
+            os.makedirs(processed_dir, exist_ok=True)
+
+            frame_files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+            if not frame_files:
+                return False
+
+            # For each frame: create a mask image and inpaint
+            for frame_file in frame_files:
+                frame_path = os.path.join(frames_dir, frame_file)
+                processed_path = os.path.join(processed_dir, frame_file)
+
+                # Create a simple mask (bottom-right 15% x 8% region - common Douyin logo spot)
+                mask_path = self._create_watermark_mask(frame_path, frames_dir)
+
+                success = await comfyui_client.process_inpaint(
+                    input_path=frame_path,
+                    mask_path=mask_path,
+                    output_path=processed_path,
+                    denoise=0.7,
+                )
+                if not success:
+                    import shutil
+                    shutil.copy2(frame_path, processed_path)
+
+            # Get original fps from input video
+            fps = await self._get_video_fps(input_path)
+
+            # Reassemble video
+            reassemble_ok = await self._run_ffmpeg([
+                "-framerate", str(fps),
+                "-i", f"{processed_dir}/frame_%04d.png",
+                "-i", input_path,
+                "-map", "0:v",
+                "-map", "1:a?",
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-pix_fmt", "yuv420p",
+                "-shortest",
+                output_path,
+            ])
+
+            import shutil
+            shutil.rmtree(frames_dir, ignore_errors=True)
+            shutil.rmtree(processed_dir, ignore_errors=True)
+
+            return reassemble_ok
+
+        except Exception as e:
+            logger.error(f"[SmartReup] AI logo removal failed: {e}", exc_info=True)
+            return False
+
+    def _create_watermark_mask(self, frame_path: str, out_dir: str) -> str:
+        """
+        Create a mask image for the watermark region.
+        Returns path to the mask PNG.
+        """
+        from PIL import Image, ImageDraw
+
+        img = Image.open(frame_path)
+        w, h = img.size
+
+        # Douyin watermark is typically bottom-right
+        mask = Image.new("L", (w, h), 0)  # black = keep, white = inpaint
+        mask_draw = ImageDraw.Draw(mask)
+
+        # Bottom-right region: 15% from right, 8% from bottom
+        x1 = int(w * 0.85)
+        y1 = int(h * 0.92)
+        x2 = w
+        y2 = h
+        mask_draw.rectangle([x1, y1, x2, y2], fill=255)
+
+        mask_path = os.path.join(out_dir, f"mask_{os.path.basename(frame_path)}")
+        mask.save(mask_path)
+        return mask_path
+
+    async def _get_video_fps(self, input_path: str) -> float:
+        """Get FPS of a video file using ffprobe."""
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=r_frame_rate",
+            "-of", "csv=p=0", input_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            fps_str = stdout.decode().strip().split('\n')[0]
+            # Handle fraction format like "30000/1001"
+            if '/' in fps_str:
+                num, denom = fps_str.split('/')
+                return float(num) / float(denom)
+            return float(fps_str)
+        except Exception:
+            return 30.0  # Default fallback
+
+    async def _has_audio_stream(self, input_path: str) -> bool:
+        """Check if video file has an audio stream."""
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0", input_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            return "audio" in stdout.decode().lower()
+        except Exception:
+            return False
+
+    async def _get_audio_sample_rate(self, input_path: str) -> int:
+        """Get audio sample rate of a video file using ffprobe."""
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=sample_rate",
+            "-of", "csv=p=0", input_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            rate_str = stdout.decode().strip().split('\n')[0]
+            return int(rate_str)
+        except Exception:
+            return 44100  # Default fallback
+
+    async def _get_video_duration(self, input_path: str) -> float:
+        """Get duration of a video file in seconds using ffprobe."""
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "csv=p=0", input_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            return float(stdout.decode().strip().split('\n')[0])
+        except Exception:
+            return 0.0
+
     def list_transforms(self) -> Dict[str, str]:
         """Return available transforms with descriptions."""
         return self.TRANSFORMS.copy()
+
+    @staticmethod
+    def reorder_transforms(transforms: List[str]) -> List[str]:
+        """
+        Reorder transforms to ensure correct pipeline order:
+        - strip_audio always runs last (after speed/pitch which need audio)
+        - trim_end runs before strip_audio but after visual transforms
+        - mirror and flip_h are treated as the same operation (deduplicated)
+        """
+        result = []
+        seen = set()
+        strip_audio = None
+        trim_end = None
+
+        # mirror and flip_h are the same hflip operation
+        EQUIVALENT_GROUPS = {"mirror": "hflip_group", "flip_h": "hflip_group"}
+
+        for t in transforms:
+            if t == "strip_audio":
+                strip_audio = t
+                continue
+            if t == "trim_end":
+                trim_end = t
+                continue
+
+            # Check equivalence groups
+            group_key = EQUIVALENT_GROUPS.get(t, t)
+            if group_key in seen:
+                continue
+            seen.add(group_key)
+            result.append(t)
+
+        # trim_end before strip_audio, both at end
+        if trim_end:
+            result.append(trim_end)
+        if strip_audio:
+            result.append(strip_audio)
+        return result

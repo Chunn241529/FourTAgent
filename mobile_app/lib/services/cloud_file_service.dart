@@ -122,4 +122,21 @@ class CloudFileService {
       rethrow;
     }
   }
+
+  /// Build the stream URL for binary file access (video/image)
+  static String getStreamUrl(String path) {
+    return '${ApiConfig.baseUrl}/cloud/files/stream?path=${Uri.encodeComponent(path)}';
+  }
+
+  /// Check if file is a video
+  static bool isVideoFile(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv'].contains(ext);
+  }
+
+  /// Check if file is an image
+  static bool isImageFile(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
 }

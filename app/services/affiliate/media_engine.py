@@ -12,6 +12,7 @@ import os
 import logging
 import aiohttp
 import asyncio
+import urllib.parse
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Storage paths
 MEDIA_STORAGE = os.path.join("storage", "affiliate", "media")
 BGM_DIR = os.path.join("storage", "affiliate", "bgm")
+
+# Valid image extensions
+_VALID_IMG_EXT = {"jpg", "jpeg", "png", "gif", "webp", "bmp"}
 
 
 class MediaEngine:
@@ -39,6 +43,19 @@ class MediaEngine:
         os.makedirs(MEDIA_STORAGE, exist_ok=True)
         os.makedirs(BGM_DIR, exist_ok=True)
 
+    @staticmethod
+    def _get_image_ext(url: str) -> str:
+        """Extract image extension from URL, defaulting to jpg."""
+        try:
+            path = urllib.parse.urlparse(url).path  # e.g. /file/abc123
+            _, ext = os.path.splitext(path)  # ext = "" or ".png"
+            ext = ext.lstrip(".").lower().split("?")[0]
+            if ext in _VALID_IMG_EXT:
+                return ext
+        except Exception:
+            pass
+        return "jpg"
+
     async def download_images(
         self, image_urls: List[str], output_dir: str
     ) -> List[str]:
@@ -51,7 +68,12 @@ class MediaEngine:
                 try:
                     async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                         if resp.status == 200:
-                            ext = url.split(".")[-1].split("?")[0][:4] or "jpg"
+                            content_type = resp.headers.get('Content-Type', '').lower()
+                            if 'svg' in content_type:
+                                logger.info(f"[MediaEngine] Skipping SVG image: {url}")
+                                continue
+                            
+                            ext = self._get_image_ext(url)
                             filename = f"img_{i:03d}.{ext}"
                             filepath = os.path.join(output_dir, filename)
                             with open(filepath, "wb") as f:
@@ -115,12 +137,18 @@ class MediaEngine:
                     .with_duration(duration_per_image)
                 )
 
-                # Center crop to target resolution
+                # Center crop to target resolution (ensure even dimensions for libx264)
                 if clip.w > width:
                     clip = clip.cropped(
                         x_center=clip.w / 2,
                         width=width,
                     )
+
+                # Ensure dimensions are divisible by 2 (libx264 requirement)
+                if clip.w % 2 != 0:
+                    clip = clip.resized(width=clip.w - 1)
+                if clip.h % 2 != 0:
+                    clip = clip.resized(height=clip.h - 1)
 
                 clips.append(clip)
 
@@ -135,29 +163,36 @@ class MediaEngine:
             if script_text:
                 # Split text into chunks for subtitle timing
                 words = script_text.split()
-                chunk_size = max(1, len(words) // len(clips))
-                for i, clip in enumerate(clips):
+                # estimate chunk size based on video duration instead of len(clips)
+                total_duration = video.duration if video.duration else (len(images) * duration_per_image)
+                chunks_count = max(1, int(total_duration / 2)) # roughly 2 secs per chunk
+                chunk_size = max(1, len(words) // chunks_count)
+                
+                txt_clips = []
+                for i in range(chunks_count):
                     start_word = i * chunk_size
                     end_word = min((i + 1) * chunk_size, len(words))
                     subtitle_text = " ".join(words[start_word:end_word])
-
+                    
                     if subtitle_text:
                         txt_clip = (
                             TextClip(
+                                font="Arial",
                                 text=subtitle_text,
-                                font_size=36,
+                                font_size=42,
                                 color="white",
                                 stroke_color="black",
                                 stroke_width=2,
                                 size=(width - 80, None),
                                 method="caption",
                             )
-                            .with_position(("center", height - 200))
-                            .with_duration(duration_per_image)
-                            .with_start(i * duration_per_image)
+                            .with_position(("center", height - 300))
+                            .with_duration(2.0)
+                            .with_start(i * 2.0)
                         )
+                        txt_clips.append(txt_clip)
 
-                video = CompositeVideoClip([video] + [txt_clip] if script_text else [video])
+                video = CompositeVideoClip([video] + txt_clips)
 
             # Add audio
             audio_clips = []

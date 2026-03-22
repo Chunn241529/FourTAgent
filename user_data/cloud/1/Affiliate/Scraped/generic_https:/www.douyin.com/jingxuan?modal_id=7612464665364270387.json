@@ -1,0 +1,22 @@
+[
+  {
+    "product_id": "generic_44035889",
+    "platform": "generic",
+    "name": "Unknown Video",
+    "price": 0.0,
+    "original_price": null,
+    "discount_percent": null,
+    "rating": null,
+    "sold_count": null,
+    "commission_rate": null,
+    "image_urls": [],
+    "video_urls": [
+      "https://lf-douyin-pc-web.douyinstatic.com/obj/douyin-pc-web/uuu_265.mp4"
+    ],
+    "affiliate_link": "https://www.douyin.com/video/7612464665364270387",
+    "description": "",
+    "shop_name": "Unknown",
+    "category": null,
+    "scraped_at": 1774068332.8636825
+  }
+]

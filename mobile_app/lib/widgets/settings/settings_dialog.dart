@@ -34,6 +34,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final List<_MenuItem> _menuItems = [
     _MenuItem(icon: Icons.settings_outlined, label: 'Tổng quát'),
     _MenuItem(icon: Icons.cloud_outlined, label: 'File đám mây'),
+    _MenuItem(icon: Icons.movie_creation_outlined, label: 'Video AI'),
     _MenuItem(icon: Icons.storage_outlined, label: 'Quản lý dữ liệu'),
     // _MenuItem(icon: Icons.notifications_outlined, label: 'Thông báo'),
     _MenuItem(icon: Icons.security_outlined, label: 'Quyền hạn'),
@@ -156,12 +157,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
            child: CloudFilesScreen(isEmbedded: true),
         );
       case 2:
-        return _buildDataControlsSection(theme, isDark);
-      // case 3:
-      //   return _buildNotificationsSection(theme, isDark);
+        return _buildVideoAISection(theme, isDark);
       case 3:
-        return _buildPermissionsSection(theme, isDark);
+        return _buildDataControlsSection(theme, isDark);
+      // case 4:
+      //   return _buildNotificationsSection(theme, isDark);
       case 4:
+        return _buildPermissionsSection(theme, isDark);
+      case 5:
         return _buildAccountSection(theme, isDark);
       default:
         return const SizedBox();
@@ -202,6 +205,45 @@ class _SettingsDialogState extends State<SettingsDialog> {
           subtitle: 'Bật/tắt giao diện Canvas bên phải',
           value: settings.showCanvas,
           onChanged: settings.setShowCanvas,
+        ),
+      ],
+    );
+  }
+
+  // ===== VIDEO AI SECTION =====
+  Widget _buildVideoAISection(ThemeData theme, bool isDark) {
+    final settings = context.watch<SettingsProvider>();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tích hợp AI tạo Video (Kling/Veo/Wan)',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Nhập API Key để sử dụng tính năng sinh video AI trực tiếp từ script của Affiliate Automation.',
+          style: TextStyle(color: Colors.grey, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          initialValue: settings.aiVideoApiKey,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'API Key',
+            border: OutlineInputBorder(),
+            hintText: 'Nhập API key...',
+            prefixIcon: Icon(Icons.key),
+          ),
+          onChanged: (val) {
+            settings.setAiVideoApiKey(val.trim());
+          },
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          '* Lưu ý: API Key của bạn được lưu trữ an toàn trên thiết bị này và chỉ dùng để giao tiếp với AI backend service.',
+          style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12),
         ),
       ],
     );
