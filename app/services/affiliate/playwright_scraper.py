@@ -447,6 +447,9 @@ class PlaywrightScraper:
                                 logger.info(f"[Shopee] Direct API returned data at root level, images: {len(api_data.get('images', []))}")
                             else:
                                 logger.info(f"[Shopee] Direct API response keys: {list(api_data.keys()) if isinstance(api_data, dict) else 'not a dict'}")
+                    else:
+                        error_body = await api_response.text()
+                        logger.error(f"[Shopee] Direct API failed with status {api_response.status}, body: {error_body[:500]}")
                 except Exception as e:
                     logger.debug(f"[Shopee] Direct API failed: {e}")
 

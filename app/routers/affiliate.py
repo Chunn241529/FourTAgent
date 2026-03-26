@@ -465,6 +465,23 @@ async def download_job_result(job_id: str, user_id: int = Depends(verify_jwt)):
     return FileResponse(job["output_path"], media_type="video/mp4", filename=f"affiliate_{job_id}.mp4")
 
 
+@router.get("/jobs/{job_id}/audio")
+async def download_job_audio(job_id: str, user_id: int = Depends(verify_jwt)):
+    """Download the extracted audio from a completed smart-reup job (only if strip_audio was selected)."""
+    if job_id not in _jobs:
+        raise HTTPException(404, "Job not found")
+
+    job = _jobs[job_id]
+    if job["status"] != "done":
+        raise HTTPException(400, "Job not complete or failed")
+
+    audio_path = job.get("audio_path")
+    if not audio_path or not os.path.exists(audio_path):
+        raise HTTPException(404, "Audio file not found (strip_audio may not have been selected)")
+
+    return FileResponse(audio_path, media_type="audio/mpeg", filename=f"affiliate_{job_id}.mp3")
+
+
 @router.post("/generate-ai-video")
 async def generate_ai_video(
     request: GenerateAIVideoRequest,
@@ -793,6 +810,23 @@ async def _smart_reup_douyin_task(
                 else:
                     success = await reup._crop_rescale(current_path, next_path)
             elif transform_name == "strip_audio":
+                # Extract audio to separate file before stripping
+                if await reup._has_audio_stream(current_path):
+                    audio_path = os.path.join(output_dir, f"reup_{job_id}.mp3")
+                    extract_ok = await reup._extract_audio(current_path, audio_path)
+                    if extract_ok:
+                        _jobs[job_id]["audio_path"] = audio_path
+                        # Save audio to cloud
+                        try:
+                            from app.services.cloud_file_service import CloudFileService
+                            cloud_audio_path = f"/Affiliate/Videos/reup_{job_id}.mp3"
+                            target_audio_secure = CloudFileService._get_secure_path(user_id, cloud_audio_path)
+                            os.makedirs(os.path.dirname(target_audio_secure), exist_ok=True)
+                            import shutil
+                            shutil.copy2(audio_path, target_audio_secure)
+                            _jobs[job_id]["audio_cloud_path"] = cloud_audio_path
+                        except Exception as e:
+                            logger.warning(f"Could not save audio to cloud: {e}")
                 success = await reup._strip_audio(current_path, next_path)
             elif transform_name == "pitch":
                 success = await reup._pitch_shift(current_path, next_path)

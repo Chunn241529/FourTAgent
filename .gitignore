@@ -20,6 +20,7 @@ logs/
 storage/
 *.db
 *.sqlite
+user_data/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 app/__pycache_

@@ -409,6 +409,16 @@ class SmartReupService:
             output_path,
         ])
 
+    async def _extract_audio(self, input_path: str, output_path: str) -> bool:
+        """Extract audio track to a separate file (mp3)."""
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-q:a", "2",
+            output_path,
+        ])
+
     async def _add_overlay(self, input_path: str, output_path: str) -> bool:
         """Add a subtle border/frame overlay."""
         return await self._run_ffmpeg([

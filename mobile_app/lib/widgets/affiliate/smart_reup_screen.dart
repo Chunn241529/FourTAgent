@@ -456,27 +456,27 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Audio mode
-                  Text('Audio Mode', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Radio<String>(
-                        value: 'strip',
-                        groupValue: _audioMode,
-                        onChanged: (v) => setState(() => _audioMode = v!),
-                      ),
-                      const Text('Strip audio'),
-                      const SizedBox(width: 16),
-                      Radio<String>(
-                        value: 'shift',
-                        groupValue: _audioMode,
-                        onChanged: (v) => setState(() => _audioMode = v!),
-                      ),
-                      const Text('Pitch shift'),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                  // // Audio mode
+                  // Text('Audio Mode', style: theme.textTheme.titleSmall),
+                  // const SizedBox(height: 8),
+                  // Row(
+                  //   children: [
+                  //     Radio<String>(
+                  //       value: 'strip',
+                  //       groupValue: _audioMode,
+                  //       onChanged: (v) => setState(() => _audioMode = v!),
+                  //     ),
+                  //     const Text('Strip audio'),
+                  //     const SizedBox(width: 16),
+                  //     Radio<String>(
+                  //       value: 'shift',
+                  //       groupValue: _audioMode,
+                  //       onChanged: (v) => setState(() => _audioMode = v!),
+                  //     ),
+                  //     const Text('Pitch shift'),
+                  //   ],
+                  // ),
+                  // const SizedBox(height: 16),
 
                   // Logo removal
                   Text('Logo Removal', style: theme.textTheme.titleSmall),

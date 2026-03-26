@@ -191,14 +191,14 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
                   theme.colorScheme.tertiaryContainer,
                   theme.colorScheme.onTertiaryContainer,
                 ),
-                _buildToolCard(
-                  'reup',
-                  Icons.transform,
-                  'Smart Reup',
-                  'Transform video',
-                  theme.colorScheme.primaryContainer.withValues(alpha: 0.8),
-                  theme.colorScheme.onPrimaryContainer,
-                ),
+                // _buildToolCard(
+                //   'reup',
+                //   Icons.transform,
+                //   'Smart Reup',
+                //   'Transform video',
+                //   theme.colorScheme.primaryContainer.withValues(alpha: 0.8),
+                //   theme.colorScheme.onPrimaryContainer,
+                // ),
                 _buildToolCard(
                   'smart_reup_douyin',
                   Icons.smart_display,
