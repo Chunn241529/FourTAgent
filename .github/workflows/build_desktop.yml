@@ -33,7 +33,7 @@ jobs:
       - name: Copy libmpv DLLs
         run: |
           cp .github/workflows/libmpv-2.dll mobile_app/build/windows/x64/runner/Release/
-          ls -la mobile_app/build/windows/x64/runner/Release/*.dll
+          Get-ChildItem mobile_app/build/windows/x64/runner/Release/*.dll
 
       - name: Create Windows Archive
         run: |
