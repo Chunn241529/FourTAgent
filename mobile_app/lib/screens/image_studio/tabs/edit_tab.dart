@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../services/image_service.dart';
 
 class EditTab extends StatefulWidget {
@@ -436,8 +438,68 @@ class _EditTabState extends State<EditTab> {
                       color: Colors.white70, fontSize: 11)),
             ),
           ),
+        // Download button (top-right)
+        Positioned(
+          top: 10,
+          right: 10,
+          child: _buildDownloadButton(theme),
+        ),
       ],
     );
+  }
+
+  Widget _buildDownloadButton(ThemeData theme) {
+    return Tooltip(
+      message: 'Tải ảnh về',
+      child: Material(
+        color: Colors.black.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: _handleDownload,
+          borderRadius: BorderRadius.circular(10),
+          child: const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(Icons.download_rounded, size: 20, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleDownload() async {
+    if (_resultImageUrl == null) return;
+    try {
+      final uri = Uri.parse(_resultImageUrl!);
+      final segments = uri.pathSegments;
+      final defaultName = segments.isNotEmpty ? segments.last : 'lumina_edit.png';
+
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Lưu ảnh',
+        fileName: defaultName,
+        type: FileType.image,
+      );
+      if (savePath == null) return;
+
+      final response = await HttpClient().getUrl(uri).then((req) => req.close());
+      final bytes = await consolidateHttpClientResponseBytes(response);
+      final file = File(savePath);
+      await file.writeAsBytes(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã lưu ảnh tại: ${file.path}'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi tải ảnh: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // ─────────────────── Prompt Bar ───────────────────

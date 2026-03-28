@@ -294,7 +294,7 @@ async def _stream_openai_compatible(
     }
 
     # Handle Reasoning Flags for compatible models (e.g. gpt-oss-120b)
-    if model in ("openai/gpt-oss-120b", "gpt-oss-120b", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b-specdec"):
+    if model in ("openai/gpt-oss-120b", "gpt-oss-120b"):
         bool_think = think if isinstance(think, bool) else (str(think).lower() == "true")
         if bool_think:
             payload["include_reasoning"] = True
@@ -393,9 +393,18 @@ async def _stream_openai_compatible(
                     )
                     if reasoning_content:
                         ollama_chunk["message"]["reasoning_content"] = reasoning_content
+                        # Also track for fallback
+                        if not content:
+                            # Some reasoning models send reasoning but no content
+                            # We still need to yield so frontend shows thinking state
+                            pass
 
                     # Emit content chunks immediately
-                    if content or reasoning_content:
+                    if content:
+                        yield ollama_chunk
+                    elif reasoning_content:
+                        # Yield reasoning with proper chunk structure so downstream processes it correctly
+                        ollama_chunk["message"]["reasoning_content"] = reasoning_content
                         yield ollama_chunk
 
                     # On finish, emit accumulated tool calls
@@ -715,14 +724,11 @@ class ChatLLMRouter:
     async def _classify_needs_tools(
         self, messages: List[Dict], tools: Optional[List[Dict]]
     ) -> bool:
-        """
-        Use local Lumina-small to quickly classify whether the user's last
-        message requires tool calling. Returns True if tools are needed.
-        """
+        """Extract last user message and classify via standalone function."""
         if not tools:
             return False
 
-        # Extract last user message
+        # Extract last user message only — no history, no RAG
         last_user_msg = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -738,48 +744,64 @@ class ChatLLMRouter:
         if not last_user_msg:
             return False
 
-        # Build concise tool list
-        tool_names = []
-        for t in tools:
-            func = t.get("function", {})
-            name = func.get("name", "")
-            desc = func.get("description", "")[:60]
-            if name:
-                tool_names.append(f"- {name}: {desc}")
-        tool_list_str = "\n".join(tool_names[:20])  # Cap at 20 for speed
-
-        classify_prompt = (
-            "You are a routing classifier. Given a user message and available tools, "
-            "decide if the message REQUIRES calling a tool to answer properly.\n"
-            "Reply with ONLY 'YES' or 'NO'. Nothing else.\n\n"
-            "Rules:\n"
-            "- If the user asks for real-time info (weather, prices, news, time) → YES\n"
-            "- If the user asks to generate/edit images → YES\n"
-            "- If the user asks to search the web → YES\n"
-            "- If the user asks to execute code → YES\n"
-            "- If it's a simple chat/greeting/knowledge question → NO\n\n"
-            f"Available tools:\n{tool_list_str}\n\n"
-            f"User message: {last_user_msg}\n\n"
-            "Answer (YES or NO):"
+        # Standalone classification — only raw message, no history/RAG
+        prompt = (
+            'Classify if this user message needs an external tool to answer.\n'
+            'Tools: web_search, generate_image, edit_image, execute_code, read_file, create_file.\n\n'
+            'Rules:\n'
+            '- Greeting, chitchat, knowledge questions → false\n'
+            '- Real-time info (weather, price, news, current events) → true\n'
+            '- Image generation/editing requests → true\n'
+            '- Web search, file operations, code execution → true\n\n'
+            f'Message: "{last_user_msg}"\n\n'
+            'Reply ONLY with valid JSON: {"is_tool": true} or {"is_tool": false}'
         )
 
         try:
-            from app.services.chat.utils import get_client
-            client = get_client()
-            # Non-streaming, fast call with small model
-            response = await client.chat(
-                model="Lumina-small",
-                messages=[{"role": "user", "content": classify_prompt}],
-                options={"temperature": 0.0, "num_ctx": 2048, "num_predict": 8},
-            )
-            answer = response.get("message", {}).get("content", "").strip().upper()
-            needs_tools = answer.startswith("YES")
-            logger.info(
-                f"[ChatRouter] Lumina-small classification: '{answer}' → needs_tools={needs_tools}"
-            )
-            return needs_tools
+            import asyncio
+            import json as _json
+
+            def _call():
+                return ollama.chat(
+                    model="Lumina-small",
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"temperature": 0.0, "num_ctx": 1024, "num_predict": 20},
+                    format="json",
+                )
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, _call)
+
+            # Extract content (handle object or dict response)
+            raw = ""
+            if hasattr(response, 'message'):
+                raw = getattr(response.message, 'content', '') or ''
+            elif isinstance(response, dict):
+                raw = response.get("message", {}).get("content", "")
+            else:
+                raw = str(response)
+
+            raw = raw.strip()
+            logger.info(f"[ToolClassifier] Lumina-small raw: {repr(raw)}")
+
+            if not raw:
+                logger.warning("[ToolClassifier] Empty response → default false")
+                return False
+
+            # Parse JSON
+            try:
+                data = _json.loads(raw)
+                result = bool(data.get("is_tool", False))
+                logger.info(f"[ToolClassifier] Parsed: is_tool={result}")
+                return result
+            except _json.JSONDecodeError:
+                lower = raw.lower()
+                result = '"is_tool": true' in lower or '"is_tool":true' in lower
+                logger.info(f"[ToolClassifier] JSON parse failed, text fallback: is_tool={result}")
+                return result
+
         except Exception as e:
-            logger.warning(f"[ChatRouter] Lumina-small classification failed: {e}, defaulting to Cloud")
+            logger.warning(f"[ToolClassifier] Classification failed: {e} → default false")
             return False
 
     async def stream_chat(

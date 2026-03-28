@@ -13,11 +13,17 @@ class ImageStudioScreen extends StatefulWidget {
 class _ImageStudioScreenState extends State<ImageStudioScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() => _currentIndex = _tabController.index);
+      }
+    });
   }
 
   @override
@@ -133,10 +139,10 @@ class _ImageStudioScreenState extends State<ImageStudioScreen>
 
           const SizedBox(height: 4),
 
-          // ── Content ──
+          // ── Content: IndexedStack keeps both tabs alive ──
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: IndexedStack(
+              index: _currentIndex,
               children: const [
                 GenerateTab(),
                 EditTab(),
