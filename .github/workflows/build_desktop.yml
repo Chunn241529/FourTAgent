@@ -44,13 +44,14 @@ jobs:
         run: flutter build windows --debug -v
 
       - name: Verify release artifacts
+        shell: pwsh
         run: |
-          cd mobile_app/build/windows/x64/runner/Release
-          echo "Check main files"
-          if exist Lumina.exe (echo "Lumina.exe exists") else (echo "Lumina.exe missing" & exit 1)
-          if exist icudtl.dat (echo "icudtl.dat exists") else (echo "icudtl.dat missing" & exit 1)
-          if exist flutter_assets\ (echo "flutter_assets exists") else (echo "flutter_assets missing" & exit 1)
-          dir *.dll | findstr /i "flutter_windows.dll"
+          Set-Location mobile_app/build/windows/x64/runner/Release
+          Write-Host 'Check main files'
+          if (-Not (Test-Path .\Lumina.exe)) { Write-Error 'Lumina.exe missing'; exit 1 } else { Write-Host 'Lumina.exe exists' }
+          if (-Not (Test-Path .\icudtl.dat)) { Write-Error 'icudtl.dat missing'; exit 1 } else { Write-Host 'icudtl.dat exists' }
+          if (-Not (Test-Path .\flutter_assets)) { Write-Error 'flutter_assets missing'; exit 1 } else { Write-Host 'flutter_assets exists' }
+          Get-ChildItem -Filter '*.dll' | Where-Object Name -Match 'flutter_windows.dll' | ForEach-Object { Write-Host "Found $_" }
 
       - name: Upload release artifacts for diagnostics
         uses: actions/upload-artifact@v4
