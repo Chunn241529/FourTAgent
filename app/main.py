@@ -113,7 +113,7 @@ app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://api.fourt.io.vn",  # Cloudflare Tunnel
+        "https://fourt.io.vn",  # Cloudflare Tunnel
         "https://fourt.io.vn",
         "http://localhost:8080",  # Flutter web dev server
         "http://127.0.0.1:8080",

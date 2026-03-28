@@ -16,7 +16,7 @@ class AIRegisterForm {
         this.tokenWidget = document.getElementById('tokenWidget');
         this.tokenValue = document.getElementById('tokenValue');
         this.copyTokenButton = document.getElementById('copyToken');
-        this.API_BASE_URL = 'https://api.fourt.io.vn';
+        this.API_BASE_URL = 'https://fourt.io.vn';
         this.userId = null;
         this.init();
     }

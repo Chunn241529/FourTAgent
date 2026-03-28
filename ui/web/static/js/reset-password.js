@@ -10,7 +10,7 @@ class AIAssistantResetPasswordForm {
         this.newPasswordError = document.getElementById('newPasswordError');
         this.confirmPasswordError = document.getElementById('confirmPasswordError');
         this.resetTokenInput = document.getElementById('resetToken');
-        this.API_BASE_URL = 'https://api.fourt.io.vn';
+        this.API_BASE_URL = 'https://fourt.io.vn';
         this.init();
     }
 

@@ -5,7 +5,7 @@ class AIAssistantForgetPasswordForm {
         this.submitButton = this.form.querySelector('.neural-button');
         this.successMessage = document.getElementById('successMessage');
         this.emailError = document.getElementById('emailError');
-        this.API_BASE_URL = 'https://api.fourt.io.vn';
+        this.API_BASE_URL = 'https://fourt.io.vn';
         this.init();
     }
 
