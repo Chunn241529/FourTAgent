@@ -19,16 +19,25 @@ jobs:
         with:
           channel: "stable"
 
-      - name: Enable Windows Desktop
-        run: flutter config --enable-windows-desktop
+      - name: Setup MSVC and Windows SDK
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-      - name: Get dependencies
-        working-directory: mobile_app
-        run: flutter pub get
+      - name: Verify Flutter Setup
+        run: |
+          flutter doctor -v
+          flutter config --enable-windows-desktop
 
-      - name: Build Windows
+      - name: Get Flutter Dependencies
         working-directory: mobile_app
-        run: flutter build windows --release
+        run: |
+          flutter clean
+          flutter pub get
+
+      - name: Build Windows Release
+        working-directory: mobile_app
+        run: flutter build windows --release -v
 
       - name: Create Windows Archive
         run: |

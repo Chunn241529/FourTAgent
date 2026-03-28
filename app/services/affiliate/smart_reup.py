@@ -524,6 +524,110 @@ class SmartReupService:
             logger.error(f"[SmartReup] ComfyUI transform failed: {e}", exc_info=True)
             return False
 
+    async def _blur_region(
+        self,
+        input_path: str,
+        output_path: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> bool:
+        """
+        Apply heavy boxblur to a rectangular region (e.g., subtitle area).
+        Uses split/overlay to apply blur only to the specified region.
+        """
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-vf", f"split=2[bg][vid];[vid]crop={w}:{h}:{x}:{y},boxblur=25[blurred];[bg][blurred]overlay={x}:{y}:enable='between(t,0,99999)'",
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    async def _burn_subtitles(
+        self,
+        input_path: str,
+        output_path: str,
+        subtitle_path: str,
+        style: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Burn subtitles from SRT/ASS file into the video using FFmpeg.
+        style: optional dict with 'font_size', 'font_color', 'position' (top/bottom)
+        """
+        import subprocess as sp
+
+        if style is None:
+            style = {}
+
+        font_size = style.get("font_size", 18)
+        font_color = style.get("font_color", "white")
+        position = style.get("position", "bottom")
+
+        # Convert color name to ASS format
+        color_map = {
+            "white": "&H00FFFFFF",
+            "yellow": "&H00FFFF00",
+            "red": "&H000000FF",
+            "green": "&H000FF00",
+        }
+        ass_color = color_map.get(font_color.lower(), "&H00FFFFFF")
+
+        # Position: force_style
+        force_style = f"FontSize={font_size},PrimaryColour={ass_color}"
+        if position == "top":
+            force_style += ",Alignment=10"  # top center
+        else:
+            force_style += ",Alignment=2"  # bottom center
+
+        # Build filter complex
+        vf = f"subtitles='{subtitle_path}':force_style='{force_style}'"
+
+        return await self._run_ffmpeg([
+            "-i", input_path,
+            "-vf", vf,
+            "-c:a", "copy",
+            output_path,
+        ])
+
+    def _generate_srt_from_text(self, text: str, duration: float, output_path: str) -> str:
+        """
+        Generate a simple SRT file from plain text.
+        Splits text into sentences, assigns equal duration to each.
+        Returns path to generated SRT file.
+        """
+        import re
+
+        # Split into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        if not sentences:
+            sentences = [text.strip()]
+
+        num_chunks = len(sentences)
+        chunk_duration = duration / num_chunks
+
+        srt_content = []
+        for i, sentence in enumerate(sentences):
+            start = self._seconds_to_srt_time(i * chunk_duration)
+            end = self._seconds_to_srt_time((i + 1) * chunk_duration)
+            srt_content.append(f"{i + 1}\n{start} --> {end}\n{sentence}\n")
+
+        srt_path = output_path if output_path else os.path.join(REUP_STORAGE, f"auto_subtitle_{uuid.uuid4().hex[:8]}.srt")
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(srt_content))
+
+        return srt_path
+
+    def _seconds_to_srt_time(self, seconds: float) -> str:
+        """Convert seconds to SRT time format: HH:MM:SS,mmm"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millis = int((seconds - int(seconds)) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
     async def _ai_logo_removal(self, input_path: str, output_path: str) -> bool:
         """
         Extract frames -> generate mask for watermark areas -> inpaint via ComfyUI -> reassemble.
@@ -626,6 +730,28 @@ class SmartReupService:
         mask_path = os.path.join(out_dir, f"mask_{os.path.basename(frame_path)}")
         mask.save(mask_path)
         return mask_path
+
+    async def _get_video_dimensions(self, input_path: str) -> tuple[int, int]:
+        """Get width and height of a video file using ffprobe."""
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=0:p=0", input_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            parts = stdout.decode().strip().split(',')
+            w = int(parts[0])
+            h = int(parts[1])
+            return (w, h)
+        except Exception:
+            return (1920, 1080)  # Default fallback
 
     async def _get_video_fps(self, input_path: str) -> float:
         """Get FPS of a video file using ffprobe."""

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from fastapi.responses import FileResponse
 from app.utils import verify_jwt
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import os
 import uuid
 import time
@@ -670,6 +670,109 @@ async def list_transforms(user_id: int = Depends(verify_jwt)):
     return {"transforms": reup.list_transforms()}
 
 
+@router.post("/smart-reup/extract-frame")
+async def extract_frame(
+    file: Optional[UploadFile] = File(None),
+    url: Optional[str] = Form(None),
+    timestamp: Optional[float] = Form(1.0),
+    user_id: int = Depends(verify_jwt),
+):
+    """
+    Extract a single frame from video for subtitle region selection UI.
+    Returns base64-encoded JPEG image.
+    """
+    import base64
+    import tempfile
+    import os
+
+    reup = _get_reup_service()
+    video_path = None
+
+    try:
+        # Download video from URL or use uploaded file
+        if url:
+            # Scrape video URL from Douyin/TikTok
+            scraper = _get_scraper()
+            scraped = scraper.scrape_generic_video(url)
+            if not scraped or not scraped.get("video_url"):
+                raise HTTPException(400, "Could not extract video from URL")
+
+            # Download to temp file
+            video_url = scraped["video_url"]
+            video_path = await reup._download_video(video_url, f"temp_{user_id}")
+
+        elif file:
+            # Save uploaded file to temp
+            suffix = os.path.splitext(file.filename or ".mp4")[1] or ".mp4"
+            video_path = tempfile.mktemp(suffix=suffix)
+            content = await file.read()
+            with open(video_path, 'wb') as f:
+                f.write(content)
+        else:
+            raise HTTPException(400, "Either url or file is required")
+
+        # Extract frame using FFmpeg
+        import asyncio
+        output_path = tempfile.mktemp(suffix=".jpg")
+
+        # Get original video dimensions first
+        video_w, video_h = await reup._get_video_dimensions(video_path)
+
+        cmd = [
+            'ffmpeg', '-y', '-ss', str(timestamp), '-i', video_path,
+            '-vframes', '1', '-q:v', '2', output_path
+        ]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            raise HTTPException(500, f"FFmpeg failed: {stderr.decode()}")
+
+        # Read and encode
+        with open(output_path, 'rb') as f:
+            img_data = base64.b64encode(f.read()).decode()
+
+        return {
+            "image": f"data:image/jpeg;base64,{img_data}",
+            "video_width": video_w,
+            "video_height": video_h,
+        }
+
+    finally:
+        # Cleanup temp files
+        if video_path and os.path.exists(video_path):
+            os.remove(video_path)
+        if 'output_path' in dir() and os.path.exists(output_path):
+            os.remove(output_path)
+
+
+@router.post("/affiliate/upload-subtitle")
+async def upload_subtitle(
+    file: UploadFile = File(...),
+    user_id: int = Depends(verify_jwt),
+):
+    """Upload an SRT or ASS subtitle file."""
+    from app.services.cloud_file_service import CloudFileService
+    import os
+
+    suffix = os.path.splitext(file.filename or ".srt")[1] or ".srt"
+    filename = f"subtitle_{user_id}_{uuid.uuid4().hex[:8]}{suffix}"
+
+    content = await file.read()
+    CloudFileService.create_file(
+        user_id,
+        f"/Affiliate/Subtitles/{filename}",
+        content.decode('utf-8', errors='replace')
+    )
+
+    return {"filename": filename, "path": f"/Affiliate/Subtitles/{filename}"}
+
+
 @router.get("/llm-providers")
 async def list_llm_providers(user_id: int = Depends(verify_jwt)):
     """List all configured LLM providers and their status."""
@@ -685,6 +788,14 @@ class SmartReupDouyinRequest(BaseModel):
     crop_settings: Optional[Dict[str, float]] = None  # top, right, bottom, left
     audio_mode: Optional[str] = "strip"  # "strip" | "shift"
     logo_removal: Optional[str] = "none"  # "none" | "manual" | "ai"
+    # Subtitle options
+    blur_subtitles: bool = False
+    blur_region: Optional[Dict[str, int]] = None  # {"x": 0, "y": 500, "w": 720, "h": 80}
+    burn_subtitles: bool = False
+    subtitle_file: Optional[str] = None  # path to uploaded SRT
+    subtitle_text: Optional[str] = None  # raw text for auto-timing
+    subtitle_duration: Optional[float] = None  # seconds for auto-timing
+    subtitle_style: Optional[Dict[str, Any]] = None  # font_size, font_color, position
 
 
 @router.post("/smart-reup-douyin")
@@ -696,6 +807,14 @@ async def smart_reup_douyin(
     crop_settings_json: Optional[str] = Form(None),  # JSON string
     audio_mode: Optional[str] = Form("strip"),
     logo_removal: Optional[str] = Form("none"),
+    # Subtitle params
+    blur_subtitles: Optional[str] = Form("false"),  # "true" | "false"
+    blur_region_json: Optional[str] = Form(None),  # JSON string
+    burn_subtitles: Optional[str] = Form("false"),
+    subtitle_file: Optional[str] = Form(None),
+    subtitle_text: Optional[str] = Form(None),
+    subtitle_duration: Optional[float] = Form(None),
+    subtitle_style_json: Optional[str] = Form(None),
     user_id: int = Depends(verify_jwt),
 ):
     """
@@ -719,6 +838,16 @@ async def smart_reup_douyin(
     crop_settings = None
     if crop_settings_json:
         crop_settings = json.loads(crop_settings_json)
+
+    # Parse subtitle params
+    blur_sub = blur_subtitles == "true"
+    blur_region = None
+    if blur_region_json:
+        blur_region = json.loads(blur_region_json)
+    burn_sub = burn_subtitles == "true"
+    sub_style = None
+    if subtitle_style_json:
+        sub_style = json.loads(subtitle_style_json)
 
     # Save uploaded file if provided
     input_path = None
@@ -749,6 +878,13 @@ async def smart_reup_douyin(
         crop_settings,
         audio_mode,
         logo_removal,
+        blur_sub,
+        blur_region,
+        burn_sub,
+        subtitle_file,
+        subtitle_text,
+        subtitle_duration,
+        sub_style,
         user_id,
     )
 
@@ -763,6 +899,13 @@ async def _smart_reup_douyin_task(
     crop_settings: Optional[Dict[str, float]],
     audio_mode: str,
     logo_removal: str,
+    blur_subtitles: bool,
+    blur_region: Optional[Dict[str, int]],
+    burn_subtitles: bool,
+    subtitle_file: Optional[str],
+    subtitle_text: Optional[str],
+    subtitle_duration: Optional[float],
+    subtitle_style: Optional[Dict[str, Any]],
     user_id: int,
 ):
     """
@@ -770,11 +913,19 @@ async def _smart_reup_douyin_task(
     1. Scrape/download video from Douyin URL (or use uploaded file)
     2. Chain FFmpeg transforms
     3. AI logo removal (if selected)
-    4. Save output to cloud
+    4. Blur subtitle region (if selected)
+    5. Burn subtitles (if selected)
+    6. Save output to cloud
     """
     try:
+        stages = ["init", "scrape", "download", "transform", "ai_logo_removal"]
+        if blur_subtitles:
+            stages.append("blur_subtitles")
+        if burn_subtitles:
+            stages.append("burn_subtitles")
+        stages.extend(["assemble", "save"])
+        _jobs[job_id]["stages"] = stages
         _jobs[job_id]["status"] = "processing"
-        _jobs[job_id]["stages"] = ["init", "scrape", "download", "transform", "ai_logo_removal", "assemble", "save"]
         _jobs[job_id]["progress"] = 5
 
         reup = _get_reup_service()
@@ -909,6 +1060,57 @@ async def _smart_reup_douyin_task(
                 current_path = ai_output
                 applied.append("ai_logo_removal")
             _jobs[job_id]["progress"] = 85
+
+        # --- Stage 4b: Blur subtitle region ---
+        if blur_subtitles and blur_region:
+            _jobs[job_id]["stages"].append("blur_subtitles")
+            _jobs[job_id]["progress"] = 86
+            blur_output = os.path.join(output_dir, f"{job_id}_blursub.mp4")
+            blur_success = await reup._blur_region(
+                current_path,
+                blur_output,
+                x=blur_region.get("x", 0),
+                y=blur_region.get("y", 0),
+                w=blur_region.get("w", 0),
+                h=blur_region.get("h", 0),
+            )
+            if blur_success:
+                if current_path != video_path and os.path.exists(current_path):
+                    os.remove(current_path)
+                current_path = blur_output
+                applied.append("blur_subtitles")
+            _jobs[job_id]["progress"] = 88
+
+        # --- Stage 4c: Burn subtitles ---
+        if burn_subtitles:
+            _jobs[job_id]["stages"].append("burn_subtitles")
+            _jobs[job_id]["progress"] = 89
+            burn_output = os.path.join(output_dir, f"{job_id}_burnsub.mp4")
+            burn_success = False
+
+            # Get video duration for auto-timing
+            video_duration = subtitle_duration
+            if not video_duration:
+                video_duration = await reup._get_video_duration(current_path)
+
+            if subtitle_text:
+                # Auto-generate SRT from plain text
+                srt_path = reup._generate_srt_from_text(subtitle_text, video_duration, None)
+                burn_success = await reup._burn_subtitles(current_path, burn_output, srt_path, subtitle_style)
+                try:
+                    os.remove(srt_path)
+                except Exception:
+                    pass
+            elif subtitle_file:
+                # Use uploaded SRT file
+                burn_success = await reup._burn_subtitles(current_path, burn_output, subtitle_file, subtitle_style)
+
+            if burn_success:
+                if current_path != video_path and os.path.exists(current_path):
+                    os.remove(current_path)
+                current_path = burn_output
+                applied.append("burn_subtitles")
+            _jobs[job_id]["progress"] = 92
 
         # --- Stage 5: Assemble final output ---
         _jobs[job_id]["stages"].append("assemble")

@@ -1,0 +1,2376 @@
+╭─── Claude Code v2.1.84 ──────────────────────────────────────────────────────╮
+│                                            │ Tips for getting started        │
+│                Welcome back!               │ Run /init to create a CLAUDE.m… │
+│                                            │ ─────────────────────────────── │
+│                   ▐▛███▜▌                  │ Recent activity                 │
+│                  ▝▜█████▛▘                 │ No recent activity              │
+│                    ▘▘ ▝▝                   │                                 │
+│                                            │                                 │
+│   minimax-m2.7:cloud · API Usage Billing   │                                 │
+│       ~/Documents/4T_task/mobile_app       │                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ ở screen affiliate flutter phần script giúp tôi thêm logic import file manual 
+ giúp cho LLM tạo kịch bản dễ hơn ví dụ như folder hình ảnh, txt,... gợi ý thêm 
+
+  Searched for 2 patterns, read 4 files (ctrl+o to expand)
+
+● Tôi sẽ thêm tính năng import file manual vào ScriptTool để LLM có thêm context
+   khi tạo kịch bản.
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 2 lines
+      1 +import 'dart:io';                                               
+      2  import 'package:flutter/material.dart';
+      3 +import 'package:file_picker/file_picker.dart';                  
+      4  import '../../services/affiliate_service.dart';
+      5  
+      6  /// Script tool panel - independent script generation.
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 83 lines, removed 5 lines
+       31  
+       32    Map<String, dynamic>? _generatedScript;
+       33  
+       34 +  // Manual import files for LLM context                      
+       35 +  List<ImportedFile> _importedFiles = [];                     
+       36 +                                                              
+       37    @override
+       38    void initState() {
+       39      super.initState();
+       40      _generatedScript = widget.generatedScript;
+       41    }
+       42  
+       40 -  @override                                                   
+       41 -  void didUpdateWidget(ScriptTool oldWidget) {                
+       42 -    super.didUpdateWidget(oldWidget);                         
+       43 -    if (widget.generatedScript != oldWidget.generatedScript) {
+       44 -      _generatedScript = widget.generatedScript;              
+       43 +  Future<void> _importFiles() async {                         
+       44 +    try {                                                     
+       45 +      final result = await FilePicker.platform.pickFiles(     
+       46 +        type: FileType.custom,                                
+       47 +        allowedExtensions: ['txt', 'md', 'json', 'jpg', 'jpeg'
+          +, 'png', 'gif', 'webp', 'mp4', 'mov', 'avi'],                 
+       48 +        allowMultiple: true,                                  
+       49 +      );                                                      
+       50 +                                                              
+       51 +      if (result != null && result.files.isNotEmpty) {        
+       52 +        final newFiles = <ImportedFile>[];                    
+       53 +        for (final file in result.files) {                    
+       54 +          if (file.path != null) {                            
+       55 +            final f = File(file.path!);                       
+       56 +            final content = await _readFileContent(f, file.ext
+          +ension ?? '');                                                
+       57 +            newFiles.add(ImportedFile(                        
+       58 +              name: file.name,                                
+       59 +              path: file.path!,                               
+       60 +              type: _getFileType(file.extension ?? ''),       
+       61 +              content: content,                               
+       62 +            ));                                               
+       63 +          }                                                   
+       64 +        }                                                     
+       65 +                                                              
+       66 +        setState(() {                                         
+       67 +          _importedFiles = [..._importedFiles, ...newFiles];  
+       68 +        });                                                   
+       69 +                                                              
+       70 +        if (mounted && newFiles.isNotEmpty) {                 
+       71 +          ScaffoldMessenger.of(context).showSnackBar(         
+       72 +            SnackBar(content: Text('Đã import ${newFiles.lengt
+          +h} file thành công')),                                        
+       73 +          );                                                  
+       74 +        }                                                     
+       75 +      }                                                       
+       76 +    } catch (e) {                                             
+       77 +      if (mounted) {                                          
+       78 +        ScaffoldMessenger.of(context).showSnackBar(           
+       79 +          SnackBar(content: Text('Import thất bại: $e')),     
+       80 +        );                                                    
+       81 +      }                                                       
+       82      }
+       83    }
+       84  
+       85 +  Future<String> _readFileContent(File file, String extension)
+          + async {                                                      
+       86 +    try {                                                     
+       87 +      final ext = extension.toLowerCase();                    
+       88 +      if (ext == 'txt' || ext == 'md' || ext == 'json') {     
+       89 +        return await file.readAsString();                     
+       90 +      }                                                       
+       91 +      return '[File: ${file.path}]';                          
+       92 +    } catch (_) {                                             
+       93 +      return '[Cannot read file content]';                    
+       94 +    }                                                         
+       95 +  }                                                           
+       96 +                                                              
+       97 +  FileType _getFileType(String extension) {                   
+       98 +    final ext = extension.toLowerCase();                      
+       99 +    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) r
+          +eturn FileType.image;                                         
+      100 +    if (['mp4', 'mov', 'avi'].contains(ext)) return FileType.v
+          +ideo;                                                         
+      101 +    return FileType.text;                                     
+      102 +  }                                                           
+      103 +                                                              
+      104 +  void _removeImportedFile(int index) {                       
+      105 +    setState(() {                                             
+      106 +      _importedFiles = List.from(_importedFiles)..removeAt(ind
+          +ex);                                                          
+      107 +    });                                                       
+      108 +  }                                                           
+      109 +                                                              
+      110    Future<void> _generateScript() async {
+      111      if (widget.selectedProductId == null || _generating) retur
+           n;
+      112      setState(() => _generating = true);
+      113      try {
+      114 +      // Build custom prompt from imported files              
+      115 +      String? customPrompt;                                   
+      116 +      if (_importedFiles.isNotEmpty) {                        
+      117 +        final buffer = StringBuffer();                        
+      118 +        buffer.writeln('=== TÀI LIỆU THAM KHẢO ===');         
+      119 +        for (final file in _importedFiles) {                  
+      120 +          buffer.writeln('\n[${file.type.label}: ${file.name}]
+          +');                                                           
+      121 +          if (file.content != null) {                         
+      122 +            buffer.writeln(file.content);                     
+      123 +          }                                                   
+      124 +        }                                                     
+      125 +        buffer.writeln('\n=======================');          
+      126 +        customPrompt = buffer.toString();                     
+      127 +      }                                                       
+      128 +                                                              
+      129        final result = await AffiliateService.generateScript(
+      130          productId: widget.selectedProductId!,
+      131          style: _selectedStyle,
+      132          duration: _selectedDuration,
+      133 +        customPrompt: customPrompt,                           
+      134        );
+      135        setState(() => _generatedScript = result);
+      136        widget.onScriptGenerated?.call(result);
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 40 lines
+       3  import 'package:file_picker/file_picker.dart';
+       4  import '../../services/affiliate_service.dart';
+       5  
+       6 +enum FileType { text, image, video }                           
+       7 +                                                               
+       8 +extension FileTypeExtension on FileType {                      
+       9 +  String get label {                                           
+      10 +    switch (this) {                                            
+      11 +      case FileType.text:                                      
+      12 +        return 'Text';                                         
+      13 +      case FileType.image:                                     
+      14 +        return 'Image';                                        
+      15 +      case FileType.video:                                     
+      16 +        return 'Video';                                        
+      17 +    }                                                          
+      18 +  }                                                            
+      19 +                                                               
+      20 +  IconData get icon {                                          
+      21 +    switch (this) {                                            
+      22 +      case FileType.text:                                      
+      23 +        return Icons.description;                              
+      24 +      case FileType.image:                                     
+      25 +        return Icons.image;                                    
+      26 +      case FileType.video:                                     
+      27 +        return Icons.video_file;                               
+      28 +    }                                                          
+      29 +  }                                                            
+      30 +}                                                              
+      31 +                                                               
+      32 +class ImportedFile {                                           
+      33 +  final String name;                                           
+      34 +  final String path;                                           
+      35 +  final FileType type;                                         
+      36 +  final String? content;                                       
+      37 +                                                               
+      38 +  ImportedFile({                                               
+      39 +    required this.name,                                        
+      40 +    required this.path,                                        
+      41 +    required this.type,                                        
+      42 +    this.content,                                              
+      43 +  });                                                          
+      44 +}                                                              
+      45 +                                                               
+      46  /// Script tool panel - independent script generation.
+      47  class ScriptTool extends StatefulWidget {
+      48    final List<dynamic> products;
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 60 lines
+      265            ),
+      266            const SizedBox(height: 16),
+      267  
+      268 +          // Imported files section                           
+      269 +          if (_importedFiles.isNotEmpty) ...[                 
+      270 +            Row(                                              
+      271 +              children: [                                     
+      272 +                const Icon(Icons.attach_file, size: 16),      
+      273 +                const SizedBox(width: 4),                     
+      274 +                Text('Tài liệu tham khảo (${_importedFiles.len
+          +gth})', style: theme.textTheme.titleSmall),                   
+      275 +                const Spacer(),                               
+      276 +                TextButton.icon(                              
+      277 +                  onPressed: _importFiles,                    
+      278 +                  icon: const Icon(Icons.add, size: 16),      
+      279 +                  label: const Text('Thêm'),                  
+      280 +                ),                                            
+      281 +              ],                                              
+      282 +            ),                                                
+      283 +            const SizedBox(height: 8),                        
+      284 +            SizedBox(                                         
+      285 +              height: 80,                                     
+      286 +              child: ListView.builder(                        
+      287 +                scrollDirection: Axis.horizontal,             
+      288 +                itemCount: _importedFiles.length,             
+      289 +                itemBuilder: (context, index) {               
+      290 +                  final file = _importedFiles[index];         
+      291 +                  return Padding(                             
+      292 +                    padding: const EdgeInsets.only(right: 8), 
+      293 +                    child: Chip(                              
+      294 +                      avatar: CircleAvatar(                   
+      295 +                        backgroundColor: theme.colorScheme.pri
+          +maryContainer,                                                
+      296 +                        child: Icon(file.type.icon, size: 14),
+      297 +                      ),                                      
+      298 +                      label: SizedBox(                        
+      299 +                        width: 80,                            
+      300 +                        child: Text(                          
+      301 +                          file.name,                          
+      302 +                          overflow: TextOverflow.ellipsis,    
+      303 +                          style: const TextStyle(fontSize: 12)
+          +,                                                             
+      304 +                        ),                                    
+      305 +                      ),                                      
+      306 +                      deleteIcon: const Icon(Icons.close, size
+          +: 14),                                                        
+      307 +                      onDeleted: () => _removeImportedFile(ind
+          +ex),                                                          
+      308 +                    ),                                        
+      309 +                  );                                          
+      310 +                },                                            
+      311 +              ),                                              
+      312 +            ),                                                
+      313 +            const SizedBox(height: 16),                       
+      314 +          ] else ...[                                         
+      315 +            OutlinedButton.icon(                              
+      316 +              onPressed: _importFiles,                        
+      317 +              icon: const Icon(Icons.upload_file),            
+      318 +              label: const Text('Import tài liệu tham khảo'), 
+      319 +            ),                                                
+      320 +            const SizedBox(height: 8),                        
+      321 +            Text(                                             
+      322 +              'Hỗ trợ: TXT, MD, JSON, Ảnh, Video',            
+      323 +              style: theme.textTheme.bodySmall?.copyWith(color
+          +: theme.hintColor),                                           
+      324 +            ),                                                
+      325 +            const SizedBox(height: 16),                       
+      326 +          ],                                                  
+      327 +                                                              
+      328            // Generated script result
+      329            if (_generatedScript != null)
+      330              Expanded(
+
+  Read 1 file (ctrl+o to expand)
+
+● Tôi cần sắp xếp lại vị trí để phần import file nằm trước nút Generate.
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 13 lines, removed 13 lines
+      252            ),
+      253            const SizedBox(height: 16),
+      254  
+      255 -          // Generate button                                  
+      256 -          SizedBox(                                           
+      257 -            width: double.infinity,                           
+      258 -            child: ElevatedButton.icon(                       
+      259 -              onPressed: _generating ? null : _generateScript,
+      260 -              icon: _generating                               
+      261 -                  ? const SizedBox(width: 16, height: 16, chil
+          -d: CircularProgressIndicator(strokeWidth: 2))                 
+      262 -                  : const Icon(Icons.auto_awesome),           
+      263 -              label: Text(_generating ? 'Đang sinh...' : 'Gene
+          -rate Script'),                                                
+      264 -            ),                                                
+      265 -          ),                                                  
+      266 -          const SizedBox(height: 16),                         
+      267 -                                                              
+      255            // Imported files section
+      256            if (_importedFiles.isNotEmpty) ...[
+      257              Row(
+     ...
+      312              const SizedBox(height: 16),
+      313            ],
+      314  
+      315 +          // Generate button                                  
+      316 +          SizedBox(                                           
+      317 +            width: double.infinity,                           
+      318 +            child: ElevatedButton.icon(                       
+      319 +              onPressed: _generating ? null : _generateScript,
+      320 +              icon: _generating                               
+      321 +                  ? const SizedBox(width: 16, height: 16, chil
+          +d: CircularProgressIndicator(strokeWidth: 2))                 
+      322 +                  : const Icon(Icons.auto_awesome),           
+      323 +              label: Text(_generating ? 'Đang sinh...' : 'Gene
+          +rate Script'),                                                
+      324 +            ),                                                
+      325 +          ),                                                  
+      326 +          const SizedBox(height: 16),                         
+      327 +                                                              
+      328            // Generated script result
+      329            if (_generatedScript != null)
+      330              Expanded(
+
+● Đã thêm xong tính năng import file manual vào ScriptTool. Tóm tắt những gì đã
+  thêm:
+
+  Tính năng:
+  1. Import file tham khảo - Nút "Import tài liệu tham khảo" cho phép upload
+  nhiều file cùng lúc
+  2. Hỗ trợ nhiều định dạng: TXT, MD, JSON (đọc nội dung text), Ảnh (jpg, png,
+  gif, webp), Video (mp4, mov, avi)
+  3. Hiển thị file đã import - Danh sách horizontal chips với icon theo loại
+  file, có nút xóa
+  4. Gửi context lên LLM - Khi generate script, nội dung file text sẽ được đóng
+  gói vào customPrompt với format:
+  === TÀI LIỆU THAM KHẢO ===
+  [Text: sample.txt]
+  (nội dung file)
+  [Image: product.jpg]
+  [File: /path/to/video.mp4]
+  =======================
+
+  UI flow:
+  - Khi chưa import: hiện nút OutlinedButton + hint text
+  - Khi đã import: hiện danh sách chips + nút "Thêm" để tiếp tục thêm file
+  - Phần import nằm ngay trên nút Generate Script
+
+✻ Baked for 2m 30s
+
+❯ ủa mà backend đã làm logic chưa                                               
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● Backend đã xử lý custom_prompt ở dòng 282. Kiểm tra request model xem đã có
+  custom_prompt chưa.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Backend đã có custom_prompt trong request model. Kiểm tra xem service xử lý nó
+   chưa.
+  Searched for 2 patterns (ctrl+o to expand)
+
+● Backend đã xử lý custom_prompt rồi:
+
+  1. Request model (affiliate.py:85): custom_prompt: Optional[str] = None
+  2. Service (content_generator.py:120-121):
+  if custom_prompt:
+      prompt += f"\n\nYêu cầu bổ sung: {custom_prompt}"
+
+  Vậy frontend thêm vào là đủ rồi - backend sẽ tự động append nội dung file vào
+  prompt khi generate script.
+
+✻ Worked for 35s
+
+❯ trung@trung:~/Documents/4T_task/mobile_app$ flutter run -d linux              
+Launching lib/main.dart on Linux in debug mode...                               
+ERROR: lib/widgets/affiliate/script_tool.dart:86:24: Error: Member not found:   
+'custom'.                                                                       
+ERROR:         type: FileType.custom,                                           
+ERROR:                        ^^^^^^                                            
+ERROR: Target kernel_snapshot_program failed: Exception                         
+Building Linux application...                                                   
+Error: Build process failed                                                     
+                                                                                
+
+● Conflict tên enum FileType - trùng với FileType của file_picker. Cần đổi tên
+  enum tôi định nghĩa.
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 8 lines, removed 8 lines
+       3  import 'package:file_picker/file_picker.dart';
+       4  import '../../services/affiliate_service.dart';
+       5  
+       6 -enum FileType { text, image, video }                           
+       6 +enum ImportFileType { text, image, video }                     
+       7  
+       8 -extension FileTypeExtension on FileType {                      
+       8 +extension ImportFileTypeExtension on ImportFileType {          
+       9    String get label {
+      10      switch (this) {
+      11 -      case FileType.text:                                      
+      11 +      case ImportFileType.text:                                
+      12          return 'Text';
+      13 -      case FileType.image:                                     
+      13 +      case ImportFileType.image:                               
+      14          return 'Image';
+      15 -      case FileType.video:                                     
+      15 +      case ImportFileType.video:                               
+      16          return 'Video';
+      17      }
+      18    }
+      19  
+      20    IconData get icon {
+      21      switch (this) {
+      22 -      case FileType.text:                                      
+      22 +      case ImportFileType.text:                                
+      23          return Icons.description;
+      24 -      case FileType.image:                                     
+      24 +      case ImportFileType.image:                               
+      25          return Icons.image;
+      26 -      case FileType.video:                                     
+      26 +      case ImportFileType.video:                               
+      27          return Icons.video_file;
+      28      }
+      29    }
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 1 line, removed 1 line
+      32  class ImportedFile {
+      33    final String name;
+      34    final String path;
+      35 -  final FileType type;                                         
+      35 +  final ImportFileType type;                                   
+      36    final String? content;
+      37  
+      38    ImportedFile({
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 1 line, removed 1 line
+      134      }
+      135    }
+      136  
+      137 -  FileType _getFileType(String extension) {                   
+      137 +  ImportFileType _getFileType(String extension) {             
+      138      final ext = extension.toLowerCase();
+      139      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) r
+           eturn FileType.image;
+      140      if (['mp4', 'mov', 'avi'].contains(ext)) return FileType.v
+           ideo;
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 3 lines, removed 3 lines
+      136  
+      137    ImportFileType _getFileType(String extension) {
+      138      final ext = extension.toLowerCase();
+      139 -    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) r
+          -eturn FileType.image;                                         
+      140 -    if (['mp4', 'mov', 'avi'].contains(ext)) return FileType.v
+          -ideo;                                                         
+      141 -    return FileType.text;                                     
+      139 +    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) r
+          +eturn ImportFileType.image;                                   
+      140 +    if (['mp4', 'mov', 'avi'].contains(ext)) return ImportFile
+          +Type.video;                                                   
+      141 +    return ImportFileType.text;                               
+      142    }
+      143  
+      144    void _removeImportedFile(int index) {
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 1 line, removed 1 line
+      83    Future<void> _importFiles() async {
+      84      try {
+      85        final result = await FilePicker.platform.pickFiles(
+      86 -        type: FileType.custom,                                 
+      86 +        type: FilePickerFileType.custom,                       
+      87          allowedExtensions: ['txt', 'md', 'json', 'jpg', 'jpeg',
+           'png', 'gif', 'webp', 'mp4', 'mov', 'avi'],
+      88          allowMultiple: true,
+      89        );
+
+● Bash(cd /home/trung/Documents/4T_task/mobile_app && flutter analyze
+      lib/widgets/affiliate/script_tool.dart 2>&1 | head -30)
+  ⎿  Analyzing script_tool.dart...
+
+       error • Undefined name 'FilePickerFileType' • lib/widgets/affiliate/
+     … +3 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 1 line, removed 1 line
+      1  import 'dart:io';
+      2  import 'package:flutter/material.dart';
+      3 -import 'package:file_picker/file_picker.dart';                  
+      3 +import 'package:file_picker/file_picker.dart' as fp;            
+      4  import '../../services/affiliate_service.dart';
+      5  
+      6  enum ImportFileType { text, image, video }
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 2 lines, removed 2 lines
+      82  
+      83    Future<void> _importFiles() async {
+      84      try {
+      85 -      final result = await FilePicker.platform.pickFiles(      
+      86 -        type: FilePickerFileType.custom,                       
+      85 +      final result = await fp.FilePicker.platform.pickFiles(   
+      86 +        type: fp.FileType.custom,                              
+      87          allowedExtensions: ['txt', 'md', 'json', 'jpg', 'jpeg',
+           'png', 'gif', 'webp', 'mp4', 'mov', 'avi'],
+      88          allowMultiple: true,
+      89        );
+
+● Bash(flutter analyze lib/widgets/affiliate/script_tool.dart 2>&1)
+  ⎿  Analyzing script_tool.dart...
+     No issues found! (ran in 1.1s)
+
+● Đã fix. Vấn đề là trùng tên FileType giữa enum custom và file_picker package.
+  Đã:
+  1. Đổi tên enum thành ImportFileType
+  2. Import file_picker với alias fp và dùng fp.FileType.custom
+
+✻ Baked for 1m 20s
+
+❯ ủa screen tạo kịch bản vẫn đâu thấy phần import file nhỉ                      
+  Read 1 file (ctrl+o to expand)
+
+● Phần import file nằm trong block else - tức là chỉ hiển thị khi đã chọn sản 
+  phẩm (dòng 219). Nếu bạn chưa chọn sản phẩm từ Scrape thì sẽ thấy dòng:
+
+  'Chọn một sản phẩm từ Scrape trước'
+
+  Cách sử dụng:
+  1. Vào Scrape → chọn sản phẩm
+  2. Quay lại Script → lúc đó mới thấy phần import file
+
+  Hoặc bạn muốn cho phép import file mà không cần chọn sản phẩm trước?
+
+✻ Churned for 32s
+
+❯ import file ở SCript luoon không cần thông qua scrape nữa, hiện tại scrape    
+tôi ẩn rồi, chưa có giải pháp nên ẩn rồi                                        
+
+● Hiểu rồi. Script cần hoạt động độc lập - không cần sản phẩm từ Scrape. Cần:
+
+  1. Frontend: Hiện import file + generate script mà không cần sản phẩm
+  2. Backend: Cho phép product_id optional
+
+  Bạn muốn tạo script từ file tham khảo + style/duration thôi, đúng không? Hay
+  cần thêm option khác để nhập thông tin sản phẩm thủ công (tên, mô tả, giá...)?
+
+● User answered Claude's questions:
+  ⎿  · Khi không có Scrape, bạn muốn cung cấp thông tin sản phẩm cho LLM bằng 
+     cách nào? → Nhập thủ công và có chổ import hình ảnh -> các ảnh này sẽ cho 
+     llm thêm thông tin, cùng là ảnh đó để đầy qua render video (sau này sẽ 
+     update render video thành chuẩn edit video render nâng cao) 
+
+● OK, hiểu rồi. Flow mới:
+  - User nhập thông tin sản phẩm thủ công (tên, mô tả, giá...)
+  - Import ảnh sản phẩm (dùng cho LLM để tạo script + sau này cho render video)
+  - Import file tham khảo (txt, md...)
+  - Generate script
+
+  Cần update cả frontend và backend.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Cần update cả backend và frontend. Bắt đầu từ backend trước.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Documents/4T_task/app/routers/affiliate.py)
+  ⎿  Added 9 lines, removed 1 line
+      78      limit: int = 10
+      79  
+      80  
+      81 +class ManualProduct(BaseModel):                                
+      82 +    name: str                                                  
+      83 +    description: Optional[str] = None                          
+      84 +    price: Optional[str] = None                                
+      85 +    image_urls: Optional[List[str]] = None  # URLs of uploaded 
+         +images                                                         
+      86 +                                                               
+      87 +                                                               
+      88  class GenerateScriptRequest(BaseModel):
+      82 -    product_id: str  # hash_id from scraper                    
+      89 +    product_id: Optional[str] = None  # hash_id from scraper (o
+         +ptional if manual_product provided)                            
+      90      style: str = "genz"
+      91      duration: str = "30s"
+      92      custom_prompt: Optional[str] = None
+      93 +    manual_product: Optional[ManualProduct] = None  # For manua
+         +l entry without scrape                                         
+      94  
+      95  
+      96  class RenderVideoRequest(BaseModel):
+
+● Update(~/Documents/4T_task/app/routers/affiliate.py)
+  ⎿  Added 33 lines, removed 11 lines
+      268  @router.post("/generate-script")
+      269  async def generate_script(request: GenerateScriptRequest, user
+           _id: int = Depends(verify_jwt)):
+      270      """Generate viral review script for a product."""
+      271 -    scraper = _get_scraper()                                  
+      271 +    from app.services.affiliate.scraper import ProductData    
+      272      gen = _get_content_gen()
+      273  
+      274 -    # Find product from storage                               
+      275 -    products = scraper.list_saved_products()                  
+      274      product_data = None
+      277 -    for p in products:                                        
+      278 -        if p.get("product_id") == request.product_id or p.get(
+          -"hash_id") == request.product_id:                             
+      279 -            from app.services.affiliate.scraper import Product
+          -Data                                                          
+      280 -            product_data = ProductData(**{k: v for k, v in p.i
+          -tems() if k != "hash_id"})                                    
+      281 -            break                                             
+      275  
+      283 -    if not product_data:                                      
+      284 -        raise HTTPException(404, f"Product not found: {request
+          -.product_id}")                                                
+      276 +    # Case 1: Use scraped product                             
+      277 +    if request.product_id:                                    
+      278 +        scraper = _get_scraper()                              
+      279 +        products = scraper.list_saved_products()              
+      280 +        for p in products:                                    
+      281 +            if p.get("product_id") == request.product_id or p.
+          +get("hash_id") == request.product_id:                         
+      282 +                product_data = ProductData(**{k: v for k, v in
+          + p.items() if k != "hash_id"})                                
+      283 +                break                                         
+      284 +        if not product_data:                                  
+      285 +            raise HTTPException(404, f"Product not found: {req
+          +uest.product_id}")                                            
+      286  
+      287 +    # Case 2: Use manual product entry                        
+      288 +    elif request.manual_product:                              
+      289 +        mp = request.manual_product                           
+      290 +        product_data = ProductData(                           
+      291 +            name=mp.name,                                     
+      292 +            description=mp.description or "",                 
+      293 +            price=mp.price or "",                             
+      294 +            platform="manual",                                
+      295 +            product_id=f"manual_{uuid.uuid4().hex[:8]}",      
+      296 +            image_urls=mp.image_urls or [],                   
+      297 +            url="",                                           
+      298 +            rating=0.0,                                       
+      299 +            sold=0,                                           
+      300 +            original_price=None,                              
+      301 +            discount=None,                                    
+      302 +        )                                                     
+      303 +    else:                                                     
+      304 +        raise HTTPException(400, "Either product_id or manual_
+          +product is required")                                         
+      305 +                                                              
+      306      result = await gen.generate_script(
+      307          product=product_data,
+      308          style=request.style,
+     ...
+      318          script_content = json.dumps(result.get("script", {}), 
+           ensure_ascii=False, indent=2)
+      319          CloudFileService.create_file(
+      320              user_id,
+      301 -            f"/Affiliate/Scripts/{request.product_id}.json",  
+      321 +            f"/Affiliate/Scripts/{product_data.product_id}.jso
+          +n",                                                           
+      322              script_content
+      323          )
+      324      except Exception as e:
+      325          logger.warning(f"Could not save script to cloud: {e}")
+      326  
+      327 +    # Include image_urls in response for render step          
+      328 +    result["image_urls"] = product_data.image_urls            
+      329      return result
+      330  
+      331  
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Backend có vấn đề: ProductData.price là float nhưng manual product dùng str.
+  Cần fix.
+
+● Update(~/Documents/4T_task/app/routers/affiliate.py)
+  ⎿  Added 11 lines, removed 4 lines
+      287      # Case 2: Use manual product entry
+      288      elif request.manual_product:
+      289          mp = request.manual_product
+      290 +        # Parse price - remove currency symbols and convert to
+          + float                                                        
+      291 +        price_str = mp.price or "0"                           
+      292 +        try:                                                  
+      293 +            price_val = float(''.join(c for c in price_str if 
+          +c.isdigit() or c == '.'))                                     
+      294 +        except:                                               
+      295 +            price_val = 0.0                                   
+      296 +                                                              
+      297          product_data = ProductData(
+      298              name=mp.name,
+      299              description=mp.description or "",
+      293 -            price=mp.price or "",                             
+      300 +            price=price_val,                                  
+      301              platform="manual",
+      302              product_id=f"manual_{uuid.uuid4().hex[:8]}",
+      303              image_urls=mp.image_urls or [],
+      304              url="",
+      298 -            rating=0.0,                                       
+      299 -            sold=0,                                           
+      305 +            rating=None,                                      
+      306 +            sold_count=None,                                  
+      307              original_price=None,
+      301 -            discount=None,                                    
+      308 +            discount_percent=None,                            
+      309          )
+      310      else:
+      311          raise HTTPException(400, "Either product_id or manual_
+           product is required")
+
+● Bây giờ update frontend - ScriptTool cần:
+  1. Form nhập thông tin sản phẩm thủ công
+  2. Import ảnh sản phẩm (lưu URL để gửi lên backend)
+  3. Import file tham khảo (txt, md...)
+  4. Gọi API với manual_product thay vì product_id
+
+  Read 1 file (ctrl+o to expand)
+
+● Sẽ viết lại toàn bộ ScriptTool với form nhập thủ công và import ảnh sản phẩm.
+
+● Write(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 427 lines, removed 221 lines
+       1  import 'dart:io';
+       2  import 'package:flutter/material.dart';
+       3  import 'package:file_picker/file_picker.dart' as fp;
+       4 +import 'package:http/http.dart' as http;                       
+       5 +import 'package:path/path.dart' as p;                          
+       6  import '../../services/affiliate_service.dart';
+       7  
+       6 -enum ImportFileType { text, image, video }                     
+       7 -                                                               
+       8 -extension ImportFileTypeExtension on ImportFileType {          
+       9 -  String get label {                                           
+      10 -    switch (this) {                                            
+      11 -      case ImportFileType.text:                                
+      12 -        return 'Text';                                         
+      13 -      case ImportFileType.image:                               
+      14 -        return 'Image';                                        
+      15 -      case ImportFileType.video:                               
+      16 -        return 'Video';                                        
+      17 -    }                                                          
+      18 -  }                                                            
+      19 -                                                               
+      20 -  IconData get icon {                                          
+      21 -    switch (this) {                                            
+      22 -      case ImportFileType.text:                                
+      23 -        return Icons.description;                              
+      24 -      case ImportFileType.image:                               
+      25 -        return Icons.image;                                    
+      26 -      case ImportFileType.video:                               
+      27 -        return Icons.video_file;                               
+      28 -    }                                                          
+      29 -  }                                                            
+      30 -}                                                              
+      31 -                                                               
+      32 -class ImportedFile {                                           
+      33 -  final String name;                                           
+      34 -  final String path;                                           
+      35 -  final ImportFileType type;                                   
+      36 -  final String? content;                                       
+      37 -                                                               
+      38 -  ImportedFile({                                               
+      39 -    required this.name,                                        
+      40 -    required this.path,                                        
+      41 -    required this.type,                                        
+      42 -    this.content,                                              
+      43 -  });                                                          
+      44 -}                                                              
+      45 -                                                               
+      46 -/// Script tool panel - independent script generation.         
+       8 +/// Script tool panel - independent script generation without S
+         +crape dependency.                                              
+       9  class ScriptTool extends StatefulWidget {
+      10    final List<dynamic> products;
+      11    final String? selectedProductId;
+     ...
+       30    String _selectedStyle = 'genz';
+       31    String _selectedDuration = '30s';
+       32    bool _generating = false;
+       33 +  bool _uploadingImages = false;                              
+       34  
+       35    Map<String, dynamic>? _generatedScript;
+       36  
+       74 -  // Manual import files for LLM context                      
+       75 -  List<ImportedFile> _importedFiles = [];                     
+       37 +  // Manual product form                                      
+       38 +  final _nameController = TextEditingController();            
+       39 +  final _descController = TextEditingController();            
+       40 +  final _priceController = TextEditingController();           
+       41 +  List<ImportedFile> _productImages = [];                     
+       42 +  List<ImportedFile> _referenceFiles = [];                    
+       43  
+       44 +  bool get _hasProductInfo =>                                 
+       45 +      _nameController.text.trim().isNotEmpty;                 
+       46 +                                                              
+       47    @override
+       48    void initState() {
+       49      super.initState();
+       50      _generatedScript = widget.generatedScript;
+       51    }
+       52  
+       83 -  Future<void> _importFiles() async {                         
+       53 +  @override                                                   
+       54 +  void dispose() {                                            
+       55 +    _nameController.dispose();                                
+       56 +    _descController.dispose();                                
+       57 +    _priceController.dispose();                               
+       58 +    super.dispose();                                          
+       59 +  }                                                           
+       60 +                                                              
+       61 +  // --- Product Image Import ---                             
+       62 +  Future<void> _importProductImages() async {                 
+       63      try {
+       64        final result = await fp.FilePicker.platform.pickFiles(
+       65 +        type: fp.FileType.image,                              
+       66 +        allowMultiple: true,                                  
+       67 +      );                                                      
+       68 +                                                              
+       69 +      if (result != null && result.files.isNotEmpty) {        
+       70 +        final newImages = <ImportedFile>[];                   
+       71 +        for (final file in result.files) {                    
+       72 +          if (file.path != null) {                            
+       73 +            newImages.add(ImportedFile(                       
+       74 +              name: file.name,                                
+       75 +              path: file.path!,                               
+       76 +              type: ImportFileType.image,                     
+       77 +              content: null,                                  
+       78 +            ));                                               
+       79 +          }                                                   
+       80 +        }                                                     
+       81 +                                                              
+       82 +        setState(() {                                         
+       83 +          _productImages = [..._productImages, ...newImages]; 
+       84 +        });                                                   
+       85 +      }                                                       
+       86 +    } catch (e) {                                             
+       87 +      if (mounted) {                                          
+       88 +        ScaffoldMessenger.of(context).showSnackBar(           
+       89 +          SnackBar(content: Text('Import ảnh thất bại: $e')), 
+       90 +        );                                                    
+       91 +      }                                                       
+       92 +    }                                                         
+       93 +  }                                                           
+       94 +                                                              
+       95 +  void _removeProductImage(int index) {                       
+       96 +    setState(() {                                             
+       97 +      _productImages = List.from(_productImages)..removeAt(ind
+          +ex);                                                          
+       98 +    });                                                       
+       99 +  }                                                           
+      100 +                                                              
+      101 +  // --- Reference File Import ---                            
+      102 +  Future<void> _importReferenceFiles() async {                
+      103 +    try {                                                     
+      104 +      final result = await fp.FilePicker.platform.pickFiles(  
+      105          type: fp.FileType.custom,
+       87 -        allowedExtensions: ['txt', 'md', 'json', 'jpg', 'jpeg'
+          -, 'png', 'gif', 'webp', 'mp4', 'mov', 'avi'],                 
+      106 +        allowedExtensions: ['txt', 'md', 'json'],             
+      107          allowMultiple: true,
+      108        );
+      109  
+     ...
+      112          for (final file in result.files) {
+      113            if (file.path != null) {
+      114              final f = File(file.path!);
+       96 -            final content = await _readFileContent(f, file.ext
+          -ension ?? '');                                                
+      115 +            final content = await f.readAsString();           
+      116              newFiles.add(ImportedFile(
+      117                name: file.name,
+      118                path: file.path!,
+      100 -              type: _getFileType(file.extension ?? ''),       
+      119 +              type: ImportFileType.text,                      
+      120                content: content,
+      121              ));
+      122            }
+      123          }
+      124  
+      125          setState(() {
+      107 -          _importedFiles = [..._importedFiles, ...newFiles];  
+      126 +          _referenceFiles = [..._referenceFiles, ...newFiles];
+      127          });
+      128  
+      129          if (mounted && newFiles.isNotEmpty) {
+     ...
+      141      }
+      142    }
+      143  
+      125 -  Future<String> _readFileContent(File file, String extension)
+          - async {                                                      
+      144 +  void _removeReferenceFile(int index) {                      
+      145 +    setState(() {                                             
+      146 +      _referenceFiles = List.from(_referenceFiles)..removeAt(i
+          +ndex);                                                        
+      147 +    });                                                       
+      148 +  }                                                           
+      149 +                                                              
+      150 +  // --- Upload images to backend and get URLs ---            
+      151 +  Future<List<String>> _uploadProductImages() async {         
+      152 +    if (_productImages.isEmpty) return [];                    
+      153 +                                                              
+      154 +    setState(() => _uploadingImages = true);                  
+      155 +    final urls = <String>[];                                  
+      156 +                                                              
+      157      try {
+      127 -      final ext = extension.toLowerCase();                    
+      128 -      if (ext == 'txt' || ext == 'md' || ext == 'json') {     
+      129 -        return await file.readAsString();                     
+      158 +      for (final img in _productImages) {                     
+      159 +        final file = File(img.path);                          
+      160 +        if (await file.exists()) {                            
+      161 +          final url = await _uploadFile(file, 'image');       
+      162 +          if (url != null) urls.add(url);                     
+      163 +        }                                                     
+      164        }
+      131 -      return '[File: ${file.path}]';                          
+      132 -    } catch (_) {                                             
+      133 -      return '[Cannot read file content]';                    
+      165 +    } finally {                                               
+      166 +      setState(() => _uploadingImages = false);               
+      167      }
+      135 -  }                                                           
+      168  
+      137 -  ImportFileType _getFileType(String extension) {             
+      138 -    final ext = extension.toLowerCase();                      
+      139 -    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) r
+          -eturn ImportFileType.image;                                   
+      140 -    if (['mp4', 'mov', 'avi'].contains(ext)) return ImportFile
+          -Type.video;                                                   
+      141 -    return ImportFileType.text;                               
+      169 +    return urls;                                              
+      170    }
+      171  
+      144 -  void _removeImportedFile(int index) {                       
+      145 -    setState(() {                                             
+      146 -      _importedFiles = List.from(_importedFiles)..removeAt(ind
+          -ex);                                                          
+      147 -    });                                                       
+      172 +  Future<String?> _uploadFile(File file, String type) async { 
+      173 +    try {                                                     
+      174 +      final uri = Uri.parse('${AffiliateService.baseUrl}/affil
+          +iate/upload');                                                
+      175 +      final request = http.MultipartRequest('POST', uri);     
+      176 +                                                              
+      177 +      request.files.add(await http.MultipartFile.fromPath('fil
+          +e', file.path));                                              
+      178 +                                                              
+      179 +      final streamedResponse = await request.send();          
+      180 +      final response = await http.Response.fromStream(streamed
+          +Response);                                                    
+      181 +                                                              
+      182 +      if (response.statusCode == 200) {                       
+      183 +        final data = jsonDecode(response.body);               
+      184 +        return data['url'] as String?;                        
+      185 +      }                                                       
+      186 +    } catch (e) {                                             
+      187 +      debugPrint('Upload failed: $e');                        
+      188 +    }                                                         
+      189 +    return null;                                              
+      190    }
+      191  
+      192 +  // --- Generate Script ---                                  
+      193    Future<void> _generateScript() async {
+      151 -    if (widget.selectedProductId == null || _generating) retur
+          -n;                                                            
+      194 +    if (!_hasProductInfo || _generating) return;              
+      195 +                                                              
+      196      setState(() => _generating = true);
+      197      try {
+      154 -      // Build custom prompt from imported files              
+      198 +      // Upload product images first                          
+      199 +      List<String> imageUrls = [];                            
+      200 +      if (_productImages.isNotEmpty) {                        
+      201 +        imageUrls = await _uploadProductImages();             
+      202 +      }                                                       
+      203 +                                                              
+      204 +      // Build custom prompt from reference files             
+      205        String? customPrompt;
+      156 -      if (_importedFiles.isNotEmpty) {                        
+      206 +      if (_referenceFiles.isNotEmpty) {                       
+      207          final buffer = StringBuffer();
+      208          buffer.writeln('=== TÀI LIỆU THAM KHẢO ===');
+      159 -        for (final file in _importedFiles) {                  
+      160 -          buffer.writeln('\n[${file.type.label}: ${file.name}]
+          -');                                                           
+      209 +        for (final file in _referenceFiles) {                 
+      210 +          buffer.writeln('\n[${file.name}]');                 
+      211            if (file.content != null) {
+      212              buffer.writeln(file.content);
+      213            }
+     ...
+      216          customPrompt = buffer.toString();
+      217        }
+      218  
+      169 -      final result = await AffiliateService.generateScript(   
+      170 -        productId: widget.selectedProductId!,                 
+      219 +      final result = await AffiliateService.generateScriptManu
+          +al(                                                           
+      220 +        name: _nameController.text.trim(),                    
+      221 +        description: _descController.text.trim(),             
+      222 +        price: _priceController.text.trim(),                  
+      223          style: _selectedStyle,
+      224          duration: _selectedDuration,
+      225          customPrompt: customPrompt,
+      226 +        imageUrls: imageUrls,                                 
+      227        );
+      228 +                                                              
+      229        setState(() => _generatedScript = result);
+      230        widget.onScriptGenerated?.call(result);
+      231      } catch (e) {
+     ...
+      261          ),
+      262          const SizedBox(height: 12),
+      263  
+      210 -        if (widget.selectedProductId == null)                 
+      211 -          Expanded(                                           
+      212 -            child: Center(                                    
+      213 -              child: Text(                                    
+      214 -                'Chọn một sản phẩm từ Scrape trước',          
+      215 -                style: theme.textTheme.bodyLarge?.copyWith(col
+          -or: theme.hintColor),                                         
+      216 -              ),                                              
+      217 -            ),                                                
+      218 -          )                                                   
+      219 -        else ...[                                             
+      220 -          // Style selector                                   
+      221 -          Text('Style kịch bản', style: theme.textTheme.titleS
+          -mall),                                                        
+      222 -          const SizedBox(height: 8),                          
+      223 -          Wrap(                                               
+      224 -            spacing: 8,                                       
+      225 -            children: {                                       
+      226 -              'genz': 'GenZ 🔥',                              
+      227 -              'formal': 'Formal 📋',                          
+      228 -              'storytelling': 'Story 📖',                     
+      229 -              'comparison': 'Compare ⚖️',                     
+      230 -            }.entries.map((e) {                               
+      231 -              return ChoiceChip(                              
+      232 -                label: Text(e.value),                         
+      233 -                selected: _selectedStyle == e.key,            
+      234 -                onSelected: (_) => setState(() => _selectedSty
+          -le = e.key),                                                  
+      235 -              );                                              
+      236 -            }).toList(),                                      
+      237 -          ),                                                  
+      238 -          const SizedBox(height: 12),                         
+      264 +        Expanded(                                             
+      265 +          child: SingleChildScrollView(                       
+      266 +            child: Column(                                    
+      267 +              crossAxisAlignment: CrossAxisAlignment.start,   
+      268 +              children: [                                     
+      269 +                // --- Product Info Section ---               
+      270 +                Text('Thông tin sản phẩm', style: theme.textTh
+          +eme.titleSmall),                                              
+      271 +                const SizedBox(height: 8),                    
+      272  
+      240 -          // Duration selector                                
+      241 -          Text('Thời lượng', style: theme.textTheme.titleSmall
+          -),                                                            
+      242 -          const SizedBox(height: 8),                          
+      243 -          Wrap(                                               
+      244 -            spacing: 8,                                       
+      245 -            children: {'15s': '15 giây', '30s': '30 giây', '60
+          -s': '60 giây'}.entries.map((e) {                              
+      246 -              return ChoiceChip(                              
+      247 -                label: Text(e.value),                         
+      248 -                selected: _selectedDuration == e.key,         
+      249 -                onSelected: (_) => setState(() => _selectedDur
+          -ation = e.key),                                               
+      250 -              );                                              
+      251 -            }).toList(),                                      
+      252 -          ),                                                  
+      253 -          const SizedBox(height: 16),                         
+      273 +                TextField(                                    
+      274 +                  controller: _nameController,                
+      275 +                  decoration: const InputDecoration(          
+      276 +                    labelText: 'Tên sản phẩm *',              
+      277 +                    border: OutlineInputBorder(),             
+      278 +                    hintText: 'VD: Son môi Cherry',           
+      279 +                  ),                                          
+      280 +                  onChanged: (_) => setState(() {}),          
+      281 +                ),                                            
+      282 +                const SizedBox(height: 8),                    
+      283  
+      255 -          // Imported files section                           
+      256 -          if (_importedFiles.isNotEmpty) ...[                 
+      257 -            Row(                                              
+      258 -              children: [                                     
+      259 -                const Icon(Icons.attach_file, size: 16),      
+      260 -                const SizedBox(width: 4),                     
+      261 -                Text('Tài liệu tham khảo (${_importedFiles.len
+          -gth})', style: theme.textTheme.titleSmall),                   
+      262 -                const Spacer(),                               
+      263 -                TextButton.icon(                              
+      264 -                  onPressed: _importFiles,                    
+      265 -                  icon: const Icon(Icons.add, size: 16),      
+      266 -                  label: const Text('Thêm'),                  
+      284 +                TextField(                                    
+      285 +                  controller: _descController,                
+      286 +                  decoration: const InputDecoration(          
+      287 +                    labelText: 'Mô tả',                       
+      288 +                    border: OutlineInputBorder(),             
+      289 +                    hintText: 'VD: Son dưỡng, màu đỏ cherry', 
+      290 +                  ),                                          
+      291 +                  maxLines: 2,                                
+      292                  ),
+      268 -              ],                                              
+      269 -            ),                                                
+      270 -            const SizedBox(height: 8),                        
+      271 -            SizedBox(                                         
+      272 -              height: 80,                                     
+      273 -              child: ListView.builder(                        
+      274 -                scrollDirection: Axis.horizontal,             
+      275 -                itemCount: _importedFiles.length,             
+      276 -                itemBuilder: (context, index) {               
+      277 -                  final file = _importedFiles[index];         
+      278 -                  return Padding(                             
+      279 -                    padding: const EdgeInsets.only(right: 8), 
+      280 -                    child: Chip(                              
+      281 -                      avatar: CircleAvatar(                   
+      282 -                        backgroundColor: theme.colorScheme.pri
+          -maryContainer,                                                
+      283 -                        child: Icon(file.type.icon, size: 14),
+      284 -                      ),                                      
+      285 -                      label: SizedBox(                        
+      286 -                        width: 80,                            
+      287 -                        child: Text(                          
+      288 -                          file.name,                          
+      289 -                          overflow: TextOverflow.ellipsis,    
+      290 -                          style: const TextStyle(fontSize: 12)
+          -,                                                             
+      291 -                        ),                                    
+      292 -                      ),                                      
+      293 -                      deleteIcon: const Icon(Icons.close, size
+          -: 14),                                                        
+      294 -                      onDeleted: () => _removeImportedFile(ind
+          -ex),                                                          
+      293 +                const SizedBox(height: 8),                    
+      294 +                                                              
+      295 +                TextField(                                    
+      296 +                  controller: _priceController,               
+      297 +                  decoration: const InputDecoration(          
+      298 +                    labelText: 'Giá',                         
+      299 +                    border: OutlineInputBorder(),             
+      300 +                    hintText: 'VD: 150.000đ',                 
+      301 +                  ),                                          
+      302 +                ),                                            
+      303 +                const SizedBox(height: 12),                   
+      304 +                                                              
+      305 +                // Product Images                             
+      306 +                Row(                                          
+      307 +                  children: [                                 
+      308 +                    const Icon(Icons.image, size: 16),        
+      309 +                    const SizedBox(width: 4),                 
+      310 +                    Text('Ảnh sản phẩm (${_productImages.lengt
+          +h})',                                                         
+      311 +                        style: theme.textTheme.titleSmall),   
+      312 +                    const Spacer(),                           
+      313 +                    TextButton.icon(                          
+      314 +                      onPressed: _importProductImages,        
+      315 +                      icon: const Icon(Icons.add_photo_alterna
+          +te, size: 16),                                                
+      316 +                      label: const Text('Thêm ảnh'),          
+      317                      ),
+      296 -                  );                                          
+      297 -                },                                            
+      298 -              ),                                              
+      299 -            ),                                                
+      300 -            const SizedBox(height: 16),                       
+      301 -          ] else ...[                                         
+      302 -            OutlinedButton.icon(                              
+      303 -              onPressed: _importFiles,                        
+      304 -              icon: const Icon(Icons.upload_file),            
+      305 -              label: const Text('Import tài liệu tham khảo'), 
+      306 -            ),                                                
+      307 -            const SizedBox(height: 8),                        
+      308 -            Text(                                             
+      309 -              'Hỗ trợ: TXT, MD, JSON, Ảnh, Video',            
+      310 -              style: theme.textTheme.bodySmall?.copyWith(color
+          -: theme.hintColor),                                           
+      311 -            ),                                                
+      312 -            const SizedBox(height: 16),                       
+      313 -          ],                                                  
+      318 +                  ],                                          
+      319 +                ),                                            
+      320 +                if (_productImages.isNotEmpty) ...[           
+      321 +                  const SizedBox(height: 8),                  
+      322 +                  SizedBox(                                   
+      323 +                    height: 80,                               
+      324 +                    child: ListView.builder(                  
+      325 +                      scrollDirection: Axis.horizontal,       
+      326 +                      itemCount: _productImages.length,       
+      327 +                      itemBuilder: (context, index) {         
+      328 +                        final img = _productImages[index];    
+      329 +                        return Padding(                       
+      330 +                          padding: const EdgeInsets.only(right
+          +: 8),                                                         
+      331 +                          child: Stack(                       
+      332 +                            children: [                       
+      333 +                              ClipRRect(                      
+      334 +                                borderRadius: BorderRadius.cir
+          +cular(8),                                                     
+      335 +                                child: Image.file(            
+      336 +                                  File(img.path),             
+      337 +                                  width: 80,                  
+      338 +                                  height: 80,                 
+      339 +                                  fit: BoxFit.cover,          
+      340 +                                  errorBuilder: (_, __, ___) =
+          +> Container(                                                  
+      341 +                                    width: 80,                
+      342 +                                    height: 80,               
+      343 +                                    color: theme.colorScheme.s
+          +urfaceContainerHighest,                                       
+      344 +                                    child: const Icon(Icons.br
+          +oken_image),                                                  
+      345 +                                  ),                          
+      346 +                                ),                            
+      347 +                              ),                              
+      348 +                              Positioned(                     
+      349 +                                top: 0,                       
+      350 +                                right: 0,                     
+      351 +                                child: GestureDetector(       
+      352 +                                  onTap: () => _removeProductI
+          +mage(index),                                                  
+      353 +                                  child: Container(           
+      354 +                                    padding: const EdgeInsets.
+          +all(2),                                                       
+      355 +                                    decoration: BoxDecoration(
+      356 +                                      color: Colors.black54,  
+      357 +                                      borderRadius: BorderRadi
+          +us.circular(10),                                              
+      358 +                                    ),                        
+      359 +                                    child: const Icon(Icons.cl
+          +ose, size: 14, color: Colors.white),                          
+      360 +                                  ),                          
+      361 +                                ),                            
+      362 +                              ),                              
+      363 +                            ],                                
+      364 +                          ),                                  
+      365 +                        );                                    
+      366 +                      },                                      
+      367 +                    ),                                        
+      368 +                  ),                                          
+      369 +                ],                                            
+      370 +                const SizedBox(height: 16),                   
+      371  
+      315 -          // Generate button                                  
+      316 -          SizedBox(                                           
+      317 -            width: double.infinity,                           
+      318 -            child: ElevatedButton.icon(                       
+      319 -              onPressed: _generating ? null : _generateScript,
+      320 -              icon: _generating                               
+      321 -                  ? const SizedBox(width: 16, height: 16, chil
+          -d: CircularProgressIndicator(strokeWidth: 2))                 
+      322 -                  : const Icon(Icons.auto_awesome),           
+      323 -              label: Text(_generating ? 'Đang sinh...' : 'Gene
+          -rate Script'),                                                
+      324 -            ),                                                
+      325 -          ),                                                  
+      326 -          const SizedBox(height: 16),                         
+      372 +                // --- Style & Duration ---                   
+      373 +                Text('Style kịch bản', style: theme.textTheme.
+          +titleSmall),                                                  
+      374 +                const SizedBox(height: 8),                    
+      375 +                Wrap(                                         
+      376 +                  spacing: 8,                                 
+      377 +                  children: {                                 
+      378 +                    'genz': 'GenZ 🔥',                        
+      379 +                    'formal': 'Formal 📋',                    
+      380 +                    'storytelling': 'Story 📖',               
+      381 +                    'comparison': 'Compare ⚖️',               
+      382 +                  }.entries.map((e) {                         
+      383 +                    return ChoiceChip(                        
+      384 +                      label: Text(e.value),                   
+      385 +                      selected: _selectedStyle == e.key,      
+      386 +                      onSelected: (_) => setState(() => _selec
+          +tedStyle = e.key),                                            
+      387 +                    );                                        
+      388 +                  }).toList(),                                
+      389 +                ),                                            
+      390 +                const SizedBox(height: 12),                   
+      391  
+      328 -          // Generated script result                          
+      329 -          if (_generatedScript != null)                       
+      330 -            Expanded(                                         
+      331 -              child: Card(                                    
+      332 -                child: SingleChildScrollView(                 
+      333 -                  padding: const EdgeInsets.all(16),          
+      334 -                  child: Column(                              
+      335 -                    crossAxisAlignment: CrossAxisAlignment.sta
+          -rt,                                                           
+      336 -                    children: [                               
+      337 -                      Row(                                    
+      392 +                Text('Thời lượng', style: theme.textTheme.titl
+          +eSmall),                                                      
+      393 +                const SizedBox(height: 8),                    
+      394 +                Wrap(                                         
+      395 +                  spacing: 8,                                 
+      396 +                  children: {'15s': '15 giây', '30s': '30 giây
+          +', '60s': '60 giây'}                                          
+      397 +                      .entries                                
+      398 +                      .map((e) {                              
+      399 +                    return ChoiceChip(                        
+      400 +                      label: Text(e.value),                   
+      401 +                      selected: _selectedDuration == e.key,   
+      402 +                      onSelected: (_) => setState(() => _selec
+          +tedDuration = e.key),                                         
+      403 +                    );                                        
+      404 +                  }).toList(),                                
+      405 +                ),                                            
+      406 +                const SizedBox(height: 16),                   
+      407 +                                                              
+      408 +                // --- Reference Files ---                    
+      409 +                Row(                                          
+      410 +                  children: [                                 
+      411 +                    const Icon(Icons.attach_file, size: 16),  
+      412 +                    const SizedBox(width: 4),                 
+      413 +                    Text('Tài liệu tham khảo (${_referenceFile
+          +s.length})',                                                  
+      414 +                        style: theme.textTheme.titleSmall),   
+      415 +                    const Spacer(),                           
+      416 +                    TextButton.icon(                          
+      417 +                      onPressed: _importReferenceFiles,       
+      418 +                      icon: const Icon(Icons.add, size: 16),  
+      419 +                      label: const Text('Thêm file'),         
+      420 +                    ),                                        
+      421 +                  ],                                          
+      422 +                ),                                            
+      423 +                if (_referenceFiles.isNotEmpty) ...[          
+      424 +                  const SizedBox(height: 8),                  
+      425 +                  Wrap(                                       
+      426 +                    spacing: 8,                               
+      427 +                    runSpacing: 4,                            
+      428 +                    children: _referenceFiles.asMap().entries.
+          +map((e) {                                                     
+      429 +                      final idx = e.key;                      
+      430 +                      final file = e.value;                   
+      431 +                      return Chip(                            
+      432 +                        avatar: const Icon(Icons.description, 
+          +size: 14),                                                    
+      433 +                        label: Text(file.name, style: const Te
+          +xtStyle(fontSize: 12)),                                       
+      434 +                        deleteIcon: const Icon(Icons.close, si
+          +ze: 14),                                                      
+      435 +                        onDeleted: () => _removeReferenceFile(
+          +idx),                                                         
+      436 +                      );                                      
+      437 +                    }).toList(),                              
+      438 +                  ),                                          
+      439 +                ] else ...[                                   
+      440 +                  Text(                                       
+      441 +                    'Hỗ trợ: TXT, MD, JSON (không bắt buộc)', 
+      442 +                    style: theme.textTheme.bodySmall?.copyWith
+          +(color: theme.hintColor),                                     
+      443 +                  ),                                          
+      444 +                ],                                            
+      445 +                const SizedBox(height: 16),                   
+      446 +                                                              
+      447 +                // --- Generate Button ---                    
+      448 +                SizedBox(                                     
+      449 +                  width: double.infinity,                     
+      450 +                  child: ElevatedButton.icon(                 
+      451 +                    onPressed: (_hasProductInfo && !_generatin
+          +g && !_uploadingImages)                                       
+      452 +                        ? _generateScript                     
+      453 +                        : null,                               
+      454 +                    icon: _generating || _uploadingImages     
+      455 +                        ? const SizedBox(                     
+      456 +                            width: 16,                        
+      457 +                            height: 16,                       
+      458 +                            child: CircularProgressIndicator(s
+          +trokeWidth: 2),                                               
+      459 +                          )                                   
+      460 +                        : const Icon(Icons.auto_awesome),     
+      461 +                    label: Text(                              
+      462 +                      _uploadingImages                        
+      463 +                          ? 'Đang upload ảnh...'              
+      464 +                          : _generating                       
+      465 +                              ? 'Đang sinh...'                
+      466 +                              : 'Generate Script',            
+      467 +                    ),                                        
+      468 +                  ),                                          
+      469 +                ),                                            
+      470 +                                                              
+      471 +                // --- Generated Script Result ---            
+      472 +                if (_generatedScript != null) ...[            
+      473 +                  const SizedBox(height: 16),                 
+      474 +                  Card(                                       
+      475 +                    child: Padding(                           
+      476 +                      padding: const EdgeInsets.all(16),      
+      477 +                      child: Column(                          
+      478 +                        crossAxisAlignment: CrossAxisAlignment
+          +.start,                                                       
+      479                          children: [
+      339 -                          const Icon(Icons.smart_toy, size: 16
+          -),                                                            
+      340 -                          const SizedBox(width: 4),           
+      341 -                          Text(                               
+      342 -                            '${_generatedScript!['provider']} 
+          -(${_generatedScript!['model']})',                             
+      343 -                            style: theme.textTheme.labelSmall,
+      480 +                          Row(                                
+      481 +                            children: [                       
+      482 +                              const Icon(Icons.smart_toy, size
+          +: 16),                                                        
+      483 +                              const SizedBox(width: 4),       
+      484 +                              Text(                           
+      485 +                                '${_generatedScript!['provider
+          +']} (${_generatedScript!['model']})',                         
+      486 +                                style: theme.textTheme.labelSm
+          +all,                                                          
+      487 +                              ),                              
+      488 +                            ],                                
+      489                            ),
+      490 +                          const Divider(),                    
+      491 +                          if (_generatedScript!['script'] != n
+          +ull) ...[                                                     
+      492 +                            _buildScriptSection('🎣 Hook', _ge
+          +neratedScript!['script']['hook']),                            
+      493 +                            _buildScriptSection('📝 Nội dung',
+          + _generatedScript!['script']['body']),                        
+      494 +                            _buildScriptSection('📢 CTA', _gen
+          +eratedScript!['script']['cta']),                              
+      495 +                            const Divider(),                  
+      496 +                            _buildScriptSection('📜 Full Scrip
+          +t', _generatedScript!['script']['full_script']),              
+      497 +                            _buildScriptSection('🎬 AI Video P
+          +rompt', _generatedScript!['script']['ai_video_prompt']),      
+      498 +                            _buildScriptSection('📱 Caption', 
+          +_generatedScript!['script']['caption']),                      
+      499 +                            if (_generatedScript!['script']['h
+          +ashtags'] != null)                                            
+      500 +                              Wrap(                           
+      501 +                                spacing: 4,                   
+      502 +                                children: (_generatedScript!['
+          +script']['hashtags'] as List)                                 
+      503 +                                    .map((h) => Chip(         
+      504 +                                          label: Text(h, style
+          +: const TextStyle(fontSize: 11)),                             
+      505 +                                        ))                    
+      506 +                                    .toList(),                
+      507 +                              ),                              
+      508 +                            // Show image URLs if available fo
+          +r render step                                                 
+      509 +                            if (_generatedScript!['image_urls'
+          +] != null &&                                                  
+      510 +                                (_generatedScript!['image_urls
+          +'] as List).isNotEmpty) ...[                                  
+      511 +                              const Divider(),                
+      512 +                              Row(                            
+      513 +                                children: [                   
+      514 +                                  const Icon(Icons.image, size
+          +: 14),                                                        
+      515 +                                  const SizedBox(width: 4),   
+      516 +                                  Text(                       
+      517 +                                    'Ảnh cho Render (${(_gener
+          +atedScript!['image_urls'] as List).length})',                 
+      518 +                                    style: theme.textTheme.lab
+          +elSmall,                                                      
+      519 +                                  ),                          
+      520 +                                ],                            
+      521 +                              ),                              
+      522 +                              const SizedBox(height: 4),      
+      523 +                              Wrap(                           
+      524 +                                spacing: 4,                   
+      525 +                                children: (_generatedScript!['
+          +image_urls'] as List)                                         
+      526 +                                    .map((url) => Chip(       
+      527 +                                          label: Text(        
+      528 +                                            url.toString().spl
+          +it('/').last,                                                 
+      529 +                                            style: const TextS
+          +tyle(fontSize: 10),                                           
+      530 +                                          ),                  
+      531 +                                        ))                    
+      532 +                                    .toList(),                
+      533 +                              ),                              
+      534 +                            ],                                
+      535 +                          ] else                              
+      536 +                            Text(_generatedScript!['raw_text']
+          + ?? 'No output'),                                             
+      537                          ],
+      538                        ),
+      347 -                      const Divider(),                        
+      348 -                      if (_generatedScript!['script'] != null)
+          - ...[                                                         
+      349 -                        _buildScriptSection('🎣 Hook', _genera
+          -tedScript!['script']['hook']),                                
+      350 -                        _buildScriptSection('📝 Nội dung', _ge
+          -neratedScript!['script']['body']),                            
+      351 -                        _buildScriptSection('📢 CTA', _generat
+          -edScript!['script']['cta']),                                  
+      352 -                        const Divider(),                      
+      353 -                        _buildScriptSection('📜 Full Script', 
+          -_generatedScript!['script']['full_script']),                  
+      354 -                        _buildScriptSection('🎬 AI Video Promp
+          -t', _generatedScript!['script']['ai_video_prompt']),          
+      355 -                        _buildScriptSection('📱 Caption', _gen
+          -eratedScript!['script']['caption']),                          
+      356 -                        if (_generatedScript!['script']['hasht
+          -ags'] != null)                                                
+      357 -                          Wrap(                               
+      358 -                            spacing: 4,                       
+      359 -                            children: (_generatedScript!['scri
+          -pt']['hashtags'] as List)                                     
+      360 -                                .map((h) => Chip(label: Text(h
+          -, style: const TextStyle(fontSize: 11))))                     
+      361 -                                .toList(),                    
+      362 -                          ),                                  
+      363 -                      ] else                                  
+      364 -                        Text(_generatedScript!['raw_text'] ?? 
+          -'No output'),                                                 
+      365 -                    ],                                        
+      539 +                    ),                                        
+      540                    ),
+      367 -                ),                                            
+      368 -              ),                                              
+      541 +                ],                                            
+      542 +                const SizedBox(height: 16),                   
+      543 +              ],                                              
+      544              ),
+      370 -        ],                                                    
+      545 +          ),                                                  
+      546 +        ),                                                    
+      547        ],
+      548      );
+      549    }
+     ...
+      563      );
+      564    }
+      565  }
+      566 +                                                              
+      567 +// --- Helper classes ---                                     
+      568 +enum ImportFileType { text, image, video }                    
+      569 +                                                              
+      570 +extension ImportFileTypeExtension on ImportFileType {         
+      571 +  IconData get icon {                                         
+      572 +    switch (this) {                                           
+      573 +      case ImportFileType.text:                               
+      574 +        return Icons.description;                             
+      575 +      case ImportFileType.image:                              
+      576 +        return Icons.image;                                   
+      577 +      case ImportFileType.video:                              
+      578 +        return Icons.video_file;                              
+      579 +    }                                                         
+      580 +  }                                                           
+      581 +}                                                             
+      582 +                                                              
+      583 +class ImportedFile {                                          
+      584 +  final String name;                                          
+      585 +  final String path;                                          
+      586 +  final ImportFileType type;                                  
+      587 +  final String? content;                                      
+      588 +                                                              
+      589 +  ImportedFile({                                              
+      590 +    required this.name,                                       
+      591 +    required this.path,                                       
+      592 +    required this.type,                                       
+      593 +    this.content,                                             
+      594 +  });                                                         
+      595 +}                                                             
+
+● Giờ cần thêm method generateScriptManual vào AffiliateService.
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Update(lib/services/affiliate_service.dart)
+  ⎿  Added 2 lines
+       7  
+       8  /// Service for interacting with the Affiliate Automation backe
+          nd APIs.
+       9  class AffiliateService {
+      10 +  static String get baseUrl => ApiConfig.baseUrl;              
+      11 +                                                               
+      12    /// Get status of all LLM providers and ComfyUI.
+      13    static Future<Map<String, dynamic>> getStatus() async {
+      14      final response = await ApiService.get('/affiliate/status');
+
+● Update(lib/services/affiliate_service.dart)
+  ⎿  Added 27 lines
+      66      return ApiService.parseResponse(response);
+      67    }
+      68  
+      69 +  /// Generate script with manual product entry (no scrape need
+         +ed).                                                           
+      70 +  static Future<Map<String, dynamic>> generateScriptManual({   
+      71 +    required String name,                                      
+      72 +    String? description,                                       
+      73 +    String? price,                                             
+      74 +    String style = 'genz',                                     
+      75 +    String duration = '30s',                                   
+      76 +    String? customPrompt,                                      
+      77 +    List<String>? imageUrls,                                   
+      78 +  }) async {                                                   
+      79 +    final response = await ApiService.post(                    
+      80 +      '/affiliate/generate-script',                            
+      81 +      body: {                                                  
+      82 +        'manual_product': {                                    
+      83 +          'name': name,                                        
+      84 +          if (description != null) 'description': description, 
+      85 +          if (price != null) 'price': price,                   
+      86 +          if (imageUrls != null && imageUrls.isNotEmpty) 'image
+         +_urls': imageUrls,                                             
+      87 +        },                                                     
+      88 +        'style': style,                                        
+      89 +        'duration': duration,                                  
+      90 +        if (customPrompt != null) 'custom_prompt': customPrompt
+         +,                                                              
+      91 +      },                                                       
+      92 +    );                                                         
+      93 +    return ApiService.parseResponse(response);                 
+      94 +  }                                                            
+      95 +                                                               
+      96    /// Start a video render job (background task).
+      97    static Future<String> startRenderVideo({
+      98      required String productId,
+
+● Bash(flutter analyze lib/widgets/affiliate/script_tool.dart
+      lib/services/affiliate_service.dart 2>&1 | head -40)
+  ⎿  Analyzing 2 items...
+
+     warning • Unused import: 'package:path/path.dart' • lib/widgets/affili
+     … +10 lines (ctrl+o to expand)
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Added 1 line
+      1 +import 'dart:convert';                                          
+      2  import 'dart:io';
+      3  import 'package:flutter/material.dart';
+      4  import 'package:file_picker/file_picker.dart' as fp;
+
+● Update(lib/widgets/affiliate/script_tool.dart)
+  ⎿  Removed 1 line
+      3  import 'package:flutter/material.dart';
+      4  import 'package:file_picker/file_picker.dart' as fp;
+      5  import 'package:http/http.dart' as http;
+      6 -import 'package:path/path.dart' as p;                           
+      6  import '../../services/affiliate_service.dart';
+      7  
+      8  /// Script tool panel - independent script generation without Sc
+         rape dependency.
+
+● Bash(cd /home/trung/Documents/4T_task && python -c "from app.routers.affiliate
+       import router" 2>&1)
+  ⎿  Error: Exit code 127
+     /bin/bash: line 1: python: command not found
+
+● Bash(cd /home/trung/Documents/4T_task && python3 -c "from
+      app.routers.affiliate import router; print('OK')" 2>&1)
+  ⎿  Error: Exit code 1
+     Traceback (most recent call last):
+       File "<string>", line 1, in <module>
+       File "/home/trung/Documents/4T_task/app/routers/__init__.py", line 1, in 
+     <module>
+         from .chat import router as chat_router
+       File "/home/trung/Documents/4T_task/app/routers/chat.py", line 1, in 
+     <module>
+         from fastapi import APIRouter, Depends, HTTPException, File, 
+     UploadFile, Body, Query
+     ModuleNotFoundError: No module named 'fastapi'
+
+● Bash(flutter analyze lib/widgets/affiliate/script_tool.dart
+      lib/services/affiliate_service.dart 2>&1)
+  ⎿  Error: Exit code 1
+     Analyzing 2 items...                                            
+
+        info • Unnecessary use of multiple underscores • 
+     lib/widgets/affiliate/script_tool.dart:340:53 • unnecessary_underscores
+        info • Unnecessary use of multiple underscores • 
+     lib/widgets/affiliate/script_tool.dart:340:57 • unnecessary_underscores
+
+     2 issues found. (ran in 1.1s)
+
+● Flutter code đã OK - chỉ có warnings nhỏ. Tóm tắt những gì đã làm:
+
+  Backend (app/routers/affiliate.py):
+  - Thêm ManualProduct model với name, description, price, image_urls
+  - Update GenerateScriptRequest để product_id optional, thêm manual_product
+  - Update endpoint để handle cả 2 trường hợp: scraped product hoặc manual entry
+
+  Frontend (mobile_app/.../script_tool.dart):
+  - Form nhập thủ công: tên, mô tả, giá (không cần Scrape)
+  - Import ảnh sản phẩm (hiển thị thumbnail, có thể xóa)
+  - Import file tham khảo (txt, md, json)
+  - Upload ảnh lên backend qua /affiliate/upload
+  - Gọi generateScriptManual thay vì generateScript
+  - Response trả về image_urls để dùng cho render video sau này
+
+  Service (affiliate_service.dart):
+  - Thêm baseUrl getter
+  - Thêm generateScriptManual() method
+
+  Bạn cần restart backend server và chạy lại flutter để test.
+
+✻ Churned for 4m 25s
+
+❯ Processing 1 sentences...                                                     
+Filler warmup complete. Cached 18 items.                                        
+LLMRouter initialized with 4 active providers                                   
+LLMRouter initialized with 4 active providers                                   
+DEBUG GET /conversations: id=1, title=Khởi đầu "không buông                     
+Found assets: ['Lumina-v0.0.8-windows.zip']                                     
+ERROR POST /affiliate/generate-script - ProductData.__init__() got an           
+unexpected keyword argument 'url' - 0.97ms                                      
+Traceback (most recent call last):                                              
+  File "/home/trung/Documents/4T_task/app/main.py", line 147, in log_requests   
+    response = await call_next(request)                                         
+               ^^^^^^^^^^^^^^^^^^^^^^^^                                         
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 168, in call_next                                  
+    raise app_exc from app_exc.__cause__ or app_exc.__context__                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 144, in coro                                       
+    await self.app(scope, receive_or_disconnect, send_no_error)                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 29, in __call__                                    
+    await responder(scope, receive, send)                                       
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 130, in __call__                                   
+    await super().__call__(scope, receive, send)                                
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 46, in __call__                                    
+    await self.app(scope, receive, self.send_with_compression)                  
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/cors.py", line 85, in __call__                                    
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/exceptions.py", line 63, in __call__                              
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)    
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 53, in wrapped_app                              
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 42, in wrapped_app                              
+    await app(scope, receive, sender)                                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/middleware/asyncexitstack.py", line 18, in __call__                            
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 716, in __call__                                           
+    await self.middleware_stack(scope, receive, send)                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 736, in app                                                
+    await route.handle(scope, receive, send)                                    
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 290, in handle                                             
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 125, in app                                                  
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)      
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 53, in wrapped_app                              
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 42, in wrapped_app                              
+    await app(scope, receive, sender)                                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 111, in app                                                  
+    response = await f(request)                                                 
+               ^^^^^^^^^^^^^^^^                                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 391, in app                                                  
+    raw_response = await run_endpoint_function(                                 
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 290, in run_endpoint_function                                
+    return await dependant.call(**values)                                       
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                       
+  File "/home/trung/Documents/4T_task/app/routers/affiliate.py", line 297, in   
+generate_script                                                                 
+    product_data = ProductData(                                                 
+                   ^^^^^^^^^^^^                                                 
+TypeError: ProductData.__init__() got an unexpected keyword argument 'url'      
+ERROR:    Exception in ASGI application                                         
+Traceback (most recent call last):                                              
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/uvicorn 
+/protocols/http/httptools_impl.py", line 409, in run_asgi                       
+    result = await app(  # type: ignore[func-returns-value]                     
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                     
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/uvicorn 
+/middleware/proxy_headers.py", line 60, in __call__                             
+    return await self.app(scope, receive, send)                                 
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/applications.py", line 1134, in __call__                                       
+    await super().__call__(scope, receive, send)                                
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/applications.py", line 107, in __call__                                      
+    await self.middleware_stack(scope, receive, send)                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/errors.py", line 186, in __call__                                 
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/errors.py", line 164, in __call__                                 
+    await self.app(scope, receive, _send)                                       
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 191, in __call__                                   
+    with recv_stream, send_stream, collapse_excgroups():                        
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__               
+    self.gen.throw(value)                                                       
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_utils.py", line 85, in collapse_excgroups                                   
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 193, in __call__                                   
+    response = await self.dispatch_func(request, call_next)                     
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                     
+  File "/home/trung/Documents/4T_task/app/main.py", line 164, in log_requests   
+    raise e                                                                     
+  File "/home/trung/Documents/4T_task/app/main.py", line 147, in log_requests   
+    response = await call_next(request)                                         
+               ^^^^^^^^^^^^^^^^^^^^^^^^                                         
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 168, in call_next                                  
+    raise app_exc from app_exc.__cause__ or app_exc.__context__                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/base.py", line 144, in coro                                       
+    await self.app(scope, receive_or_disconnect, send_no_error)                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 29, in __call__                                    
+    await responder(scope, receive, send)                                       
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 130, in __call__                                   
+    await super().__call__(scope, receive, send)                                
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/gzip.py", line 46, in __call__                                    
+    await self.app(scope, receive, self.send_with_compression)                  
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/cors.py", line 85, in __call__                                    
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/middleware/exceptions.py", line 63, in __call__                              
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)    
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 53, in wrapped_app                              
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 42, in wrapped_app                              
+    await app(scope, receive, sender)                                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/middleware/asyncexitstack.py", line 18, in __call__                            
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 716, in __call__                                           
+    await self.middleware_stack(scope, receive, send)                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 736, in app                                                
+    await route.handle(scope, receive, send)                                    
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/routing.py", line 290, in handle                                             
+    await self.app(scope, receive, send)                                        
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 125, in app                                                  
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)      
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 53, in wrapped_app                              
+    raise exc                                                                   
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/starlet 
+te/_exception_handler.py", line 42, in wrapped_app                              
+    await app(scope, receive, sender)                                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 111, in app                                                  
+    response = await f(request)                                                 
+               ^^^^^^^^^^^^^^^^                                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 391, in app                                                  
+    raw_response = await run_endpoint_function(                                 
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 290, in run_endpoint_function                                
+    return await dependant.call(**values)                                       
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                       
+  File "/home/trung/Documents/4T_task/app/routers/affiliate.py", line 297, in   
+generate_script                                                                 
+    product_data = ProductData(                                                 
+                   ^^^^^^^^^^^^                                                 
+TypeError: ProductData.__init__() got an unexpected keyword argument 'url'      
+                                                                                
+
+  Read 1 file (ctrl+o to expand)
+
+● Lỗi ProductData không có field url. Cần fix:
+
+● Update(~/Documents/4T_task/app/routers/affiliate.py)
+  ⎿  Removed 1 line
+      301              platform="manual",
+      302              product_id=f"manual_{uuid.uuid4().hex[:8]}",
+      303              image_urls=mp.image_urls or [],
+      304 -            url="",                                           
+      304              rating=None,
+      305              sold_count=None,
+      306              original_price=None,
+
+● Test lại backend xem còn lỗi không.
+❯ ủa rõ ràng là 499.000vnđ mà sao sinh kịch bản nó lại còn 499d ta              
+
+● Vấn đề là khi truyền price_val = 499000.0 (float) lên cho LLM, nó hiểu thành
+  499d. Cần giữ nguyên string price để LLM nhận đúng format.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Vấn đề là parsing price: 499.000vnđ → 499000.0 → format ra 499000đ (mất dấu .
+  phân cách). Cần format lại đúng:
+
+● Update(~/Documents/4T_task/app/services/affiliate/content_generator.py)
+  ⎿  Added 4 lines, removed 1 line
+      106          if product.original_price and product.discount_percent
+           :
+      107              discount_info = f"(giảm {product.discount_percent:
+           .0f}% từ {product.original_price:,.0f}đ)"
+      108  
+      109 +        # Format price with proper thousand separator         
+      110 +        price_display = f"{product.price:,.0f}đ" if isinstance
+          +(product.price, (int, float)) else str(product.price)         
+      111 +                                                              
+      112          prompt = SCRIPT_PROMPT_TEMPLATE.format(
+      113              duration=duration_desc,
+      114              name=product.name,
+      112 -            price=product.price,                              
+      115 +            price=price_display,                              
+      116              discount_info=discount_info,
+      117              rating=product.rating or "N/A",
+      118              sold_count=product.sold_count or "N/A",
+
+● Cũng cần fix dòng 149 trong generate_caption:
+
+  Read 1 file (ctrl+o to expand)
+
+● Đã fix rồi. Bây giờ price_display sẽ ra 499.000đ thay vì 499000đ.
+
+✻ Cooked for 1m 7s
+
+❯ e/_exception_handler.py", line 42, in wrapped_app                             
+    await app(scope, receive, sender)                                           
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 111, in app                                                  
+    response = await f(request)                                                 
+               ^^^^^^^^^^^^^^^^                                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 391, in app                                                  
+    raw_response = await run_endpoint_function(                                 
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                 
+  File "/home/trung/Documents/4T_task/venv/lib/python3.12/site-packages/fastapi 
+/routing.py", line 290, in run_endpoint_function                                
+    return await dependant.call(**values)                                       
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                       
+  File "/home/trung/Documents/4T_task/app/routers/affiliate.py", line 312, in   
+generate_script                                                                 
+    result = await gen.generate_script(                                         
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^                                         
+  File                                                                          
+"/home/trung/Documents/4T_task/app/services/affiliate/content_generator.py",    
+line 112, in generate_script                                                    
+    prompt = SCRIPT_PROMPT_TEMPLATE.format(                                     
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                                     
+ValueError: Unknown format code 'f' for object of type 'str'                    
+                                                                                
+
+● Update(~/Documents/4T_task/app/services/affiliate/content_generator.py)
+  ⎿  Added 5 lines, removed 1 line
+      107              discount_info = f"(giảm {product.discount_percent:
+           .0f}% từ {product.original_price:,.0f}đ)"
+      108  
+      109          # Format price with proper thousand separator
+      110 -        price_display = f"{product.price:,.0f}đ" if isinstance
+          -(product.price, (int, float)) else str(product.price)         
+      110 +        try:                                                  
+      111 +            price_val = float(product.price) if not isinstance
+          +(product.price, (int, float)) else product.price              
+      112 +            price_display = f"{price_val:,.0f}đ"              
+      113 +        except (ValueError, TypeError):                       
+      114 +            price_display = str(product.price) if product.pric
+          +e else "N/A"                                                  
+      115  
+      116          prompt = SCRIPT_PROMPT_TEMPLATE.format(
+      117              duration=duration_desc,
+
+● Cần xem template nhận format gì:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Template đang dùng {price:,.0f}đ nhưng ta truyền string rồi. Cần fix template:
+
+● Update(~/Documents/4T_task/app/services/affiliate/content_generator.py)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Documents/4T_task/app/services/affiliate/content_generator.py)
+  ⎿  Added 1 line, removed 1 line
+      27  SCRIPT_PROMPT_TEMPLATE = """Viết kịch bản review ngắn {duration
+          } cho sản phẩm sau:
+      28  
+      29  📦 Tên: {name}
+      30 -💰 Giá: {price:,.0f}đ {discount_info}                          
+      30 +💰 Giá: {price} {discount_info}                                
+      31  ⭐ Rating: {rating}
+      32  🛒 Đã bán: {sold_count}
+      33  📝 Mô tả: {description}
+
+● Đã fix. Bây giờ template dùng {price} thay vì {price:,.0f}đ, và ta truyền
+  price_display đã có format đúng (499.000đ).
+
+✻ Worked for 45s
+
+❯ ở smart reup thêm option blur sub và đè sub của mình lên... bạn gợi ý xem làm 
+ thế nào thì chuyên nghiệp? sao để match được giây và tiếng của video so với    
+sub                                                                             
+
+● Explore(Explore smart reup implementation)
+  ⎿  Done (12 tool uses · 42.1k tokens · 1m 7s)
+  (ctrl+o to expand)
+
+● Updated plan  ⎿  /plan to preview
+
+● User answered Claude's questions:
+  ⎿  · Khi bạn nói 'đè sub của mình lên' - bạn muốn dùng subtitle từ đâu? → Cả 
+     hai đều cần
+     · Về blur subtitle có sẵn - bạn muốn blur như thế nào? → Chọn vị trí, hiện 
+     frame có sub của video lên để user chọn vùng. Lưu ý dùng Screen của reup 
+     douyin chứ không phải screeen smart reup thường. smart reup thường bị 
+     conflict có thể xóa
+
+● Explore(Explore SmartReupDouyin screen)
+  ⎿  Done (11 tool uses · 45.4k tokens · 1m 6s)
+  (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/snug-crafting-lampson.md · /plan to edit
+     Smart Reup Douyin - Subtitle Options Enhancement
+
+     Context
+
+     User wants to add subtitle handling to Smart Reup Douyin:
+     1. Blur existing hardcoded subtitles - user selects region on a video
+     frame, system blurs that area
+     2. Burn custom subtitles - two modes:
+       - Upload SRT file (pre-timed)
+       - Enter text + duration → auto-generate timing
+     3. Use the Smart Reup Douyin screen as base (regular Smart Reup may be
+     removed)
+
+     ---
+     Implementation Plan
+
+     Phase 1: Backend - Frame Extraction Endpoint
+
+     New endpoint: POST /affiliate/smart-reup/extract-frame
+
+     Purpose: Extract a single frame from uploaded video for region selection UI
+
+     Request: video_file (UploadFile) or video_url
+     Response: Base64 encoded frame image
+
+     @router.post("/smart-reup/extract-frame")
+     async def extract_frame(
+         file: Optional[UploadFile] = File(None),
+         url: Optional[str] = Form(None),
+         timestamp: Optional[float] = Form(1.0),  # seconds into video
+     ):
+         # Use ffmpeg to extract frame at given timestamp
+         # Return base64 image
+
+     FFmpeg command:
+     ffmpeg -i input.mp4 -ss 1.0 -vframes 1 -q:v 2 frame.jpg
+
+     ---
+     Phase 2: Backend - Blur Subtitle Region
+
+     New transform type: blur_region
+
+     Parameters:
+     - blur_x, blur_y - top-left corner of blur region
+     - blur_w, blur_h - width/height of blur region
+
+     FFmpeg approach - use delogo or drawbox with heavy blur:
+
+     # Option 1: boxblur with delogo-like effect
+     vf = "split=2[bg][sub];[bg]drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=
+     fill[bg];[sub]subtitles=subs.srt[sub];[bg][sub]overlay=0:0"
+
+     # Option 2: Simple blur region only (no subtitle burn)
+     vf = "boxblur=enable='between(t,0,9999)':x={x}:y={y}:w={w}:h={h}:h=20:v=20"
+
+     Actually simpler - just apply heavy boxblur to the region:
+
+     # Blur a rectangular region
+     ffmpeg -i input.mp4 -vf "split=2[bg][vid];[vid]crop={w}:{h}:{x}:{y},boxblur
+     =20[blurred];[bg][blurred]overlay={x}:{y}" output.mp4
+
+     ---
+     Phase 3: Backend - Burn Subtitles
+
+     New transform type: burn_subtitles
+
+     Parameters:
+     - subtitle_file - path to SRT file (already uploaded) OR
+     - subtitle_text - plain text to generate timing for
+     - subtitle_duration - total duration in seconds (for text mode)
+
+     FFmpeg command for SRT:
+     ffmpeg -i input.mp4 -vf
+     "subtitles=subs.srt:force_style='FontSize=18,PrimaryColour=&HFFFFFF&'"
+     output.mp4
+
+     For text auto-timing:
+     - Split text into chunks (by sentences or words)
+     - Generate SRT with equal-duration segments
+     - Default: 3-5 seconds per chunk based on total duration
+
+     ---
+     Phase 4: Backend - New API Parameters
+
+     Update SmartReupDouyinRequest and endpoint:
+
+     class SubtitleSettings(BaseModel):
+         blur_subtitles: bool = False
+         blur_region: Optional[Dict[str, int]] = None  # {"x": 0, "y": 500, "w":
+      720, "h": 80}
+         burn_subtitle: bool = False
+         subtitle_file: Optional[str] = None  # path to uploaded SRT
+         subtitle_text: Optional[str] = None  # raw text for auto-timing
+         subtitle_duration: Optional[float] = None  # seconds for auto-timing
+         subtitle_style: Optional[Dict[str, Any]] = None  # font size, color, 
+     position
+
+     ---
+     Phase 5: Frontend - Smart Reup Douyin Screen
+
+     New UI section: "Subtitle Options" (expandable, below Logo Removal)
+
+     State additions:
+     bool _enableBlurSubtitles = false;
+     Rect? _blurRegion;  // user-selected region
+     bool _enableBurnSubtitles = false;
+     File? _subtitleFile;  // uploaded SRT
+     String? _subtitleText;  // raw text for auto-timing
+     double? _subtitleDuration;  // for auto-timing mode
+
+     Blur Subtitle UI:
+     1. When user toggles "Blur subtitles":
+       - If no video selected yet: show message "Select video first"
+       - Call new endpoint to extract frame → show in dialog
+       - User draws rectangle on frame to select subtitle region
+       - Store x, y, w, h coordinates
+     2. Show selected region preview
+
+     Burn Subtitle UI:
+     1. Toggle "Add subtitles"
+     2. Radio: "Upload SRT file" / "Enter text"
+     3. SRT mode: FilePicker for .srt
+     4. Text mode: TextField for script text + NumberPicker for duration
+
+     Styling options (optional for v1):
+     - Position: top / bottom
+     - Font size: small / medium / large
+     - Color: white / yellow
+
+     ---
+     Phase 6: File Upload - SRT Support
+
+     New endpoint: POST /affiliate/upload-subtitle
+
+     @router.post("/affiliate/upload-subtitle")
+     async def upload_subtitle(
+         file: UploadFile = File(...),
+         user_id: int = Depends(verify_jwt),
+     ):
+         # Save to user storage
+         # Return file path for reference
+
+     ---
+     Files to Modify
+
+     Backend
+
+     ┌──────────────────────────────────────┬───────────────────────────────────
+     ┐
+     │                 File                 │              Changes
+     │
+     ├──────────────────────────────────────┼───────────────────────────────────
+     ┤
+     │                                      │ New extract-frame endpoint, new
+     │
+     │ app/routers/affiliate.py             │ upload-subtitle endpoint, update
+     │
+     │                                      │ smart-reup-douyin request model
+     │
+     ├──────────────────────────────────────┼───────────────────────────────────
+     ┤
+     │                                      │ Add blur_region(),
+     │
+     │ app/services/affiliate/smart_reup.py │ burn_subtitles() methods,
+     │
+     │                                      │ integrate into pipeline
+     │
+     └──────────────────────────────────────┴───────────────────────────────────
+     ┘
+
+     Frontend
+
+     File: mobile_app/lib/widgets/affiliate/smart_reup_screen.dart
+     Changes: Add Subtitle Options section with blur region selector, SRT
+     upload,
+       text input
+     ────────────────────────────────────────
+     File: mobile_app/lib/services/affiliate_service.dart
+     Changes: Add extractFrame(), uploadSubtitle() methods
+
+     ---
+     Verification
+
+     1. Blur test: Upload video with hardcoded subs → select bottom region →
+     verify subs obscured
+     2. SRT burn test: Create SRT with known timing → burn into video → verify
+     text matches timing
+     3. Auto-timing test: Enter 50-word script, 30s duration → verify text
+     chunks reasonable
+     4. Combined test: Blur existing + burn new subtitles together
+
+     ---
+     Implementation Order
+
+     1. Backend: Frame extraction endpoint
+     2. Frontend: Show video frame in blur region selector dialog
+     3. Backend: Blur region FFmpeg transform
+     4. Backend: SRT upload + burn subtitles
+     5. Frontend: Subtitle options UI (SRT upload, text input)
+     6. Integration testing
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Documents/4T_task/app/routers/affiliate.py)
+  ⎿  Added 96 lines
+      670      return {"transforms": reup.list_transforms()}
+      671  
+      672  
+      673 +@router.post("/smart-reup/extract-frame")                     
+      674 +async def extract_frame(                                      
+      675 +    file: Optional[UploadFile] = File(None),                  
+      676 +    url: Optional[str] = Form(None),                          
+      677 +    timestamp: Optional[float] = Form(1.0),                   
+      678 +    user_id: int = Depends(verify_jwt),                       
+      679 +):                                                            
+      680 +    """                                                       
+      681 +    Extract a single frame from video for subtitle region sele
+          +ction UI.                                                     
+      682 +    Returns base64-encoded JPEG image.                        
+      683 +    """                                                       
+      684 +    import base64                                             
+      685 +    import tempfile                                           
+      686 +    import os                                                 
+      687 +                                                              
+      688 +    reup = _get_reup_service()                                
+      689 +    video_path = None                                         
+      690 +                                                              
+      691 +    try:                                                      
+      692 +        # Download video from URL or use uploaded file        
+      693 +        if url:                                               
+      694 +            # Scrape video URL from Douyin/TikTok             
+      695 +            scraper = _get_scraper()                          
+      696 +            scraped = scraper.scrape_generic_video(url)       
+      697 +            if not scraped or not scraped.get("video_url"):   
+      698 +                raise HTTPException(400, "Could not extract vi
+          +deo from URL")                                                
+      699 +                                                              
+      700 +            # Download to temp file                           
+      701 +            video_url = scraped["video_url"]                  
+      702 +            video_path = await reup._download_video(video_url,
+          + f"temp_{user_id}")                                           
+      703 +                                                              
+      704 +        elif file:                                            
+      705 +            # Save uploaded file to temp                      
+      706 +            suffix = os.path.splitext(file.filename or ".mp4")
+          +[1] or ".mp4"                                                 
+      707 +            video_path = tempfile.mktemp(suffix=suffix)       
+      708 +            content = await file.read()                       
+      709 +            with open(video_path, 'wb') as f:                 
+      710 +                f.write(content)                              
+      711 +        else:                                                 
+      712 +            raise HTTPException(400, "Either url or file is re
+          +quired")                                                      
+      713 +                                                              
+      714 +        # Extract frame using FFmpeg                          
+      715 +        import asyncio                                        
+      716 +        output_path = tempfile.mktemp(suffix=".jpg")          
+      717 +                                                              
+      718 +        cmd = [                                               
+      719 +            'ffmpeg', '-y', '-ss', str(timestamp), '-i', video
+          +_path,                                                        
+      720 +            '-vframes', '1', '-q:v', '2', output_path         
+      721 +        ]                                                     
+      722 +                                                              
+      723 +        proc = await asyncio.create_subprocess_exec(          
+      724 +            *cmd,                                             
+      725 +            stdout=asyncio.subprocess.PIPE,                   
+      726 +            stderr=asyncio.subprocess.PIPE,                   
+      727 +        )                                                     
+      728 +        stdout, stderr = await proc.communicate()             
+      729 +                                                              
+      730 +        if proc.returncode != 0:                              
+      731 +            raise HTTPException(500, f"FFmpeg failed: {stderr.
+          +decode()}")                                                   
+      732 +                                                              
+      733 +        # Read and encode                                     
+      734 +        with open(output_path, 'rb') as f:                    
+      735 +            img_data = base64.b64encode(f.read()).decode()    
+      736 +                                                              
+      737 +        return {"image": f"data:image/jpeg;base64,{img_data}"}
+      738 +                                                              
+      739 +    finally:                                                  
+      740 +        # Cleanup temp files                                  
+      741 +        if video_path and os.path.exists(video_path):         
+      742 +            os.remove(video_path)                             
+      743 +        if 'output_path' in dir() and os.path.exists(output_pa
+          +th):                                                          
+      744 +            os.remove(output_path)                            
+      745 +                                                              
+      746 +                                                              
+      747 +@router.post("/affiliate/upload-subtitle")                    
+      748 +async def upload_subtitle(                                    
+      749 +    file: UploadFile = File(...),                             
+      750 +    user_id: int = Depends(verify_jwt),                       
+      751 +):                                                            
+      752 +    """Upload an SRT or ASS subtitle file."""                 
+      753 +    from app.services.cloud_file_service import CloudFileServi
+          +ce                                                            
+      754 +    import os                                                 
+      755 +                                                              
+      756 +    suffix = os.path.splitext(file.filename or ".srt")[1] or "
+          +.srt"                                                         
+      757 +    filename = f"subtitle_{user_id}_{uuid.uuid4().hex[:8]}{suf
+          +fix}"                                                         
+      758 +                                                              
+      759 +    content = await file.read()                               
+      760 +    CloudFileService.create_file(                             
+      761 +        user_id,                                              
+      762 +        f"/Affiliate/Subtitles/{filename}",                   
+      763 +        content.decode('utf-8', errors='replace')             
+      764 +    )                                                         
+      765 +                                                              
+      766 +    return {"filename": filename, "path": f"/Affiliate/Subtitl
+          +es/{filename}"}                                               
+      767 +                                                              
+      768 +                                                              
+      769  @router.get("/llm-providers")
+      770  async def list_llm_providers(user_id: int = Depends(verify_jwt
+           )):
+      771      """List all configured LLM providers and their status."""
+  Read 1 file (ctrl+o to expand)
+  ⎿  API Error: 429 
+     {"type":"error","error":{"type":"rate_limit_error","message":"you 
+     (chunvn2401s) have reached your session usage limit, upgrade for higher 
+     limits: 
+     https://ollama.com/upgrade"},"request_id":"req_efc5f40f1b502440e95aedcf"}
+
+✻ Churned for 9m 5s
+
+❯ tiêp tục                                                                      
+
+❯ Tiếp tục task                                                                 

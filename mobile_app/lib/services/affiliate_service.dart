@@ -205,6 +205,14 @@ class AffiliateService {
     Map<String, double>? cropSettings,
     String audioMode = 'strip',  // 'strip' | 'shift'
     String logoRemoval = 'none',  // 'none' | 'manual' | 'ai'
+    // Subtitle options
+    bool blurSubtitles = false,
+    Map<String, int>? blurRegion,
+    bool burnSubtitles = false,
+    String? subtitleFile,
+    String? subtitleText,
+    double? subtitleDuration,
+    Map<String, dynamic>? subtitleStyle,
   }) async {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup-douyin');
@@ -228,6 +236,24 @@ class AffiliateService {
     }
     request.fields['audio_mode'] = audioMode;
     request.fields['logo_removal'] = logoRemoval;
+    // Subtitle params
+    request.fields['blur_subtitles'] = blurSubtitles.toString();
+    if (blurRegion != null) {
+      request.fields['blur_region_json'] = jsonEncode(blurRegion);
+    }
+    request.fields['burn_subtitles'] = burnSubtitles.toString();
+    if (subtitleFile != null) {
+      request.fields['subtitle_file'] = subtitleFile;
+    }
+    if (subtitleText != null) {
+      request.fields['subtitle_text'] = subtitleText;
+    }
+    if (subtitleDuration != null) {
+      request.fields['subtitle_duration'] = subtitleDuration.toString();
+    }
+    if (subtitleStyle != null) {
+      request.fields['subtitle_style_json'] = jsonEncode(subtitleStyle);
+    }
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
@@ -237,6 +263,62 @@ class AffiliateService {
       return data['job_id'] as String;
     }
     throw Exception('Smart Reup Douyin failed: ${response.statusCode} ${response.body}');
+  }
+
+  /// Extract a frame from video for subtitle region selection.
+  /// Returns map with 'image' (base64 data URL), 'video_width', 'video_height'.
+  static Future<Map<String, dynamic>> extractFrame({File? videoFile, String? videoUrl, double timestamp = 1.0}) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup/extract-frame');
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (videoFile != null) {
+      request.files.add(await http.MultipartFile.fromPath('file', videoFile.path));
+    }
+    if (videoUrl != null) {
+      request.fields['url'] = videoUrl;
+    }
+    request.fields['timestamp'] = timestamp.toString();
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'image': data['image'] as String,
+        'video_width': data['video_width'] as int?,
+        'video_height': data['video_height'] as int?,
+      };
+    }
+    throw Exception('Extract frame failed: ${response.statusCode} ${response.body}');
+  }
+
+  /// Upload an SRT/ASS subtitle file.
+  /// Returns the filename/path of the uploaded subtitle.
+  static Future<String> uploadSubtitle(File subtitleFile) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/upload-subtitle');
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    request.files.add(await http.MultipartFile.fromPath('file', subtitleFile.path));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['path'] as String;
+    }
+    throw Exception('Upload subtitle failed: ${response.statusCode} ${response.body}');
   }
 
   /// Upload custom model image for AI Video generation.

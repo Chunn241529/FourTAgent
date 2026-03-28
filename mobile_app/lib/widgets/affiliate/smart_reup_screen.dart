@@ -1,10 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/affiliate_service.dart';
-import '../../services/cloud_file_service.dart';
 import '../../widgets/file_viewer_dialog.dart';
 
 /// Smart Reup Douyin screen - paste Douyin URL or upload local video.
@@ -48,6 +48,16 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
   double _logoCropRight = 15.0;
   double _logoCropBottom = 8.0;
   double _logoCropLeft = 0.0;
+
+  // Subtitle options
+  bool _blurSubtitles = false;
+  Rect? _blurRegion;  // user-selected region on frame
+  bool _burnSubtitles = false;
+  File? _subtitleFile;  // uploaded SRT
+  String? _subtitleText;
+  double? _subtitleDuration;
+  String _subtitlePosition = 'bottom';  // 'top' | 'bottom'
+  int _subtitleFontSize = 18;
 
   // Job state
   bool _isProcessing = false;
@@ -107,6 +117,74 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     }
   }
 
+  Future<void> _selectBlurRegion() async {
+    if (_url == null && _videoFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chọn video trước khi chọn vùng blur')),
+      );
+      return;
+    }
+
+    try {
+      String? frameData;
+      int? videoWidth;
+      int? videoHeight;
+      if (_videoFile != null) {
+        final result = await AffiliateService.extractFrame(videoFile: _videoFile);
+        frameData = result['image'] as String;
+        videoWidth = result['video_width'] as int?;
+        videoHeight = result['video_height'] as int?;
+      } else if (_url != null) {
+        final result = await AffiliateService.extractFrame(videoUrl: _url);
+        frameData = result['image'] as String;
+        videoWidth = result['video_width'] as int?;
+        videoHeight = result['video_height'] as int?;
+      }
+
+      if (frameData == null || !mounted) return;
+
+      // Show dialog with frame and region selector
+      final result = await showDialog<Rect>(
+        context: context,
+        builder: (context) => _BlurRegionSelectorDialog(
+          frameDataUrl: frameData!,
+          videoWidth: videoWidth ?? 1920,
+          videoHeight: videoHeight ?? 1080,
+        ),
+      );
+
+      if (result != null) {
+        setState(() => _blurRegion = result);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi trích xuất frame: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickSubtitleFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'ass'],
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _subtitleFile = File(result.files.single.path!);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chọn file: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _startSmartReup() async {
     if (_url == null && _videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +206,42 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     if (_pitch) transforms.add('pitch');
     if (_trimEnd) transforms.add('trim_end');
 
+    // Build blur region map (normalized values)
+    Map<String, int>? blurRegionMap;
+    if (_blurSubtitles && _blurRegion != null) {
+      blurRegionMap = {
+        'x': _blurRegion!.left.toInt(),
+        'y': _blurRegion!.top.toInt(),
+        'w': _blurRegion!.width.toInt(),
+        'h': _blurRegion!.height.toInt(),
+      };
+    }
+
+    // Subtitle style
+    Map<String, dynamic>? subStyle;
+    if (_burnSubtitles) {
+      subStyle = {
+        'font_size': _subtitleFontSize,
+        'font_color': 'white',
+        'position': _subtitlePosition,
+      };
+    }
+
+    // Upload subtitle file if provided
+    String? uploadedSubPath;
+    if (_subtitleFile != null) {
+      try {
+        uploadedSubPath = await AffiliateService.uploadSubtitle(_subtitleFile!);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Upload subtitle thất bại: $e')),
+          );
+          return;
+        }
+      }
+    }
+
     try {
       final jobId = await AffiliateService.smartReupDouyin(
         url: _url,
@@ -135,6 +249,13 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         transforms: transforms,
         audioMode: _audioMode,
         logoRemoval: _logoRemoval,
+        blurSubtitles: _blurSubtitles,
+        blurRegion: blurRegionMap,
+        burnSubtitles: _burnSubtitles,
+        subtitleFile: uploadedSubPath,
+        subtitleText: _subtitleText,
+        subtitleDuration: _subtitleDuration,
+        subtitleStyle: subStyle,
       );
 
       setState(() {
@@ -166,6 +287,10 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         return 'Đang xử lý video...';
       case 'ai_logo_removal':
         return 'Đang xóa logo bằng AI...';
+      case 'blur_subtitles':
+        return 'Đang blur vùng subtitle...';
+      case 'burn_subtitles':
+        return 'Đang đốt phụ đề...';
       case 'assemble':
         return 'Đang ghép video...';
       case 'save':
@@ -530,6 +655,157 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                     ),
                   ],
 
+                  const SizedBox(height: 16),
+                  const Divider(),
+
+                  // Subtitle Options
+                  Text('Subtitle Options', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 8),
+
+                  // Blur existing subtitles
+                  SwitchListTile(
+                    title: const Text('Blur subtitle/caption'),
+                    subtitle: const Text('Chọn vùng chứa sub trên video để blur'),
+                    value: _blurSubtitles,
+                    onChanged: (v) => setState(() {
+                      _blurSubtitles = v;
+                      if (v && _blurRegion == null) {
+                        _selectBlurRegion();
+                      }
+                    }),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+
+                  if (_blurSubtitles) ...[
+                    if (_blurRegion != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.crop, size: 14, color: theme.colorScheme.onPrimaryContainer),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Region: ${_blurRegion!.left.toInt()}, ${_blurRegion!.top.toInt()} → '
+                              '${_blurRegion!.width.toInt()}x${_blurRegion!.height.toInt()}',
+                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onPrimaryContainer),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _selectBlurRegion,
+                              child: Icon(Icons.edit, size: 14, color: theme.colorScheme.onPrimaryContainer),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: _selectBlurRegion,
+                        icon: const Icon(Icons.crop_free, size: 16),
+                        label: const Text('Chọn vùng blur'),
+                      ),
+                  ],
+
+                  const SizedBox(height: 8),
+
+                  // Burn subtitles
+                  SwitchListTile(
+                    title: const Text('Add/burn subtitles'),
+                    subtitle: const Text('Đốt phụ đề vào video (SRT hoặc text tự động chia thời gian)'),
+                    value: _burnSubtitles,
+                    onChanged: (v) => setState(() => _burnSubtitles = v),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+
+                  if (_burnSubtitles) ...[
+                    const SizedBox(height: 8),
+                    // Subtitle source: SRT file or text
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickSubtitleFile,
+                            icon: const Icon(Icons.subtitles, size: 16),
+                            label: Text(_subtitleFile != null
+                                ? _subtitleFile!.path.split('/').last
+                                : 'Upload SRT/ASS'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('hoặc', style: TextStyle(color: Colors.grey)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              hintText: 'Nhập text...',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              isDense: true,
+                            ),
+                            onChanged: (v) => _subtitleText = v,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Duration input for auto-timing
+                    if (_subtitleText != null && _subtitleText!.isNotEmpty)
+                      Row(
+                        children: [
+                          const Text('Thời lượng video (giây):', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 80,
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                hintText: '30',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (v) => _subtitleDuration = double.tryParse(v),
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                    // Subtitle style options
+                    Row(
+                      children: [
+                        const Text('Vị trí:', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Dưới'),
+                          selected: _subtitlePosition == 'bottom',
+                          onSelected: (_) => setState(() => _subtitlePosition = 'bottom'),
+                        ),
+                        const SizedBox(width: 4),
+                        ChoiceChip(
+                          label: const Text('Trên'),
+                          selected: _subtitlePosition == 'top',
+                          onSelected: (_) => setState(() => _subtitlePosition = 'top'),
+                        ),
+                        const SizedBox(width: 16),
+                        const Text('Cỡ chữ:', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 4),
+                        DropdownButton<int>(
+                          value: _subtitleFontSize,
+                          items: [14, 16, 18, 22, 24, 28].map((s) => DropdownMenuItem(value: s, child: Text('$s'))).toList(),
+                          onChanged: (v) => setState(() => _subtitleFontSize = v!),
+                          isDense: true,
+                          underline: const SizedBox(),
+                        ),
+                      ],
+                    ),
+                  ],
+
                   const SizedBox(height: 24),
 
                   // Submit button
@@ -569,6 +845,183 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
           onChanged: onChanged,
         ),
       ],
+    );
+  }
+}
+
+/// Dialog for selecting a blur region on a video frame.
+class _BlurRegionSelectorDialog extends StatefulWidget {
+  final String frameDataUrl;  // base64 data URL
+  final int videoWidth;
+  final int videoHeight;
+
+  const _BlurRegionSelectorDialog({
+    required this.frameDataUrl,
+    required this.videoWidth,
+    required this.videoHeight,
+  });
+
+  @override
+  State<_BlurRegionSelectorDialog> createState() => _BlurRegionSelectorDialogState();
+}
+
+class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
+  Rect? _selection;
+  // Actual display size of the image (computed after image loads with BoxFit.contain)
+  double _displayImgW = 0;
+  double _displayImgH = 0;
+  double _offsetX = 0;
+  double _offsetY = 0;
+
+  void _onImageRendered(Size displaySize, Offset imgOffset) {
+    if (_displayImgW != displaySize.width || _displayImgH != displaySize.height) {
+      setState(() {
+        _displayImgW = displaySize.width;
+        _displayImgH = displaySize.height;
+        _offsetX = imgOffset.dx;
+        _offsetY = imgOffset.dy;
+      });
+    }
+  }
+
+  /// Scale coordinates from display space to original video space.
+  Rect _toVideoCoords(Rect displayRect) {
+    if (_displayImgW == 0 || _displayImgH == 0) return displayRect;
+
+    // Normalize selection to image coordinates (0-1 range within displayed image)
+    final scaleX = widget.videoWidth / _displayImgW;
+    final scaleY = widget.videoHeight / _displayImgH;
+
+    // Adjust for offset (image may be centered)
+    final leftVideo = ((displayRect.left - _offsetX) * scaleX).round();
+    final topVideo = ((displayRect.top - _offsetY) * scaleY).round();
+    final widthVideo = (displayRect.width * scaleX).round();
+    final heightVideo = (displayRect.height * scaleY).round();
+
+    // Clamp to video bounds
+    return Rect.fromLTWH(
+      leftVideo.clamp(0, widget.videoWidth).toDouble(),
+      topVideo.clamp(0, widget.videoHeight).toDouble(),
+      widthVideo.clamp(0, widget.videoWidth).toDouble(),
+      heightVideo.clamp(0, widget.videoHeight).toDouble(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Chọn vùng blur subtitle'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Kéo chọn vùng chứa subtitle trên video để blur',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return GestureDetector(
+                    onPanStart: (details) {
+                      setState(() {
+                        _selection = Rect.fromPoints(
+                          details.localPosition,
+                          details.localPosition,
+                        );
+                      });
+                    },
+                    onPanUpdate: (details) {
+                      if (_selection != null) {
+                        setState(() {
+                          _selection = Rect.fromPoints(
+                            _selection!.topLeft,
+                            details.localPosition,
+                          );
+                        });
+                      }
+                    },
+                    onPanEnd: (_) {},
+                    child: Stack(
+                      children: [
+                        _buildImageWithSizeTracker(constraints),
+                        if (_selection != null && _displayImgW > 0)
+                          Positioned(
+                            left: _selection!.left,
+                            top: _selection!.top,
+                            child: Container(
+                              width: _selection!.width.abs(),
+                              height: _selection!.height.abs(),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.red, width: 2),
+                                color: Colors.red.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Hủy'),
+        ),
+        ElevatedButton(
+          onPressed: _selection != null && _displayImgW > 0
+              ? () {
+                  final rect = _selection!;
+                  final normalized = Rect.fromLTRB(
+                    rect.left < rect.right ? rect.left : rect.right,
+                    rect.top < rect.bottom ? rect.top : rect.bottom,
+                    rect.left > rect.right ? rect.left : rect.right,
+                    rect.top > rect.bottom ? rect.top : rect.bottom,
+                  );
+                  // Return scaled coordinates in video space
+                  final videoRect = _toVideoCoords(normalized);
+                  Navigator.pop(context, videoRect);
+                }
+              : null,
+          child: const Text('Xác nhận'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageWithSizeTracker(BoxConstraints constraints) {
+    return Image.memory(
+      base64Decode(widget.frameDataUrl.split(',').last),
+      fit: BoxFit.contain,
+      width: constraints.maxWidth,
+      height: constraints.maxHeight,
+      frameBuilder: (context, child, frame, loaded) {
+        if (!loaded) return child;
+        // After image loads, compute actual displayed size with BoxFit.contain
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final imgWidget = context.findDescendantRenderObjectOfType<RenderImage>();
+          if (imgWidget != null && mounted) {
+            final imgSize = imgWidget.size;
+            // Image is centered within constraints via BoxFit.contain
+            final scaleW = constraints.maxWidth > 0 ? imgSize.width / constraints.maxWidth : 0.0;
+            final scaleH = constraints.maxHeight > 0 ? imgSize.height / constraints.maxHeight : 0.0;
+            // The actual rendered image size in the container
+            final renderedW = constraints.maxWidth * scaleW.clamp(0.0, 1.0);
+            final renderedH = constraints.maxHeight * scaleH.clamp(0.0, 1.0);
+            // Offset if image is smaller than container (centered)
+            final offsetX = (constraints.maxWidth - renderedW) / 2;
+            final offsetY = (constraints.maxHeight - renderedH) / 2;
+            _onImageRendered(Size(renderedW, renderedH), Offset(offsetX, offsetY));
+          }
+        });
+        return child;
+      },
     );
   }
 }
