@@ -53,7 +53,7 @@ jobs:
           dir *.dll | findstr /i "flutter_windows.dll"
 
       - name: Upload release artifacts for diagnostics
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-release
           path: mobile_app/build/windows/x64/runner/Release/**/*
