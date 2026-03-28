@@ -19,67 +19,16 @@ jobs:
         with:
           channel: "stable"
 
-      - name: Setup MSVC and Windows SDK
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
 
-      - name: Verify Flutter Setup
-        run: |
-          flutter doctor -v
-          flutter config --enable-windows-desktop
-
-      - name: Get Flutter Dependencies
+      - name: Get dependencies
         working-directory: mobile_app
-        run: |
-          flutter clean
-          flutter pub get
+        run: flutter pub get
 
-      - name: Build Windows Release
+      - name: Build Windows
         working-directory: mobile_app
-        run: flutter build windows --release -v
-
-
-      - name: Verify release artifacts
-        shell: pwsh
-        run: |
-          $releasePath = 'mobile_app/build/windows/x64/runner/Release'
-          Write-Host "Release path: $releasePath"
-          if (-Not (Test-Path $releasePath)) {
-            Write-Error "Release directory not found: $releasePath"
-            Get-ChildItem -Recurse mobile_app/build/windows -ErrorAction SilentlyContinue | Select-Object -First 30 | Format-List
-            exit 1
-          }
-
-          Write-Host '--- Release directory contents ---'
-          Get-ChildItem -Path $releasePath -Recurse | Format-Table -Property FullName, Length -AutoSize
-
-          Write-Host 'Check main files'
-          if (-Not (Test-Path "$releasePath/Lumina.exe")) { Write-Error 'Lumina.exe missing'; exit 1 } else { Write-Host 'Lumina.exe exists' }
-
-          # icudtl.dat is installed into data/ subdirectory by CMake
-          $icudtl = Get-ChildItem -Path $releasePath -Filter icudtl.dat -Recurse -ErrorAction SilentlyContinue
-          if (-Not $icudtl) {
-            Write-Error 'icudtl.dat missing in Release directory tree'
-            Write-Host '--- Full build tree (for debugging) ---'
-            Get-ChildItem -Path 'mobile_app/build/windows' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 50 | Format-Table -Property FullName
-            exit 1
-          } else {
-            Write-Host "icudtl.dat found at: $($icudtl.FullName)"
-          }
-
-          # flutter_assets is in data/ subdirectory
-          $flutterAssets = Get-ChildItem -Path $releasePath -Filter flutter_assets -Directory -Recurse -ErrorAction SilentlyContinue
-          if (-Not $flutterAssets) { Write-Error 'flutter_assets missing'; exit 1 } else { Write-Host "flutter_assets found at: $($flutterAssets.FullName)" }
-
-          $flutterDll = Get-ChildItem -Path $releasePath -Filter 'flutter_windows.dll' -ErrorAction SilentlyContinue
-          if ($flutterDll) { Write-Host "Found $($flutterDll.FullName)" } else { Write-Warning 'flutter_windows.dll not found' }
-
-      - name: Upload release artifacts for diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: mobile_app/build/windows/x64/runner/Release/**/*
+        run: flutter build windows --release
 
       - name: Create Windows Archive
         run: |
