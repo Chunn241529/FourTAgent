@@ -46,10 +46,27 @@ jobs:
       - name: Verify release artifacts
         shell: pwsh
         run: |
-          Set-Location mobile_app/build/windows/x64/runner/Release
+          $releasePath = 'mobile_app/build/windows/x64/runner/Release'
+          Write-Host "Release path: $releasePath"
+          if (-Not (Test-Path $releasePath)) {
+            Write-Error "Release directory not found: $releasePath"
+            Get-ChildItem -Recurse mobile_app/build/windows | Select-Object -First 20 | Format-List
+            exit 1
+          }
+
+          Set-Location $releasePath
           Write-Host 'Check main files'
           if (-Not (Test-Path .\Lumina.exe)) { Write-Error 'Lumina.exe missing'; exit 1 } else { Write-Host 'Lumina.exe exists' }
-          if (-Not (Test-Path .\icudtl.dat)) { Write-Error 'icudtl.dat missing'; exit 1 } else { Write-Host 'icudtl.dat exists' }
+
+          $icudtl = Get-ChildItem -Path mobile_app/build/windows -Filter icudtl.dat -Recurse -ErrorAction SilentlyContinue
+          if (-Not $icudtl) {
+            Write-Error 'icudtl.dat missing in any build/public path'
+            Get-ChildItem -Path mobile_app/build/windows -Recurse -Filter icudtl.dat | Format-List -Property FullName
+            exit 1
+          } else {
+            Write-Host "icudtl.dat found at: $($icudtl.FullName)"
+          }
+
           if (-Not (Test-Path .\flutter_assets)) { Write-Error 'flutter_assets missing'; exit 1 } else { Write-Host 'flutter_assets exists' }
           Get-ChildItem -Filter '*.dll' | Where-Object Name -Match 'flutter_windows.dll' | ForEach-Object { Write-Host "Found $_" }
 
