@@ -579,13 +579,8 @@ class ChatService:
 
             save_db = None
             try:
-                # Reuse client
-                client = utils.get_client()
-
-                options = {
-                    "temperature": 0.2,
-                    "num_ctx": 16384,  # Expanded context to handle system prompt + large tool results
-                }
+                # Import chat LLM router for multi-provider fallback
+                from app.services.chat.chat_llm_router import chat_llm_router
 
                 max_iterations = 10
                 current_iteration = 0
@@ -610,18 +605,22 @@ class ChatService:
                     code_executions_list: List[Dict] = []
                     deep_search_updates_list: List[str] = []
 
-                    # Async chat call
-                    stream = await client.chat(
-                        model=model_name,
+                    # Async chat call with automatic fallback across providers
+                    # Router returns Ollama-compatible stream chunks
+                    # First iteration → Cloud (fast, no tools)
+                    # After tool_calls detected → Ollama (has_tool_calls=True)
+                    stream = chat_llm_router.stream_chat(
                         messages=messages,
                         tools=tools,
-                        stream=True,
-                        options=options,
+                        model=model_name,
+                        temperature=0.2,
+                        num_ctx=16384,
                         think=level_think,
+                        force_ollama=has_tool_calls,  # After first tool call, force Ollama
                     )
 
                     logger.info(
-                        f"Ollama chat stream started using model {model_name}. Tools count: {len(tools) if tools else 0}"
+                        f"Chat stream started for model {model_name}. Tools count: {len(tools) if tools else 0}"
                     )
 
                     iteration_has_tool_calls = False

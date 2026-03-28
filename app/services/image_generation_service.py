@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # ComfyUI Configuration
 COMFYUI_HOST = os.getenv("COMFYUI_HOST", "http://localhost:8188")
 COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output")
+COMFYUI_INPUT_DIR = os.getenv("COMFYUI_INPUT_DIR", COMFYUI_OUTPUT_DIR.replace("output", "input"))
 
 # Default negative prompt
 DEFAULT_NEGATIVE_PROMPT = "text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck"
@@ -110,6 +111,48 @@ class ImageGenerationService:
                         logger.info("ComfyUI VRAM cleanup requested successfully")
         except Exception as e:
             logger.warning(f"Failed to request ComfyUI VRAM cleanup: {e}")
+
+    async def cleanup_all_vram(self):
+        """Aggressively clean up ComfyUI VRAM and unload Ollama models to prevent OOM."""
+        logger.info("Starting aggressive VRAM cleanup before image generation...")
+        await self.cleanup_vram()
+        
+        # Unload Ollama models
+        try:
+            models_to_unload = ["Lumina:latest", "Lumina-small:latest", "qwen3-vl:8b-instruct"]
+            async with aiohttp.ClientSession() as session:
+                ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                for model in models_to_unload:
+                    try:
+                        payload = {"model": model, "keep_alive": 0}
+                        async with session.post(
+                            f"{ollama_host}/api/generate", json=payload, timeout=2
+                        ) as resp:
+                            if resp.status == 200:
+                                logger.info(f"Ollama model {model} unloaded to free VRAM")
+                    except Exception as e:
+                        logger.debug(f"Failed to unload {model}: {e}")
+        except Exception as e:
+            logger.warning(f"Ollama cleanup failed: {e}")
+            
+        await self.cleanup_all_ram()
+
+    async def cleanup_all_ram(self):
+        """Aggressively clean up system RAM (CPU) to prevent Out of Memory."""
+        import gc
+        import ctypes
+        
+        # 1. Force python Garbage Collection
+        collected = gc.collect()
+        logger.info(f"Python GC collected {collected} objects.")
+        
+        # 2. Release unused libc memory back to the OS
+        try:
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+            logger.info("Executed malloc_trim(0) to release RAM back to OS")
+        except Exception as e:
+            logger.debug(f"malloc_trim not supported/failed: {e}")
 
     def validate_prompt(self, prompt: str) -> bool:
         """Check if prompt contains blacklisted keywords."""
@@ -390,8 +433,8 @@ class ImageGenerationService:
         }
         return workflow, seed
 
-    async def submit_to_comfyui(self, workflow: dict) -> dict:
-        """Submit workflow and wait for result."""
+    async def submit_to_comfyui(self, workflow: dict, user_id: int = None) -> dict:
+        """Submit workflow and wait for result. Copy output to user's cloud folder."""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -412,15 +455,32 @@ class ImageGenerationService:
                             history = await hr.json()
                             if prompt_id in history:
                                 outputs = history[prompt_id].get("outputs", {})
-                                if "42" in outputs:
-                                    img = outputs["42"]["images"][0]
+                                # Dynamically find the output node containing images
+                                img = None
+                                for node_id, node_output in outputs.items():
+                                    if "images" in node_output and len(node_output["images"]) > 0:
+                                        img = node_output["images"][0]
+                                        break
+                                
+                                if img:
                                     img_path = os.path.join(
                                         COMFYUI_OUTPUT_DIR,
                                         img.get("subfolder", ""),
                                         img["filename"],
                                     )
 
-                                    with open(img_path, "rb") as f:
+                                    # Copy to user's cloud output folder
+                                    final_filename = img["filename"]
+                                    final_path = img_path
+                                    if user_id is not None:
+                                        import shutil
+                                        user_output_dir = f"/home/trung/Documents/4T_task/user_data/cloud/{user_id}/output"
+                                        os.makedirs(user_output_dir, exist_ok=True)
+                                        final_path = os.path.join(user_output_dir, final_filename)
+                                        shutil.copy2(img_path, final_path)
+                                        logger.info(f"Image copied to user cloud: {final_path}")
+
+                                    with open(final_path, "rb") as f:
                                         import base64
 
                                         encoded = base64.b64encode(f.read()).decode(
@@ -429,7 +489,8 @@ class ImageGenerationService:
 
                                     return {
                                         "success": True,
-                                        "image_path": img_path,
+                                        "image_path": final_path,
+                                        "image_filename": final_filename,
                                         "image_base64": encoded,
                                         "prompt_id": prompt_id,
                                     }
@@ -437,18 +498,21 @@ class ImageGenerationService:
         except Exception as e:
             return {"error": str(e)}
 
-    async def generate_image(self, description: str, size: str = "768x768") -> dict:
-        return await self.generate_image_direct(description, size)
+    async def generate_image(self, description: str, size: str = "768x768", user_id: int = None) -> dict:
+        return await self.generate_image_direct(description, size, user_id=user_id)
 
     async def generate_image_direct(
-        self, prompt: str, size: str = "768x768", seed: Optional[int] = None
+        self, prompt: str, size: str = "768x768", seed: Optional[int] = None, user_id: int = None
     ) -> dict:
         if not self.validate_prompt(prompt):
             return {"success": False, "error": "Restricted keywords"}
         try:
+            # Free VRAM before starting
+            await self.cleanup_all_vram()
+            
             width, height = self.parse_size(size)
             workflow, used_seed = self.build_workflow(prompt, width, height, seed=seed)
-            result = await self.submit_to_comfyui(workflow)
+            result = await self.submit_to_comfyui(workflow, user_id=user_id)
             if result.get("success"):
                 result.update(
                     {
@@ -459,6 +523,301 @@ class ImageGenerationService:
                     }
                 )
             return result
+        finally:
+            await self.cleanup_vram()
+
+    def _build_edit_workflow(self, flux_prompt: str, image1: str, image2: str, seed: Optional[int] = None) -> dict:
+        if seed is None:
+            seed = random.randint(1, 2**53)
+            
+        return {
+            "client_id": self.client_id,
+            "prompt": {
+                "76": {
+                    "inputs": {"image": image1},
+                    "class_type": "LoadImage",
+                    "_meta": {"title": "Load image 1"}
+                },
+                "81": {
+                    "inputs": {"image": image2},
+                    "class_type": "LoadImage",
+                    "_meta": {"title": "Load Image 2"}
+                },
+                "94": {
+                    "inputs": {
+                        "filename_prefix": "__lumina_edit__",
+                        "images": ["92:104", 0]
+                    },
+                    "class_type": "SaveImage",
+                    "_meta": {"title": "Save Image"}
+                },
+                "92:102": {
+                    "inputs": {"sampler_name": "euler"},
+                    "class_type": "KSamplerSelect",
+                    "_meta": {"title": "KSamplerSelect"}
+                },
+                "92:103": {
+                    "inputs": {
+                        "noise": ["92:105", 0],
+                        "guider": ["92:114", 0],
+                        "sampler": ["92:102", 0],
+                        "sigmas": ["92:115", 0],
+                        "latent_image": ["92:109", 0]
+                    },
+                    "class_type": "SamplerCustomAdvanced",
+                    "_meta": {"title": "SamplerCustomAdvanced"}
+                },
+                "92:104": {
+                    "inputs": {"samples": ["92:103", 0], "vae": ["92:107", 0]},
+                    "class_type": "VAEDecode",
+                    "_meta": {"title": "VAE Decode"}
+                },
+                "92:105": {
+                    "inputs": {"noise_seed": seed},
+                    "class_type": "RandomNoise",
+                    "_meta": {"title": "RandomNoise"}
+                },
+                "92:106": {
+                    "inputs": {
+                        "unet_name": "tinflux2Klein4B_4bFp8.safetensors",
+                        "weight_dtype": "default"
+                    },
+                    "class_type": "UNETLoader",
+                    "_meta": {"title": "Load Diffusion Model"}
+                },
+                "92:108": {
+                    "inputs": {"image": ["92:110", 0]},
+                    "class_type": "GetImageSize",
+                    "_meta": {"title": "Get Image Size"}
+                },
+                "92:111": {
+                    "inputs": {
+                        "clip_name": "qwen_3_4b.safetensors",
+                        "type": "flux2",
+                        "device": "default"
+                    },
+                    "class_type": "CLIPLoader",
+                    "_meta": {"title": "Load CLIP"}
+                },
+                "92:115": {
+                    "inputs": {
+                        "steps": 4,
+                        "width": ["92:108", 0],
+                        "height": ["92:108", 1]
+                    },
+                    "class_type": "Flux2Scheduler",
+                    "_meta": {"title": "Flux2Scheduler"}
+                },
+                "92:114": {
+                    "inputs": {
+                        "cfg": 1,
+                        "model": ["92:106", 0],
+                        "positive": ["92:122", 0],
+                        "negative": ["92:124", 0]
+                    },
+                    "class_type": "CFGGuider",
+                    "_meta": {"title": "CFGGuider"}
+                },
+                "92:109": {
+                    "inputs": {
+                        "width": ["92:108", 0],
+                        "height": ["92:108", 1],
+                        "batch_size": 1
+                    },
+                    "class_type": "EmptyFlux2LatentImage",
+                    "_meta": {"title": "Empty Flux 2 Latent"}
+                },
+                "92:110": {
+                    "inputs": {
+                        "upscale_method": "nearest-exact",
+                        "megapixels": 1,
+                        "resolution_steps": 1,
+                        "image": ["76", 0]
+                    },
+                    "class_type": "ImageScaleToTotalPixels",
+                    "_meta": {"title": "ImageScaleToTotalPixels"}
+                },
+                "92:127": {
+                    "inputs": {
+                        "pixels": ["92:85", 0],
+                        "vae": ["92:107", 0]
+                    },
+                    "class_type": "VAEEncode",
+                    "_meta": {"title": "VAE Encode"}
+                },
+                "92:85": {
+                    "inputs": {
+                        "upscale_method": "nearest-exact",
+                        "megapixels": 1,
+                        "resolution_steps": 1,
+                        "image": ["81", 0]
+                    },
+                    "class_type": "ImageScaleToTotalPixels",
+                    "_meta": {"title": "ImageScaleToTotalPixels"}
+                },
+                "92:107": {
+                    "inputs": {"vae_name": "flux2-vae.safetensors"},
+                    "class_type": "VAELoader",
+                    "_meta": {"title": "Load VAE"}
+                },
+                "92:124": {
+                    "inputs": {
+                        "conditioning": ["92:126", 0],
+                        "latent": ["92:123", 0]
+                    },
+                    "class_type": "ReferenceLatent",
+                    "_meta": {"title": "ReferenceLatent"}
+                },
+                "92:123": {
+                    "inputs": {
+                        "pixels": ["92:110", 0],
+                        "vae": ["92:107", 0]
+                    },
+                    "class_type": "VAEEncode",
+                    "_meta": {"title": "VAE Encode"}
+                },
+                "92:122": {
+                    "inputs": {
+                        "conditioning": ["92:125", 0],
+                        "latent": ["92:123", 0]
+                    },
+                    "class_type": "ReferenceLatent",
+                    "_meta": {"title": "ReferenceLatent"}
+                },
+                "92:113": {
+                    "inputs": {"text": flux_prompt, "clip": ["92:111", 0]},
+                    "class_type": "CLIPTextEncode",
+                    "_meta": {"title": "CLIP Text Encode (Positive Prompt)"}
+                },
+                "92:87": {
+                    "inputs": {"text": "", "clip": ["92:111", 0]},
+                    "class_type": "CLIPTextEncode",
+                    "_meta": {"title": "CLIP Text Encode ( Negative Prompt)"}
+                },
+                "92:125": {
+                    "inputs": {
+                        "conditioning": ["92:113", 0],
+                        "latent": ["92:127", 0]
+                    },
+                    "class_type": "ReferenceLatent",
+                    "_meta": {"title": "ReferenceLatent"}
+                },
+                "92:126": {
+                    "inputs": {
+                        "conditioning": ["92:87", 0],
+                        "latent": ["92:127", 0]
+                    },
+                    "class_type": "ReferenceLatent",
+                    "_meta": {"title": "ReferenceLatent"}
+                }
+            }
+        }
+
+    async def edit_image_direct(
+        self, prompt: str, image1_path: str, image2_path: Optional[str] = None, user_id: int = None, seed: Optional[int] = None
+    ) -> dict:
+        try:
+            # Aggressively free up VRAM before heavy operations
+            await self.cleanup_all_vram()
+            
+            import base64
+            import shutil
+            import ollama
+            
+            # Resolve paths
+            user_input_dir = f"/home/trung/Documents/4T_task/user_data/cloud/{user_id}/input" if user_id else ""
+            
+            def resolve_path(p: str) -> Optional[str]:
+                if not p:
+                    return None
+                if os.path.isabs(p) and os.path.exists(p):
+                    return p
+                if user_input_dir:
+                    user_path = os.path.join(user_input_dir, p)
+                    if os.path.exists(user_path):
+                        return user_path
+                return None
+                
+            img1_full = resolve_path(image1_path)
+            if not img1_full:
+                return {"success": False, "error": f"Image 1 not found: {image1_path}"}
+                
+            img2_full = resolve_path(image2_path) if image2_path else img1_full
+            if image2_path and not img2_full:
+                return {"success": False, "error": f"Image 2 not found: {image2_path}"}
+                
+            # Convert to base64 for vision analysis
+            # --- VISION ANALYSIS REMOVED (caused over-generation/hallucination) ---
+            
+            loop = asyncio.get_event_loop()
+            
+            # Step 1: Translate user's edit instruction to short English
+            # Flux 2 Edit workflow uses reference images — the prompt should ONLY
+            # describe the CHANGE to apply, NOT describe an entire new image.
+            lumina_system = (
+                "You are a translation assistant. The user will give you an image editing instruction "
+                "(possibly in Vietnamese). Your ONLY job is to translate it into a SHORT, DIRECT English "
+                "instruction that describes ONLY the change to make. "
+                "Do NOT add quality tags like 'masterpiece', 'best quality', '8k', etc. "
+                "Do NOT describe the full image. Do NOT add details the user did not ask for. "
+                "Just translate the edit instruction faithfully. "
+                "Examples:\n"
+                "Input: 'Đổi màu áo thành đỏ' → Output: 'change shirt color to red'\n"
+                "Input: 'Thêm kính mát' → Output: 'add sunglasses'\n"
+                "Input: 'Đổi nền thành bãi biển' → Output: 'change background to beach'\n"
+                "Input: 'Make hair blonde' → Output: 'make hair blonde'\n"
+                "Reply with ONLY the translated instruction, nothing else."
+            )
+            lumina_msg = prompt
+            
+            def run_lumina():
+                return ollama.chat(
+                    model="Lumina:latest",
+                    messages=[
+                        {"role": "system", "content": lumina_system},
+                        {"role": "user", "content": lumina_msg}
+                    ]
+                )
+            logger.info("Translating user edit instruction via Lumina...")
+            lumina_response = await loop.run_in_executor(None, run_lumina)
+            flux_prompt = lumina_response.get("message", {}).get("content", "").strip()
+            
+            # Remove any markdown code blocks wrapper from AI output
+            if flux_prompt.startswith("```"):
+                flux_prompt = "\n".join(flux_prompt.split("\n")[1:-1])
+            # Remove quotes if LLM wrapped in quotes
+            flux_prompt = flux_prompt.strip('"').strip("'")
+            logger.info(f"Final Flux2 edit prompt: {flux_prompt}")
+            
+            # Step 3: Copy to ComfyUI input directory
+            os.makedirs(COMFYUI_INPUT_DIR, exist_ok=True)
+            img1_filename = f"lumina_in_{random.randint(10000, 99999)}_{os.path.basename(img1_full)}"
+            img2_filename = img1_filename if img1_full == img2_full else f"lumina_in_{random.randint(10000, 99999)}_{os.path.basename(img2_full)}"
+            
+            shutil.copy(img1_full, os.path.join(COMFYUI_INPUT_DIR, img1_filename))
+            if img1_filename != img2_filename:
+                shutil.copy(img2_full, os.path.join(COMFYUI_INPUT_DIR, img2_filename))
+                
+            workflow = self._build_edit_workflow(flux_prompt, img1_filename, img2_filename, seed)
+            used_seed = workflow["prompt"]["92:105"]["inputs"]["noise_seed"]
+            
+            # Step 4: Run workflow
+            logger.info("Aggressively freeing VRAM after Ollama usage and before ComfyUI Flux2 generation...")
+            await self.cleanup_all_vram()
+            
+            logger.info("Submitting edit workflow to ComfyUI...")
+            result = await self.submit_to_comfyui(workflow, user_id=user_id)
+            if result.get("success"):
+                result.update({
+                    "generated_prompt": flux_prompt,
+                    "seed": used_seed,
+                    "message": f"Ảnh đã được chỉnh sửa xong! (Seed: {used_seed})"
+                })
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in edit_image_direct: {e}", exc_info=True)
+            return {"error": str(e)}
         finally:
             await self.cleanup_vram()
 

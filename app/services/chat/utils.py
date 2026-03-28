@@ -61,9 +61,10 @@ async def cleanup_vram(model_name: str):
 def generate_title_suggestion(
     context: str, model_name: str = "Lumina-small"
 ) -> Optional[str]:
-    """Generate a title for the conversation context"""
+    """Generate a title for the conversation context (with cloud fallback)"""
+    # Try Ollama first
     try:
-        print(f"DEBUG: Generating title with model {model_name}")
+        logger.info(f"Generating title with Ollama model {model_name}")
 
         system_prompt = (
             "Bạn là chuyên gia tạo tiêu đề cho cuộc hội thoại. "
@@ -86,15 +87,56 @@ def generate_title_suggestion(
 
         if "message" not in response or "content" not in response["message"]:
             logger.error(f"Invalid Ollama response format: {response}")
-            return None
+            raise Exception("Invalid Ollama response")
 
         title = response["message"]["content"].strip().strip('"')
         if not title:
             logger.warning("Ollama returned empty title")
-            return None
+            raise Exception("Empty title from Ollama")
 
         return title
 
     except Exception as e:
-        logger.error(f"Title generation failed: {e}")
-        return None
+        logger.warning(f"Title generation with Ollama failed: {e}, trying cloud fallback...")
+        return _generate_title_cloud_fallback(context)
+
+
+def _generate_title_cloud_fallback(context: str) -> Optional[str]:
+    """Fallback title generation using cloud LLM providers."""
+    import asyncio
+
+    system_prompt = (
+        "Bạn là chuyên gia tạo tiêu đề cho cuộc hội thoại. "
+        "Nhiệm vụ: Tạo tiêu đề ngắn gọn (tối đa 6 từ) tóm tắt chủ đề chính. "
+        "CHỈ TRẢ VỀ TIÊU ĐỀ, không giải thích, không dùng dấu ngoặc kép."
+    )
+    user_prompt = f"Tạo tiêu đề ngắn gọn cho cuộc trò chuyện sau:\n\n{context}"
+
+    try:
+        from app.services.chat.chat_llm_router import chat_llm_router
+
+        # Run async generate_simple in a new event loop
+        # (safe because this function is called from asyncio.to_thread)
+        loop = asyncio.new_event_loop()
+        try:
+            title = loop.run_until_complete(
+                chat_llm_router.generate_simple(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.3,
+                    max_tokens=50,
+                )
+            )
+        finally:
+            loop.close()
+
+        if title:
+            title = title.strip().strip('"')
+            logger.info(f"Title generated via cloud fallback: {title}")
+            return title
+
+    except Exception as e:
+        logger.error(f"Cloud fallback title generation also failed: {e}")
+
+    return None
+

@@ -35,31 +35,38 @@ class MacDock extends StatefulWidget {
 
 class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
   bool _isExpanded = true;
-  Offset _position = const Offset(20, 20); // Default position
-  late AnimationController _expandController;
-  late Animation<double> _expandAnimation;
-
-  // Hover state for icons
   int? _hoveredIndex;
-  final double _hoverScale = 1.3;
+  String? _tooltipLabel;
+
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _expandController = AnimationController(
+    _slideController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
-      value: 1.0,
+      duration: const Duration(milliseconds: 350),
+      value: 1.0, // start expanded
     );
-    _expandAnimation = CurvedAnimation(
-      parent: _expandController,
-      curve: Curves.easeInOutBack,
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1.2), // slide down off-screen
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    ));
+    _fadeAnimation = CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOut,
     );
   }
 
   @override
   void dispose() {
-    _expandController.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
@@ -67,173 +74,145 @@ class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
     setState(() {
       _isExpanded = !_isExpanded;
       if (_isExpanded) {
-        _expandController.forward();
+        _slideController.forward();
       } else {
-        _expandController.reverse();
+        _slideController.reverse();
       }
     });
   }
 
-  Axis _getOrientation(Size screenSize) {
-    if (_position.dx < 100 || _position.dx > screenSize.width - 100) {
-      return Axis.vertical;
-    }
-    return Axis.horizontal;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    if (!_isExpanded) {
-      return Positioned(
-        left: _position.dx,
-        top: _position.dy,
-        child: _buildCollapsedTrigger(theme),
-      );
-    }
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Tooltip floating above dock ──
+          if (_tooltipLabel != null)
+            AnimatedOpacity(
+              opacity: _tooltipLabel != null ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.12)
+                      : Colors.black.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _tooltipLabel!,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
 
-    final axis = _getOrientation(screenSize);
-    final isLeft = _position.dx < screenSize.width / 2;
-    final isTop = _position.dy < screenSize.height / 2;
+          // ── Dock bar ──
+          SlideTransition(
+            position: _slideAnimation,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: _buildDockBar(theme, isDark),
+            ),
+          ),
 
-    Alignment dockingAlignment;
-    if (axis == Axis.vertical) {
-      dockingAlignment = isLeft ? Alignment.centerLeft : Alignment.centerRight;
-    } else {
-      dockingAlignment = isTop ? Alignment.topCenter : Alignment.bottomCenter;
-    }
-
-    return Positioned.fill(
-      child: Align(
-        alignment: dockingAlignment,
-        child: _buildExpandedDock(axis, theme, screenSize),
-      ),
-    );
-  }
-
-  Widget _buildCollapsedTrigger(ThemeData theme) {
-    return Draggable(
-      feedback: Material(
-        type: MaterialType.transparency,
-        child: _buildIconContent(Icons.auto_awesome, theme, isDragging: true),
-      ),
-      childWhenDragging: const SizedBox.shrink(),
-      onDragEnd: (details) {
-        setState(() {
-          // Snap to edges
-          final screenSize = MediaQuery.of(context).size;
-          double dx = details.offset.dx;
-          double dy = details.offset.dy;
-
-          if (dx < screenSize.width / 2) {
-            dx = 10;
-          } else {
-            dx = screenSize.width - 60;
-          }
-
-          if (dy < 50) {
-            dy = 50;
-          }
-          if (dy > screenSize.height - 100) {
-            dy = screenSize.height - 100;
-          }
-
-          _position = Offset(dx, dy);
-        });
-      },
-      child: GestureDetector(
-        onTap: _toggleExpanded,
-        child: _buildIconContent(Icons.auto_awesome, theme),
-      ),
-    );
-  }
-
-  Widget _buildIconContent(IconData icon, ThemeData theme, {bool isDragging = false}) {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withAlpha(isDragging ? 150 : 255),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(20),
-            blurRadius: 10,
-            spreadRadius: 1,
-          )
+          // ── Collapsed pill trigger ──
+          if (!_isExpanded)
+            GestureDetector(
+              onTap: _toggleExpanded,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.25)
+                      : Colors.black.withOpacity(0.20),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
         ],
       ),
-      child: ClipOval(
-        child: Image.asset(
-          'assets/icon/icon.png',
-          fit: BoxFit.cover,
-        ),
-      ),
     );
   }
 
-  Widget _buildExpandedDock(Axis axis, ThemeData theme, Size screenSize) {
-    return FadeTransition(
-      opacity: _expandAnimation,
-      child: ScaleTransition(
-        scale: _expandAnimation,
+  Widget _buildDockBar(ThemeData theme, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Center(
         child: Container(
-          margin: const EdgeInsets.all(12),
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withAlpha(120), // More transparent
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(80)),
+            color: isDark
+                ? const Color(0xFF1C1C1E).withOpacity(0.85)
+                : Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.06),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(30),
-                blurRadius: 30, // Softer shadow
-                spreadRadius: 2,
-              )
+                color: Colors.black.withOpacity(isDark ? 0.5 : 0.12),
+                blurRadius: 32,
+                spreadRadius: 0,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+                blurRadius: 8,
+                spreadRadius: 0,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(18),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // Higher blur
-              child: Flex(
-                direction: axis,
+              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Collapse button
-                  _buildDockItem(
+                  // ── Main nav items ──
+                  ...widget.items.asMap().entries.map((entry) =>
+                      _buildDockIcon(entry.value, theme, isDark, entry.key)),
+
+                  // ── Divider ──
+                  _buildDivider(isDark),
+
+                  // ── Action items ──
+                  ...widget.actionItems.asMap().entries.map((entry) =>
+                      _buildDockIcon(
+                          entry.value, theme, isDark, entry.key + 100)),
+
+                  // ── Divider ──
+                  _buildDivider(isDark),
+
+                  // ── Collapse button ──
+                  _buildDockIcon(
                     DockItem(
-                      icon: Icons.close_fullscreen,
-                      label: 'Thu nhỏ',
+                      icon: Icons.keyboard_arrow_down_rounded,
+                      label: 'Thu nhỏ Dock',
                       onTap: _toggleExpanded,
                     ),
                     theme,
+                    isDark,
                     -1,
                   ),
-                  const SizedBox(width: 8, height: 8),
-                  Container(
-                    width: axis == Axis.horizontal ? 1 : 20,
-                    height: axis == Axis.horizontal ? 20 : 1,
-                    color: theme.colorScheme.outlineVariant.withAlpha(80),
-                  ),
-                  const SizedBox(width: 8, height: 8),
-                  // Main items
-                  ...widget.items.asMap().entries.map((entry) => _buildDockItem(entry.value, theme, entry.key)),
-                  const SizedBox(width: 8, height: 8),
-                  Container(
-                    width: axis == Axis.horizontal ? 1 : 20,
-                    height: axis == Axis.horizontal ? 20 : 1,
-                    color: theme.colorScheme.outlineVariant.withAlpha(80),
-                  ),
-                  const SizedBox(width: 8, height: 8),
-                  // Action items
-                  ...widget.actionItems.asMap().entries.map((entry) => _buildDockItem(entry.value, theme, entry.key + 100)),
                 ],
               ),
             ),
@@ -243,34 +222,88 @@ class _MacDockState extends State<MacDock> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildDockItem(DockItem item, ThemeData theme, int index) {
+  Widget _buildDivider(bool isDark) {
+    return Container(
+      width: 1,
+      height: 28,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: isDark
+          ? Colors.white.withOpacity(0.08)
+          : Colors.black.withOpacity(0.08),
+    );
+  }
+
+  Widget _buildDockIcon(
+      DockItem item, ThemeData theme, bool isDark, int index) {
     final bool isHovered = _hoveredIndex == index;
-    
+    final bool isSelected = item.isSelected;
+    final iconData =
+        isSelected && item.selectedIcon != null ? item.selectedIcon! : item.icon;
+
+    final Color iconColor;
+    if (isSelected) {
+      iconColor = theme.colorScheme.primary;
+    } else if (item.color != null) {
+      iconColor = item.color!;
+    } else {
+      iconColor = isDark
+          ? Colors.white.withOpacity(0.6)
+          : Colors.black.withOpacity(0.55);
+    }
+
     return MouseRegion(
-      onEnter: (_) => setState(() => _hoveredIndex = index),
-      onExit: (_) => setState(() => _hoveredIndex = null),
+      onEnter: (_) => setState(() {
+        _hoveredIndex = index;
+        _tooltipLabel = item.label;
+      }),
+      onExit: (_) => setState(() {
+        _hoveredIndex = null;
+        _tooltipLabel = null;
+      }),
       child: GestureDetector(
         onTap: item.onTap,
         child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: item.isSelected ? theme.colorScheme.primaryContainer.withAlpha(180) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 300),
-              scale: isHovered ? _hoverScale : 1.0,
-              curve: Curves.easeOutBack,
-              child: Icon(
-                item.isSelected && item.selectedIcon != null ? item.selectedIcon : item.icon,
-                color: item.isSelected
-                    ? theme.colorScheme.onPrimaryContainer
-                    : (item.color ?? theme.colorScheme.onSurface.withAlpha(200)),
-                size: 28,
-              ),
-            ),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          width: 44,
+          height: 44,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          // slight upward translation on hover
+          transform: Matrix4.translationValues(
+              0, isHovered ? -6 : 0, 0),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? theme.colorScheme.primary.withOpacity(isDark ? 0.15 : 0.10)
+                : (isHovered
+                    ? (isDark
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.black.withOpacity(0.05))
+                    : Colors.transparent),
+            borderRadius: BorderRadius.circular(12),
           ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedScale(
+                scale: isHovered ? 1.2 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: Icon(iconData, size: 22, color: iconColor),
+              ),
+              // Selection dot
+              if (isSelected)
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

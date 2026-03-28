@@ -149,7 +149,7 @@ def generate_title(
     user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a title for the conversation using Lumina:latest-S model"""
+    """Generate a title for the conversation using Lumina-small:latest model"""
     import ollama
 
     # Verify conversation ownership

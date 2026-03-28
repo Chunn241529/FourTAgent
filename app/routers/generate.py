@@ -2,13 +2,17 @@
 AI Generate Router - Stateless text generation without history/conversation
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
+import os
+import shutil
+from pathlib import Path
 
 from ollama import AsyncClient
+from app.routers.task import get_current_user
 
 router = APIRouter(prefix="/generate", tags=["generate"])
 
@@ -113,14 +117,14 @@ class ImageGenerateRequest(BaseModel):
 
 
 @router.post("/image")
-async def generate_image(request: ImageGenerateRequest):
+async def generate_image(request: ImageGenerateRequest, user_id: int = Depends(get_current_user)):
     """
     Generate an image using ComfyUI with LLM-enhanced prompts.
     Returns the generated image path and prompt info.
     """
     try:
         result = await image_generation_service.generate_image(
-            description=request.description, size=request.size or "512x512"
+            description=request.description, size=request.size or "512x512", user_id=user_id
         )
 
         if result.get("error"):
@@ -134,44 +138,107 @@ async def generate_image(request: ImageGenerateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/image/edit")
+async def edit_image(
+    prompt: str = Form(..., description="Description of the changes to make"),
+    image1: UploadFile = File(..., description="Primary image to edit"),
+    image2: Optional[UploadFile] = File(None, description="Optional second reference image"),
+    user_id: int = Depends(get_current_user)
+):
+    """
+    Edit uploaded image(s) using ComfyUI with LLM-enhanced prompts.
+    Accepts 1 or 2 images. Saves to user's cloud input directory before processing.
+    """
+    import logging
+    import uuid
+    logger = logging.getLogger(__name__)
+    
+    try:
+        cloud_dir = os.path.join(
+            "/home/trung/Documents/4T_task/user_data/cloud", 
+            str(user_id), 
+            "input"
+        )
+        os.makedirs(cloud_dir, exist_ok=True)
+        
+        def save_upload(upload: UploadFile) -> str:
+            safe_filename = os.path.basename(upload.filename)
+            base_name, ext = os.path.splitext(safe_filename)
+            unique_filename = f"{base_name}_{uuid.uuid4().hex[:8]}{ext}"
+            file_path = os.path.join(cloud_dir, unique_filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(upload.file, buffer)
+            logger.info(f"Saved uploaded image to: {file_path}")
+            return file_path
+        
+        # Save image1 (required)
+        img1_path = save_upload(image1)
+        
+        # Save image2 (optional)
+        img2_path = None
+        if image2 is not None and image2.filename:
+            img2_path = save_upload(image2)
+            
+        # Call the edit image service
+        result = await image_generation_service.edit_image_direct(
+            image1_path=img1_path,
+            image2_path=img2_path,
+            prompt=prompt,
+            user_id=user_id
+        )
+
+        if result.get("error"):
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error editing image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/image/view/{filename}")
 async def view_generated_image(filename: str):
     """
-    Serve a generated image from ComfyUI output directory.
-    This proxies the image so the client doesn't need direct access to ComfyUI.
+    Serve a generated image. Searches user cloud output dirs first, then ComfyUI output.
     """
     from fastapi.responses import FileResponse
     import os
     import logging
+    import glob
 
     logger = logging.getLogger(__name__)
 
-    # Get output directory from environment or default
-    output_dir = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output")
-    logger.info(f"[IMAGE VIEW] Requested: {filename}, output_dir: {output_dir}")
-
     # Security: prevent path traversal
     safe_filename = os.path.basename(filename)
+    
+    # 1. Search user cloud output directories first
+    cloud_base = "/home/trung/Documents/4T_task/user_data/cloud"
+    if os.path.exists(cloud_base):
+        for user_dir in os.listdir(cloud_base):
+            candidate = os.path.join(cloud_base, user_dir, "output", safe_filename)
+            if os.path.exists(candidate):
+                logger.info(f"[IMAGE VIEW] Found in user cloud: {candidate}")
+                return FileResponse(candidate, media_type=_guess_media_type(safe_filename))
+
+    # 2. Fallback to ComfyUI output directory
+    output_dir = os.getenv("COMFYUI_OUTPUT_DIR", "/home/trung/ComfyUI/output")
     image_path = os.path.join(output_dir, safe_filename)
 
-    logger.info(f"[IMAGE VIEW] Looking for: {image_path}")
+    if os.path.exists(image_path):
+        logger.info(f"[IMAGE VIEW] Found in ComfyUI output: {image_path}")
+        return FileResponse(image_path, media_type=_guess_media_type(safe_filename))
 
-    if not os.path.exists(image_path):
-        logger.error(f"[IMAGE VIEW] File not found: {image_path}")
-        # List files in output dir for debugging
-        if os.path.exists(output_dir):
-            files = os.listdir(output_dir)[:10]
-            logger.info(f"[IMAGE VIEW] Files in {output_dir}: {files}")
-        raise HTTPException(status_code=404, detail=f"Image not found: {safe_filename}")
+    logger.error(f"[IMAGE VIEW] File not found anywhere: {safe_filename}")
+    raise HTTPException(status_code=404, detail=f"Image not found: {safe_filename}")
 
-    # Determine content type
-    content_type = "image/png"
-    if safe_filename.lower().endswith(".jpg") or safe_filename.lower().endswith(
-        ".jpeg"
-    ):
-        content_type = "image/jpeg"
-    elif safe_filename.lower().endswith(".webp"):
-        content_type = "image/webp"
 
-    logger.info(f"[IMAGE VIEW] Serving: {image_path}")
-    return FileResponse(image_path, media_type=content_type)
+def _guess_media_type(filename: str) -> str:
+    lower = filename.lower()
+    if lower.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    elif lower.endswith(".webp"):
+        return "image/webp"
+    return "image/png"

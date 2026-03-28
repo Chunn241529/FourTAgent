@@ -87,9 +87,9 @@ def select_model(
     tools = tool_service.get_tools()
 
     if needs_logic:
-        return "Lumin-New", tools, "high"
+        return "Lumina:latest", tools, True
     elif needs_reasoning:
-        return "Lumin-New", tools, "medium"
+        return "Lumina:latest", tools, True
     else:
         # Check if there are any images in recent history (working memory) to enable Vision
         if conversation_id and db:

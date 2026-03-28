@@ -387,6 +387,7 @@ class ToolService:
             "cloud_delete_file": self._cloud_delete_file_wrapper,
             "cloud_create_folder": self._cloud_create_folder_wrapper,
             "generate_image": self._generate_image_sync,
+            "edit_image": self._edit_image_sync,
             "create_canvas": self._create_canvas_wrapper,
             "update_canvas": self._update_canvas_wrapper,
             "read_canvas": self._read_canvas_wrapper,
@@ -537,6 +538,7 @@ class ToolService:
         description: str = "",
         size: str = "768x768",
         seed: int = None,
+        user_id: int = None,
     ) -> str:
         """
         Synchronous wrapper for async image generation.
@@ -555,7 +557,7 @@ class ToolService:
             try:
                 result = loop.run_until_complete(
                     image_generation_service.generate_image_direct(
-                        sd_prompt, size, seed=seed
+                        sd_prompt, size, seed=seed, user_id=user_id
                     )
                 )
             finally:
@@ -564,6 +566,34 @@ class ToolService:
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error in generate_image: {e}")
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+    def _edit_image_sync(
+        self,
+        prompt: str,
+        image1_path: str,
+        image2_path: str = None,
+        user_id: int = None,
+        seed: int = None,
+    ) -> str:
+        if user_id is None:
+            return json.dumps({"error": "User ID required for image editing"}, ensure_ascii=False)
+            
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    image_generation_service.edit_image_direct(
+                        prompt, image1_path, image2_path, user_id, seed=seed
+                    )
+                )
+            finally:
+                loop.close()
+
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error in edit_image: {e}", exc_info=True)
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     def get_tools(self) -> List[Any]:
@@ -922,6 +952,35 @@ class ToolService:
             {
                 "type": "function",
                 "function": {
+                    "name": "edit_image",
+                    "description": "Chỉnh sửa ảnh (Image to Image, Inpainting, etc). Sử dụng mô hình Flux 2 qua ComfyUI. Require path to the image to edit and the specific edit request.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {
+                                "type": "string",
+                                "description": "Yêu cầu chỉnh sửa chi tiết (vd: đổi áo thành màu đỏ, thay nền). Bằng tiếng Việt hoặc Anh đều được, tool sẽ tự dùng LLM dịch sang prompt Flux2 hoàn hảo.",
+                            },
+                            "image1_path": {
+                                "type": "string",
+                                "description": "Đường dẫn thư mục nội bộ (filepath) hoặc tên file bức ảnh cũ cần được chỉnh sửa. Đây LÀ TRƯỜNG BẮT BUỘC. Bạn phải lấy tên file ảnh từ user upload context.",
+                            },
+                            "image2_path": {
+                                "type": "string",
+                                "description": "Tùy chọn: Hình tham chiếu thứ 2 (nếu có).",
+                            },
+                            "seed": {
+                                "type": "integer",
+                                "description": "Tùy chọn hạt giống để ngẫu nhiên. Mặc định hệ thống tự random.",
+                            },
+                        },
+                        "required": ["prompt", "image1_path"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "create_canvas",
                     "description": "Create a new canvas. USE ONLY when explicitly requested (e.g. 'create canvas') or for very long artifacts user wants to save.",
                     "parameters": {
@@ -1044,6 +1103,8 @@ class ToolService:
                         "cloud_create_file",
                         "cloud_delete_file",
                         "cloud_create_folder",
+                        "edit_image",
+                        "generate_image",
                     ]:
                         tool_args["user_id"] = context["user_id"]
 
@@ -1109,6 +1170,8 @@ class ToolService:
                         "cloud_create_file",
                         "cloud_delete_file",
                         "cloud_create_folder",
+                        "edit_image",
+                        "generate_image",
                     ]:
                         tool_args["user_id"] = context["user_id"]
 

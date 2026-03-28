@@ -22,8 +22,9 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
-  bool _isUserScrolling = false;
-  bool _isNearBottom = true;
+  bool _autoScrollEnabled = true; // Whether auto-scroll is active
+  bool _isProgrammaticScroll = false; // Guard against scroll listener during jumpTo
+  bool _scrollPending = false; // Debounce flag to prevent multiple scroll calls per frame
   String? _selectedTool; // Tool state: image, canvas, deep_research
   bool _sidebarCollapsed = false; // Sidebar collapse state
   
@@ -130,52 +131,60 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Scroll listener — only tracks USER scrolling, ignores programmatic jumps.
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients || _isProgrammaticScroll) return;
     
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
-    final threshold = 100.0; // Distance from bottom to consider "near bottom"
+    const threshold = 150.0;
     
-    final wasNearBottom = _isNearBottom;
-    _isNearBottom = (maxScroll - currentScroll) <= threshold;
+    final isNearBottom = (maxScroll - currentScroll) <= threshold;
     
-    // If user scrolled away from bottom, mark as user scrolling
-    if (wasNearBottom && !_isNearBottom) {
-      _isUserScrolling = true;
-    }
-    
-    // If user scrolled back to bottom, re-enable auto-scroll
-    if (!wasNearBottom && _isNearBottom) {
-      _isUserScrolling = false;
+    if (isNearBottom && !_autoScrollEnabled) {
+      // User scrolled back to bottom → re-enable auto-scroll
+      _autoScrollEnabled = true;
+    } else if (!isNearBottom && _autoScrollEnabled) {
+      // User scrolled away from bottom → disable auto-scroll
+      _autoScrollEnabled = false;
     }
   }
 
+  /// Scroll to bottom with debouncing to prevent multiple calls per frame.
+  /// During streaming: uses jumpTo for instant, jitter-free updates.
+  /// After streaming: uses animateTo for smooth animation.
   void _scrollToBottom({bool isStreaming = false}) {
-    if (!mounted) return;
-    // Only auto-scroll if user hasn't scrolled up (and isn't at the very bottom)
-    if (_isUserScrolling) return;
+    if (!mounted || !_autoScrollEnabled) return;
+    if (_scrollPending) return; // Already scheduled for this frame
+    _scrollPending = true;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        final maxScroll = _scrollController.position.maxScrollExtent;
-        final currentScroll = _scrollController.offset;
-        
-        // If we are already near the bottom (within threshold), force scroll to bottom
-        // This handles cases where size increases due to images or text wrapping
-        if ((maxScroll - currentScroll) <= 200 || isStreaming) {
-             if (isStreaming) {
-               // Jump for instant updates during streaming to avoid jitter
-               _scrollController.jumpTo(maxScroll);
-             } else {
-               // Animate for new messages
-               _scrollController.animateTo(
-                 maxScroll,
-                 duration: const Duration(milliseconds: 300),
-                 curve: Curves.easeOut,
-               );
-             }
-        }
+      _scrollPending = false;
+      if (!mounted || !_scrollController.hasClients) return;
+      if (!_autoScrollEnabled) return;
+      
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.offset;
+      
+      // Nothing to scroll if already at bottom
+      if ((maxScroll - currentScroll).abs() < 1.0) return;
+      
+      _isProgrammaticScroll = true;
+      
+      if (isStreaming) {
+        // Instant jump during streaming — no animation = no jitter
+        _scrollController.jumpTo(maxScroll);
+        _isProgrammaticScroll = false;
+      } else {
+        // Smooth animation for non-streaming updates
+        _scrollController
+            .animateTo(
+              maxScroll,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+            )
+            .then((_) => _isProgrammaticScroll = false)
+            .catchError((_) => _isProgrammaticScroll = false);
       }
     });
   }
@@ -706,25 +715,29 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildChatArea(BuildContext context, ThemeData theme) {
-    // We need to listen to specific properties for the chat area logic
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, _) {
-        // Scroll to bottom when streaming - debounced via postFrameCallback
-        // This prevents layout during build phase
-        if (chatProvider.messages.isNotEmpty) {
-           WidgetsBinding.instance.addPostFrameCallback((_) {
-             // Scroll if streaming OR if we just finished streaming (to show actions)
-             // We rely on the _scrollToBottom internal logic to not scroll if user is up
-             if (chatProvider.isStreaming) {
-                _scrollToBottom(isStreaming: true);
-             } else if (chatProvider.messages.last.isStreaming == false) {
-                 // Check if we just finished? The provider might not have a "just finished" flag easily.
-                 // But we can check if the last message is NOT streaming, and we are near bottom.
-                 // The _scrollToBottom logic already handles "near bottom".
-                 // We call it here to ensure if content expanded (actions appeared), we adjust.
-                 _scrollToBottom(isStreaming: false);
-             }
-           });
+    // Use Selector to only listen to specific state changes, not every stream chunk
+    return Selector<ChatProvider, _ChatAreaState>(
+      selector: (_, provider) => _ChatAreaState(
+        hasConversation: provider.currentConversation != null,
+        messageCount: provider.messages.length,
+        isStreaming: provider.isStreaming,
+        voiceModeEnabled: provider.voiceModeEnabled,
+        lastMessageContent: provider.messages.isNotEmpty 
+            ? provider.messages.last.content.length : 0,
+      ),
+      shouldRebuild: (prev, next) => prev != next,
+      builder: (context, state, _) {
+        final chatProvider = context.read<ChatProvider>();
+        
+        // Trigger scroll after frame — debounced by _scrollToBottom itself
+        if (state.messageCount > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (state.isStreaming) {
+              _scrollToBottom(isStreaming: true);
+            } else {
+              _scrollToBottom(isStreaming: false);
+            }
+          });
         }
         
         return PopScope(
@@ -831,9 +844,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   return ListView.builder(
                     controller: _scrollController,
                     reverse: false, // Start from top
-                    padding: EdgeInsets.only(
+                    // Use fixed generous bottom padding to avoid layout jumps when streaming toggles
+                    padding: const EdgeInsets.only(
                       top: 16, 
-                      bottom: isStreaming ? MediaQuery.of(context).size.height * 0.4 : 24, 
+                      bottom: 120, 
                       left: 24, 
                       right: 24,
                     ),
@@ -943,8 +957,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     // setState(() {
                     //   _selectedTool = null;
                     // });
-                    _isUserScrolling = false;
-                    Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
+                    _autoScrollEnabled = true;
+                    _scrollToBottom(isStreaming: false);
                   },
                   onSendWithFile: (message, file) async {
                     // Auto-create conversation if none exists
@@ -984,8 +998,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     // setState(() {
                     //   _selectedTool = null;
                     // });
-                    _isUserScrolling = false;
-                    Future.delayed(const Duration(milliseconds: 100), () => _scrollToBottom(isStreaming: false));
+                    _autoScrollEnabled = true;
+                    _scrollToBottom(isStreaming: false);
                   },
                   isLoading: chatProvider.isStreaming,
                   onStop: () => chatProvider.stopStreaming(),
@@ -1245,5 +1259,42 @@ class _MessageSnapshot {
     isStreaming, 
     isGeneratingImage, 
     generatedImages
+  );
+}
+
+/// Lightweight snapshot class for chat area Selector
+class _ChatAreaState {
+  final bool hasConversation;
+  final int messageCount;
+  final bool isStreaming;
+  final bool voiceModeEnabled;
+  final int lastMessageContent;
+
+  const _ChatAreaState({
+    required this.hasConversation,
+    required this.messageCount,
+    required this.isStreaming,
+    required this.voiceModeEnabled,
+    required this.lastMessageContent,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is _ChatAreaState &&
+        other.hasConversation == hasConversation &&
+        other.messageCount == messageCount &&
+        other.isStreaming == isStreaming &&
+        other.voiceModeEnabled == voiceModeEnabled &&
+        other.lastMessageContent == lastMessageContent;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    hasConversation,
+    messageCount,
+    isStreaming,
+    voiceModeEnabled,
+    lastMessageContent,
   );
 }

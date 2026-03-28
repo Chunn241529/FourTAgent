@@ -59,12 +59,10 @@ def get_hierarchical_memory(
     )
     logger.info(f"Conversation {conversation_id}: {message_count} total messages")
 
-    # Dynamic working memory: 20 base + 5 for every 15 messages (max 40)
-    base_working = 20
-    extra_working = (message_count // 15) * 5
-    working_memory_limit = min(base_working + extra_working, 40)
+    # Dynamic working memory: 10 fixed limit to save tokens
+    working_memory_limit = 10
 
-    # 2. Working memory (dynamic limit based on conversation length)
+    # 2. Working memory (fixed limit based on token saving plan)
     working_memory = (
         db.query(ModelChatMessage)
         .filter(ModelChatMessage.conversation_id == conversation_id)
