@@ -30,6 +30,11 @@ jobs:
         working-directory: mobile_app
         run: flutter build windows --release
 
+      - name: Copy libmpv DLLs
+        run: |
+          cp .github/workflows/libmpv-2.dll mobile_app/build/windows/x64/runner/Release/
+          ls -la mobile_app/build/windows/x64/runner/Release/*.dll
+
       - name: Create Windows Archive
         run: |
           cd mobile_app/build/windows/x64/runner/Release
