@@ -39,6 +39,25 @@ jobs:
         working-directory: mobile_app
         run: flutter build windows --release -v
 
+      - name: Build Windows Debug (for logs)
+        working-directory: mobile_app
+        run: flutter build windows --debug -v
+
+      - name: Verify release artifacts
+        run: |
+          cd mobile_app/build/windows/x64/runner/Release
+          echo "Check main files"
+          if exist Lumina.exe (echo "Lumina.exe exists") else (echo "Lumina.exe missing" & exit 1)
+          if exist icudtl.dat (echo "icudtl.dat exists") else (echo "icudtl.dat missing" & exit 1)
+          if exist flutter_assets\ (echo "flutter_assets exists") else (echo "flutter_assets missing" & exit 1)
+          dir *.dll | findstr /i "flutter_windows.dll"
+
+      - name: Upload release artifacts for diagnostics
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-release
+          path: mobile_app/build/windows/x64/runner/Release/**/*
+
       - name: Create Windows Archive
         run: |
           cd mobile_app/build/windows/x64/runner/Release
