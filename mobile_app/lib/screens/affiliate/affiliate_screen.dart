@@ -167,14 +167,14 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
               children: [
-                _buildToolCard(
-                  'scrape',
-                  Icons.search,
-                  'Scrape',
-                  'Cào sản phẩm',
-                  theme.colorScheme.primaryContainer,
-                  theme.colorScheme.onPrimaryContainer,
-                ),
+                // _buildToolCard(
+                //   'scrape',
+                //   Icons.search,
+                //   'Scrape',
+                //   'Cào sản phẩm',
+                //   theme.colorScheme.primaryContainer,
+                //   theme.colorScheme.onPrimaryContainer,
+                // ),
                 _buildToolCard(
                   'script',
                   Icons.edit_note,

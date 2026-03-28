@@ -41,11 +41,33 @@ class PlaywrightScraper:
     _pool: Dict[str, "_BrowserInstance"] = {}
     _pool_lock: asyncio.Lock = None
 
-    def __init__(self, proxy: Optional[str] = None, headless: bool = True, pool_key: str = "default"):
-        self.proxy = proxy
+    def __init__(self, 
+                 proxy: Optional[str] = None,
+                 proxies: Optional[List[str]] = None,
+                 headless: bool = True, 
+                 pool_key: str = "default",
+                 cookies_file: Optional[str] = None):
+        # Support both single proxy and proxy list
+        self.proxies = proxies or ()
+        if proxy:
+            self.proxies = [proxy] + list(self.proxies)
+        self.proxy_index = 0
+        self.proxy = proxy  # Current proxy
         self.headless = headless
         self.pool_key = pool_key
+        self.cookies_file = cookies_file or os.getenv("SHOPEE_COOKIES_FILE")
         self._page = None
+        self._shopee_api_version = "20240327"  # Update this when Shopee changes API
+        logger.info(f"[PlaywrightScraper] Initialized with {len(self.proxies)} proxies, headless={headless}")
+
+    def _rotate_proxy(self) -> Optional[str]:
+        """Get next proxy from rotation list."""
+        if not self.proxies:
+            return None
+        self.proxy = self.proxies[self.proxy_index % len(self.proxies)]
+        self.proxy_index += 1
+        logger.debug(f"[PlaywrightScraper] Rotated to proxy #{self.proxy_index}: {self.proxy[:50]}...")
+        return self.proxy
 
     @classmethod
     def _get_lock(cls) -> asyncio.Lock:
@@ -78,6 +100,9 @@ class PlaywrightScraper:
             from playwright.async_api import async_playwright
             p = await async_playwright().start()
 
+            # Use proxy from rotation if available
+            current_proxy = self._rotate_proxy() if self.proxies else self.proxy
+            
             launch_args = {
                 "headless": self.headless,
                 "args": [
@@ -86,11 +111,13 @@ class PlaywrightScraper:
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--single-process",
+                    "--disable-web-resources",  # Reduce detectability
                 ],
             }
 
-            if self.proxy:
-                launch_args["proxy"] = {"server": self.proxy}
+            if current_proxy:
+                launch_args["proxy"] = {"server": current_proxy}
+                logger.info(f"[PlaywrightScraper] Using proxy: {current_proxy[:50]}...")
 
             browser = await p.chromium.launch(**launch_args)
 
@@ -105,13 +132,64 @@ class PlaywrightScraper:
                 timezone_id="Asia/Ho_Chi_Minh",
             )
 
-            # Stealth injection
+            # Stealth injection - enhanced to avoid bot detection
             await context.add_init_script("""
+                // Hide automation flags
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-                Object.defineProperty(navigator, 'languages', { get: () => ['vi-VN', 'vi', 'en-US', 'en'] });
-                window.chrome = { runtime: {} };
                 delete navigator.__proto__.webdriver;
+
+                // Fake plugins
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+
+                // Fake languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['vi-VN', 'vi', 'en-US', 'en'],
+                });
+
+                // Fake chrome runtime
+                window.chrome = { runtime: {} };
+
+                // Override permissions to default
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+
+                // Randomize screen properties
+                Object.defineProperty(screen, 'width', { get: () => 1920 });
+                Object.defineProperty(screen, 'height', { get: () => 1080 });
+                Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
+                Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
+
+                // Add mouse move simulation capability
+                window.__mouseMoves = 0;
+                document.addEventListener('mousemove', () => {
+                    window.__mouseMoves++;
+                });
+
+                // Antibrate hook
+                window.navigator.connection = {
+                    effectiveType: '4g',
+                    downlink: 10,
+                    rtt: 50,
+                    saveData: false,
+                };
+
+                // WebGL stealth
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, arguments);
+                };
             """)
 
             class _BrowserInstance:
@@ -124,6 +202,15 @@ class PlaywrightScraper:
             self._playwright = p
             self._browser = browser
             self._context = context
+
+            # Load cookies from file if provided (for authenticated requests)
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                try:
+                    await self._load_cookies(self.cookies_file)
+                    logger.info(f"[PlaywrightScraper] Loaded cookies from {self.cookies_file}")
+                except Exception as e:
+                    logger.warning(f"[PlaywrightScraper] Failed to load cookies: {e}")
+
             logger.info(f"[PlaywrightScraper] Browser initialized for pool '{self.pool_key}'")
 
     async def close(self):
@@ -143,6 +230,95 @@ class PlaywrightScraper:
             self._pool.clear()
             logger.info("[PlaywrightScraper] Browser pool closed")
 
+    def _get_shopee_headers(self, referer: str = "https://shopee.vn/") -> Dict[str, str]:
+        """
+        Get Shopee-specific headers to bypass anti-bot detection.
+        Shopee validates these headers for API requests.
+        """
+        return {
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
+            "Referer": referer,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "X-API-Source": "pc",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Shopee-SPA-Version": self._shopee_api_version,
+        }
+
+    async def _load_cookies(self, cookies_file: str):
+        """Load cookies from a file (supports both Netscape and JSON formats)."""
+        if not os.path.exists(cookies_file):
+            return
+
+        with open(cookies_file, 'r') as f:
+            content = f.read().strip()
+
+        cookies = []
+
+        # Try JSON format first (Chrome extension export)
+        if content.startswith('['):
+            try:
+                import json as json_lib
+                cookies_list = json_lib.loads(content)
+                for c in cookies_list:
+                    raw_exp = c.get('expirationDate')
+                    expires = None
+                    if raw_exp is not None:
+                        try:
+                            expires = float(raw_exp)
+                        except (ValueError, TypeError):
+                            expires = None
+                    cookie = {
+                        'domain': c.get('domain', '.shopee.vn'),
+                        'name': c.get('name', ''),
+                        'value': c.get('value', ''),
+                        'path': c.get('path', '/'),
+                        'secure': c.get('secure', False),
+                        'expires': expires,
+                    }
+                    # Fix domain for Shopee
+                    domain = cookie['domain']
+                    if not domain.startswith('.') and domain != 'localhost':
+                        domain = '.' + domain
+                    cookie['domain'] = domain
+                    if cookie['name']:
+                        cookies.append(cookie)
+                logger.info(f"[PlaywrightScraper] Loaded {len(cookies)} cookies from JSON format")
+            except Exception as e:
+                logger.warning(f"[PlaywrightScraper] Failed to parse JSON cookies: {e}")
+
+        # Try Netscape format
+        elif content.startswith('# Netscape'):
+            try:
+                for line in content.split('\n'):
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    parts = line.split('\t')
+                    if len(parts) >= 7:
+                        cookie = {
+                            'domain': parts[0],
+                            'name': parts[5],
+                            'value': parts[6],
+                            'path': parts[2],
+                            'secure': parts[3] == 'TRUE',
+                            'expires': float(parts[4]) if parts[4] != '0' else None,
+                        }
+                        cookies.append(cookie)
+                logger.info(f"[PlaywrightScraper] Loaded {len(cookies)} cookies from Netscape format")
+            except Exception as e:
+                logger.warning(f"[PlaywrightScraper] Failed to parse Netscape cookies: {e}")
+
+        if cookies:
+            await self._context.add_cookies(cookies)
+            logger.info(f"[PlaywrightScraper] Added {len(cookies)} cookies to context")
+
     # ─── SHOPEE ────────────────────────────────────────────
     #
     # Strategy: navigate to search page, intercept the internal
@@ -158,13 +334,24 @@ class PlaywrightScraper:
         """
         Search and scrape products from Shopee.
         Uses API interception as primary method.
+        Falls back to DOM parsing with multiple strategies.
         """
         await self._ensure_browser()
         page = await self._context.new_page()
         products = []
         api_data: List[Dict] = []
+        encrypted_api_data: List[Dict] = []
 
-        # --- Strategy 1: Intercept Shopee search API ---
+        # Simulate human-like mouse movements
+        async def simulate_human_behavior():
+            for _ in range(3):
+                await page.mouse.move(
+                    random.randint(300, 800),
+                    random.randint(200, 600)
+                )
+                await asyncio.sleep(random.uniform(0.1, 0.3))
+
+        # --- Strategy 1: Intercept Shopee search API with enhanced logging ---
         async def on_response(response):
             try:
                 url = response.url
@@ -172,24 +359,40 @@ class PlaywrightScraper:
                     "api/v4/search" in url or
                     "api/v2/search_items" in url or
                     "/api/v4/recommend" in url or
-                    "/api/v4/item" in url
+                    "/api/v4/item" in url or
+                    "api/v4/shop" in url
                 ):
-                    if response.status == 200:
-                        try:
+                    try:
+                        if response.status == 200:
                             body = await response.json()
-                            items = (
-                                body.get("items") or
-                                body.get("data", {}).get("items") or
-                                body.get("item") or
-                                []
-                            )
-                            if isinstance(items, list):
-                                api_data.extend(items)
-                                logger.info(f"[Shopee] Intercepted {len(items)} items from API")
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                            body_keys = list(body.keys())
+                            is_encrypted = all(k.isdigit() for k in body_keys[:5]) if body_keys else False
+                            
+                            logger.debug(f"[Shopee] API Response - URL: {url[:80]}, Status: {response.status}, Keys: {body_keys[:5]}, Encrypted: {is_encrypted}")
+
+                            if is_encrypted:
+                                encrypted_api_data.append({"url": url, "body": body})
+                                logger.info(f"[Shopee] Detected encrypted API response from {url[:60]} (keys: {body_keys[:5]})")
+                            else:
+                                items = (
+                                    body.get("items") or
+                                    body.get("data", {}).get("items") or
+                                    body.get("item") or
+                                    []
+                                )
+                                if isinstance(items, list) and items:
+                                    api_data.extend(items)
+                                    logger.info(f"[Shopee] Intercepted {len(items)} items from API (total: {len(api_data)})")
+                                elif not items:
+                                    logger.warning(f"[Shopee] API response valid but empty items. Body keys: {body_keys}")
+                        elif response.status == 403:
+                            logger.warning(f"[Shopee] Got 403 Forbidden. URL: {url[:80]}. Proxy may need rotation.")
+                        else:
+                            logger.debug(f"[Shopee] Non-200 response: {response.status} from {url[:60]}")
+                    except Exception as e:
+                        logger.warning(f"[Shopee] Failed to parse API response: {e}")
+            except Exception as e:
+                logger.debug(f"[Shopee] API interception error: {e}")
 
         page.on("response", on_response)
 
@@ -198,18 +401,26 @@ class PlaywrightScraper:
             search_url = f"https://shopee.vn/search?keyword={encoded_keyword}"
             logger.info(f"[Shopee] Navigating to: {search_url}")
 
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            # Navigate with longer timeout for slow networks
+            await page.goto(search_url, wait_until="networkidle", timeout=45000)
+            logger.info("[Shopee] Page loaded, waiting for JS to populate API data...")
 
-            # Wait for content to load and APIs to fire
-            await asyncio.sleep(random.uniform(4.0, 6.0))
+            # Longer wait for initial API calls to complete (Shopee makes multiple requests)
+            await asyncio.sleep(random.uniform(5.0, 7.0))
 
-            # Scroll to trigger lazy loading
-            for _ in range(4):
-                await page.evaluate("window.scrollBy(0, 600)")
-                await asyncio.sleep(random.uniform(0.8, 1.5))
+            # Simulate human behavior before scrolling
+            await simulate_human_behavior()
 
-            # Wait a bit more for any remaining API calls
-            await asyncio.sleep(2.0)
+            # Scroll to trigger lazy loading with increased number of scrolls
+            for i in range(8):
+                await page.evaluate(f"window.scrollBy(0, {random.randint(400, 800)})")
+                await asyncio.sleep(random.uniform(1.5, 2.5))
+                await simulate_human_behavior()
+
+            # Final wait for remaining content to load
+            await asyncio.sleep(3.0)
+            
+            logger.info(f"[Shopee] Page interaction complete. API data captured: {len(api_data)} items, Encrypted: {len(encrypted_api_data)}")
 
             # --- Parse intercepted API data ---
             if api_data:
@@ -219,9 +430,22 @@ class PlaywrightScraper:
                         products.append(parsed)
                 logger.info(f"[Shopee] Parsed {len(products)} products from API interception")
 
-            # --- Strategy 2: Fallback to DOM parsing ---
+            # --- Strategy 2: Try to decode encrypted API responses ---
+            if not products and encrypted_api_data:
+                logger.info(f"[Shopee] Attempting to decode {len(encrypted_api_data)} encrypted responses")
+                for enc_data in encrypted_api_data:
+                    decoded = self._try_decode_shopee_response(enc_data.get("body", {}))
+                    if decoded:
+                        for i, item in enumerate(decoded[:limit]):
+                            parsed = self._parse_shopee_api_item(item, i)
+                            if parsed:
+                                products.append(parsed)
+                        if products:
+                            break
+
+            # --- Strategy 3: Fallback to DOM parsing ---
             if not products:
-                logger.info("[Shopee] API interception empty, falling back to DOM parsing")
+                logger.info("[Shopee] API interception empty or failed, falling back to DOM parsing")
                 products = await self._shopee_dom_fallback(page, limit)
 
             logger.info(f"[Shopee] Total: {len(products)} products for '{keyword}'")
@@ -233,6 +457,54 @@ class PlaywrightScraper:
             await page.close()
 
         return products
+
+    def _try_decode_shopee_response(self, body: Dict) -> Optional[List[Dict]]:
+        """
+        Attempt to decode Shopee's encrypted API responses.
+        Shopee sometimes returns responses with numeric keys that need special handling.
+        """
+        try:
+            # If response has 'data' field with items, try that
+            if 'data' in body:
+                data = body['data']
+                if isinstance(data, dict) and 'items' in data:
+                    return data['items']
+                if isinstance(data, list):
+                    return data
+
+            # If response has 'items' at root, return it
+            if 'items' in body and isinstance(body['items'], list):
+                return body['items']
+
+            # If response has error=0 (success), try to find items
+            if body.get('error') == 0 or body.get('error') == '0':
+                for key in ['items', 'data', 'products', 'results']:
+                    if key in body and isinstance(body[key], list):
+                        return body[key]
+
+            # Try to decode numeric-keyed encrypted response
+            # Sometimes Shopee encrypts the items array
+            keys = list(body.keys())
+            if all(k.isdigit() for k in keys[:5]) and len(keys) > 3:
+                # This looks like an encrypted response
+                # Try to find encoded data that can be decoded
+                for key in ['2', '4', 'data', 'items', 'json']:
+                    if key in body:
+                        val = body[key]
+                        if isinstance(val, str):
+                            try:
+                                decoded = json.loads(val)
+                                if isinstance(decoded, list):
+                                    return decoded
+                                if isinstance(decoded, dict) and 'items' in decoded:
+                                    return decoded['items']
+                            except:
+                                pass
+
+            return None
+        except Exception as e:
+            logger.debug(f"[Shopee] Decode attempt failed: {e}")
+            return None
 
     def _parse_shopee_api_item(self, item: Dict, index: int) -> Optional[Dict]:
         """Parse a single item from Shopee's internal API response."""
@@ -298,54 +570,143 @@ class PlaywrightScraper:
         """Fallback: parse products from DOM using broad, adaptive selectors."""
         products = []
         try:
-            raw_products = await page.evaluate("""() => {
-                // Strategy: find all links that look like product links
-                const productLinks = document.querySelectorAll('a[href*="/product/"], a[href*="-i."]');
-                const seen = new Set();
+            raw_products = await page.evaluate(r"""() => {
                 const results = [];
 
-                productLinks.forEach(link => {
-                    const href = link.href || '';
-                    if (seen.has(href) || !href) return;
-                    seen.add(href);
+                // Strategy 1: Find all product card elements
+                const cardSelectors = [
+                    '[data-testid="product-card"]',
+                    '[class*="product-card"]',
+                    '[class*="productCard"]',
+                    '[class*="shop-search-result"] a[href*="/product/"]',
+                    '[class*="items"] a[href*="/product/"]',
+                    '.col-xs-2 a[href*="/product/"]',
+                    'a[href*="-i."]',
+                ];
 
-                    // Walk up to find the product card container
-                    let card = link;
-                    for (let i = 0; i < 5; i++) {
-                        if (card.parentElement) card = card.parentElement;
+                const seenUrls = new Set();
+
+                // Try each selector strategy
+                for (const selector of cardSelectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        console.log(`Selector "${selector}" found ${elements.length} elements`);
                     }
+                    elements.forEach(el => {
+                        const href = el.href || (el.closest('a') && el.closest('a').href);
+                        if (!href || seenUrls.has(href)) return;
+                        seenUrls.add(href);
 
-                    // Extract text content from the card
-                    const allText = card.innerText || '';
-                    const lines = allText.split('\\n').map(l => l.trim()).filter(Boolean);
+                        // Try to extract data from data attributes
+                        const data = el.dataset || {};
+                        const parent = el.closest('[data-sqe="item"]') || el.parentElement;
 
-                    // Find image
-                    const img = card.querySelector('img');
-                    const imgSrc = img ? (img.src || img.dataset.src || '') : '';
+                        // Find name - look for common class patterns
+                        const nameEl = el.querySelector('[class*="name"], [class*="title"], [class*="product-name"], [data-testid="product-title"]');
+                        const name = nameEl ? nameEl.innerText.trim() : '';
 
-                    // Find price-like text (contains ₫ or đ or numbers with dots)
-                    const priceLine = lines.find(l => /[₫đ]|\\d{1,3}(\\.\\d{3})+/.test(l)) || '';
+                        // Find price
+                        const priceEl = el.querySelector('[class*="price"], [class*="Price"]');
+                        let price = '';
+                        if (priceEl) {
+                            price = priceEl.innerText.trim();
+                        } else {
+                            // Try to find price-like text in all text
+                            const allText = el.innerText || '';
+                            const priceMatch = allText.match(/[₫đ]?\s*[\d.,]+/);
+                            if (priceMatch) price = priceMatch[0];
+                        }
 
-                    // Product name is usually the longest non-price text
-                    const nameCandidates = lines.filter(l =>
-                        l.length > 10 && !/[₫đ]/.test(l) && !/^\\d/.test(l) && !/^Đã bán/.test(l)
-                    );
-                    const name = nameCandidates.sort((a, b) => b.length - a.length)[0] || '';
+                        // Find image
+                        const img = el.querySelector('img');
+                        const imgSrc = img ? (img.dataset.src || img.dataset.original || img.src || '') : '';
 
-                    // Sold count
-                    const soldLine = lines.find(l => /bán|sold/i.test(l)) || '';
+                        // Find discount
+                        const discountEl = el.querySelector('[class*="discount"], [class*="Discount"]');
+                        const discount = discountEl ? discountEl.innerText.trim() : '';
 
-                    if (name) {
-                        results.push({
-                            name: name,
-                            price_text: priceLine,
-                            image_url: imgSrc,
-                            link: href,
-                            sold_text: soldLine,
-                        });
+                        // Find sold count
+                        const allText = el.innerText || '';
+                        const soldMatch = allText.match(/đã bán[:\s]*([\d.,]+[kKmM]?)/i);
+                        const sold = soldMatch ? soldMatch[1] : '';
+
+                        if (name && name.length > 5) {
+                            results.push({
+                                name,
+                                price,
+                                image_url: imgSrc,
+                                link: href,
+                                discount,
+                                sold,
+                            });
+                        }
+                    });
+                    if (results.length > 0) break;
+                }
+
+                // Strategy 2: Look for JSON data embedded in page
+                if (results.length === 0) {
+                    const scripts = document.querySelectorAll('script[type="application/json"], script[id*="data"]');
+                    scripts.forEach(script => {
+                        try {
+                            const data = JSON.parse(script.textContent);
+                            const jsonStr = JSON.stringify(data);
+                            // Look for product patterns in JSON
+                            if (jsonStr.includes('"name"') && jsonStr.includes('"price"') && jsonStr.length < 500000) {
+                                // Try to extract product info
+                                const nameMatch = jsonStr.match(/"name"\s*:\s*"([^"]{10,100})"/);
+                                const priceMatch = jsonStr.match(/"price"\s*:\s*([\d.]+)/);
+                                if (nameMatch) {
+                                    results.push({
+                                        name: nameMatch[1],
+                                        price: priceMatch ? priceMatch[1] : '',
+                                        image_url: '',
+                                        link: '',
+                                        discount: '',
+                                        sold: '',
+                                    });
+                                }
+                            }
+                        } catch(e) {}
+                    });
+                }
+
+                // Strategy 3: Look for window.__INITIAL_STATE__ or window.__RENDER_DATA__
+                if (results.length === 0) {
+                    const stateKeys = ['__INITIAL_STATE__', '__RENDER_DATA__', '__PRELOADED_STATE__'];
+                    for (const key of stateKeys) {
+                        if (window[key]) {
+                            try {
+                                const state = typeof window[key] === 'string' ? JSON.parse(window[key]) : window[key];
+                                const stateStr = JSON.stringify(state);
+                                // Look for product array patterns
+                                const itemsMatch = stateStr.match(/"items"\s*:\s*\[/);
+                                if (itemsMatch) {
+                                    // Try to extract from the state
+                                    const names = stateStr.match(/"name"\s*:\s*"([^"]{10,100})"/g);
+                                    if (names && names.length > 0) {
+                                        for (const n of names.slice(0, limit)) {
+                                            const nameMatch = n.match(/"name"\s*:\s*"([^"]{10,100})"/);
+                                            if (nameMatch) {
+                                                results.push({
+                                                    name: nameMatch[1],
+                                                    price: '',
+                                                    image_url: '',
+                                                    link: '',
+                                                    discount: '',
+                                                    sold: '',
+                                                });
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                            } catch(e) {}
+                        }
                     }
-                });
-                return results;
+                }
+
+                return results.slice(0, 50);
             }""")
 
             for i, raw in enumerate(raw_products[:limit]):
@@ -354,10 +715,11 @@ class PlaywrightScraper:
                         "product_id": f"shopee_dom_{i}_{hash(raw['name']) % 100000}",
                         "platform": "shopee",
                         "name": raw["name"],
-                        "price": self._parse_price(raw.get("price_text", "")),
+                        "price": self._parse_price(raw.get("price_text", raw.get("price", ""))),
                         "image_urls": [raw["image_url"]] if raw.get("image_url") else [],
                         "affiliate_link": raw.get("link", ""),
-                        "sold_count": self._parse_sold(raw.get("sold_text", "")),
+                        "sold_count": self._parse_sold(raw.get("sold_text", raw.get("sold", ""))),
+                        "discount_percent": self._parse_discount(raw.get("discount", "")),
                     })
 
             logger.info(f"[Shopee] DOM fallback found {len(products)} products")
@@ -396,7 +758,7 @@ class PlaywrightScraper:
 
         logger.info(f"[Shopee] URL scrape: shop_id={shop_id}, item_id={item_id}, url={clean_url}")
 
-        # ─── Broader API interception ───
+        # ─── Broader API interception with enhanced logging ───
         async def on_response(response):
             nonlocal product_data
             try:
@@ -408,14 +770,17 @@ class PlaywrightScraper:
                             item = body.get('data', {}).get('item') or body.get('item') or body
                             if item.get('name'):
                                 product_data = item
+                                logger.info(f"[Shopee] Captured product from API: {item.get('name', '')[:50]}")
                         elif 'items' in body and len(body.get('items', [])) > 0:
                             items = body.get('items', [])
                             if items[0].get('name') or items[0].get('item_basic', {}).get('name'):
                                 product_data = items[0].get('item_basic') or items[0]
+                                logger.info(f"[Shopee] Captured product from items array")
                         elif body.get('name'):
                             product_data = body
-            except Exception:
-                pass
+                            logger.info(f"[Shopee] Captured product from root: {body.get('name', '')[:50]}")
+            except Exception as e:
+                logger.debug(f"[Shopee] API interception error: {e}")
 
         page.on("response", on_response)
 
@@ -425,12 +790,8 @@ class PlaywrightScraper:
                 api_url = f"https://shopee.vn/api/v4/item/get?itemid={item_id}&shopid={shop_id}"
                 logger.info(f"[Shopee] Trying direct API: {api_url}")
                 try:
-                    headers = {
-                        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-                        "Referer": f"https://shopee.vn/product/{shop_id}/{item_id}",
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                        "X-Requested-With": "XMLHttpRequest",
-                    }
+                    # Use enhanced Shopee headers
+                    headers = self._get_shopee_headers(referer=f"https://shopee.vn/product/{shop_id}/{item_id}")
                     api_response = await page.request.get(api_url, headers=headers, timeout=15000)
                     if api_response.ok:
                         api_data = await api_response.json()
@@ -1045,3 +1406,13 @@ class PlaywrightScraper:
         if match:
             return int(match.group(1))
         return None
+
+    def _parse_discount(self, text: str) -> Optional[float]:
+        """Parse discount percentage from text like '-30%'."""
+        if not text:
+            return None
+        text = text.replace('%', '').replace('-', '')
+        try:
+            return float(text)
+        except ValueError:
+            return None

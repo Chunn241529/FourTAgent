@@ -7,6 +7,8 @@ import 'storage_service.dart';
 
 /// Service for interacting with the Affiliate Automation backend APIs.
 class AffiliateService {
+  static String get baseUrl => ApiConfig.baseUrl;
+
   /// Get status of all LLM providers and ComfyUI.
   static Future<Map<String, dynamic>> getStatus() async {
     final response = await ApiService.get('/affiliate/status');
@@ -56,6 +58,33 @@ class AffiliateService {
       '/affiliate/generate-script',
       body: {
         'product_id': productId,
+        'style': style,
+        'duration': duration,
+        if (customPrompt != null) 'custom_prompt': customPrompt,
+      },
+    );
+    return ApiService.parseResponse(response);
+  }
+
+  /// Generate script with manual product entry (no scrape needed).
+  static Future<Map<String, dynamic>> generateScriptManual({
+    required String name,
+    String? description,
+    String? price,
+    String style = 'genz',
+    String duration = '30s',
+    String? customPrompt,
+    List<String>? imageUrls,
+  }) async {
+    final response = await ApiService.post(
+      '/affiliate/generate-script',
+      body: {
+        'manual_product': {
+          'name': name,
+          if (description != null) 'description': description,
+          if (price != null) 'price': price,
+          if (imageUrls != null && imageUrls.isNotEmpty) 'image_urls': imageUrls,
+        },
         'style': style,
         'duration': duration,
         if (customPrompt != null) 'custom_prompt': customPrompt,

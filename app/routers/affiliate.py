@@ -78,11 +78,19 @@ class ScrapeRequest(BaseModel):
     limit: int = 10
 
 
+class ManualProduct(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: Optional[str] = None
+    image_urls: Optional[List[str]] = None  # URLs of uploaded images
+
+
 class GenerateScriptRequest(BaseModel):
-    product_id: str  # hash_id from scraper
+    product_id: Optional[str] = None  # hash_id from scraper (optional if manual_product provided)
     style: str = "genz"
     duration: str = "30s"
     custom_prompt: Optional[str] = None
+    manual_product: Optional[ManualProduct] = None  # For manual entry without scrape
 
 
 class RenderVideoRequest(BaseModel):
@@ -260,20 +268,46 @@ async def list_products(user_id: int = Depends(verify_jwt)):
 @router.post("/generate-script")
 async def generate_script(request: GenerateScriptRequest, user_id: int = Depends(verify_jwt)):
     """Generate viral review script for a product."""
-    scraper = _get_scraper()
+    from app.services.affiliate.scraper import ProductData
     gen = _get_content_gen()
 
-    # Find product from storage
-    products = scraper.list_saved_products()
     product_data = None
-    for p in products:
-        if p.get("product_id") == request.product_id or p.get("hash_id") == request.product_id:
-            from app.services.affiliate.scraper import ProductData
-            product_data = ProductData(**{k: v for k, v in p.items() if k != "hash_id"})
-            break
 
-    if not product_data:
-        raise HTTPException(404, f"Product not found: {request.product_id}")
+    # Case 1: Use scraped product
+    if request.product_id:
+        scraper = _get_scraper()
+        products = scraper.list_saved_products()
+        for p in products:
+            if p.get("product_id") == request.product_id or p.get("hash_id") == request.product_id:
+                product_data = ProductData(**{k: v for k, v in p.items() if k != "hash_id"})
+                break
+        if not product_data:
+            raise HTTPException(404, f"Product not found: {request.product_id}")
+
+    # Case 2: Use manual product entry
+    elif request.manual_product:
+        mp = request.manual_product
+        # Parse price - remove currency symbols and convert to float
+        price_str = mp.price or "0"
+        try:
+            price_val = float(''.join(c for c in price_str if c.isdigit() or c == '.'))
+        except:
+            price_val = 0.0
+
+        product_data = ProductData(
+            name=mp.name,
+            description=mp.description or "",
+            price=price_val,
+            platform="manual",
+            product_id=f"manual_{uuid.uuid4().hex[:8]}",
+            image_urls=mp.image_urls or [],
+            rating=None,
+            sold_count=None,
+            original_price=None,
+            discount_percent=None,
+        )
+    else:
+        raise HTTPException(400, "Either product_id or manual_product is required")
 
     result = await gen.generate_script(
         product=product_data,
@@ -290,12 +324,14 @@ async def generate_script(request: GenerateScriptRequest, user_id: int = Depends
         script_content = json.dumps(result.get("script", {}), ensure_ascii=False, indent=2)
         CloudFileService.create_file(
             user_id,
-            f"/Affiliate/Scripts/{request.product_id}.json",
+            f"/Affiliate/Scripts/{product_data.product_id}.json",
             script_content
         )
     except Exception as e:
         logger.warning(f"Could not save script to cloud: {e}")
 
+    # Include image_urls in response for render step
+    result["image_urls"] = product_data.image_urls
     return result
 
 

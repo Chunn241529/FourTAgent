@@ -27,7 +27,7 @@ Quy tắc:
 SCRIPT_PROMPT_TEMPLATE = """Viết kịch bản review ngắn {duration} cho sản phẩm sau:
 
 📦 Tên: {name}
-💰 Giá: {price:,.0f}đ {discount_info}
+💰 Giá: {price} {discount_info}
 ⭐ Rating: {rating}
 🛒 Đã bán: {sold_count}
 📝 Mô tả: {description}
@@ -106,10 +106,17 @@ class ContentGenerator:
         if product.original_price and product.discount_percent:
             discount_info = f"(giảm {product.discount_percent:.0f}% từ {product.original_price:,.0f}đ)"
 
+        # Format price with proper thousand separator
+        try:
+            price_val = float(product.price) if not isinstance(product.price, (int, float)) else product.price
+            price_display = f"{price_val:,.0f}đ"
+        except (ValueError, TypeError):
+            price_display = str(product.price) if product.price else "N/A"
+
         prompt = SCRIPT_PROMPT_TEMPLATE.format(
             duration=duration_desc,
             name=product.name,
-            price=product.price,
+            price=price_display,
             discount_info=discount_info,
             rating=product.rating or "N/A",
             sold_count=product.sold_count or "N/A",
