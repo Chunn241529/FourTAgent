@@ -867,44 +867,58 @@ class _BlurRegionSelectorDialog extends StatefulWidget {
 
 class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
   Rect? _selection;
-  // Actual display size of the image (computed after image loads with BoxFit.contain)
-  double _displayImgW = 0;
-  double _displayImgH = 0;
-  double _offsetX = 0;
-  double _offsetY = 0;
+  // Rendered image position and size within the container (for coordinate scaling)
+  double _renderedX = 0;
+  double _renderedY = 0;
+  double _renderedW = 0;
+  double _renderedH = 0;
+  bool _imageLoaded = false;
 
-  void _onImageRendered(Size displaySize, Offset imgOffset) {
-    if (_displayImgW != displaySize.width || _displayImgH != displaySize.height) {
-      setState(() {
-        _displayImgW = displaySize.width;
-        _displayImgH = displaySize.height;
-        _offsetX = imgOffset.dx;
-        _offsetY = imgOffset.dy;
-      });
-    }
+  /// Scale coordinates from display space (container pixels) to original video space.
+  Rect _toVideoCoords(Rect displayRect) {
+    if (!_imageLoaded || _renderedW == 0 || _renderedH == 0) return displayRect;
+
+    // Adjust for image offset within container (centering)
+    final imgLeft = displayRect.left - _renderedX;
+    final imgTop = displayRect.top - _renderedY;
+
+    // Scale to video coordinates
+    final scaleX = widget.videoWidth / _renderedW;
+    final scaleY = widget.videoHeight / _renderedH;
+
+    final leftVideo = (imgLeft * scaleX).round().clamp(0, widget.videoWidth);
+    final topVideo = (imgTop * scaleY).round().clamp(0, widget.videoHeight);
+    final wVideo = (displayRect.width * scaleX).round().clamp(0, widget.videoWidth);
+    final hVideo = (displayRect.height * scaleY).round().clamp(0, widget.videoHeight);
+
+    return Rect.fromLTWH(leftVideo.toDouble(), topVideo.toDouble(), wVideo.toDouble(), hVideo.toDouble());
   }
 
-  /// Scale coordinates from display space to original video space.
-  Rect _toVideoCoords(Rect displayRect) {
-    if (_displayImgW == 0 || _displayImgH == 0) return displayRect;
+  /// Compute rendered image rect after image loads, given container constraints.
+  void _computeRenderedRect(Size containerSize, Size imageSize) {
+    final containerW = containerSize.width;
+    final containerH = containerSize.height;
+    final imgW = imageSize.width;
+    final imgH = imageSize.height;
 
-    // Normalize selection to image coordinates (0-1 range within displayed image)
-    final scaleX = widget.videoWidth / _displayImgW;
-    final scaleY = widget.videoHeight / _displayImgH;
+    if (imgW == 0 || imgH == 0 || containerW == 0 || containerH == 0) return;
 
-    // Adjust for offset (image may be centered)
-    final leftVideo = ((displayRect.left - _offsetX) * scaleX).round();
-    final topVideo = ((displayRect.top - _offsetY) * scaleY).round();
-    final widthVideo = (displayRect.width * scaleX).round();
-    final heightVideo = (displayRect.height * scaleY).round();
+    final scale = (containerW / imgW).clamp(0.0, 1.0) < (containerH / imgH)
+        ? containerW / imgW
+        : containerH / imgH;
 
-    // Clamp to video bounds
-    return Rect.fromLTWH(
-      leftVideo.clamp(0, widget.videoWidth).toDouble(),
-      topVideo.clamp(0, widget.videoHeight).toDouble(),
-      widthVideo.clamp(0, widget.videoWidth).toDouble(),
-      heightVideo.clamp(0, widget.videoHeight).toDouble(),
-    );
+    final renderedW = imgW * scale;
+    final renderedH = imgH * scale;
+    final renderedX = (containerW - renderedW) / 2;
+    final renderedY = (containerH - renderedH) / 2;
+
+    setState(() {
+      _renderedW = renderedW;
+      _renderedH = renderedH;
+      _renderedX = renderedX;
+      _renderedY = renderedY;
+      _imageLoaded = true;
+    });
   }
 
   @override
@@ -924,6 +938,7 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  final containerSize = Size(constraints.maxWidth, constraints.maxHeight);
                   return GestureDetector(
                     onPanStart: (details) {
                       setState(() {
@@ -946,11 +961,28 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
                     onPanEnd: (_) {},
                     child: Stack(
                       children: [
-                        _buildImageWithSizeTracker(constraints),
-                        if (_selection != null && _displayImgW > 0)
+                        Image.memory(
+                          base64Decode(widget.frameDataUrl.split(',').last),
+                          fit: BoxFit.contain,
+                          width: constraints.maxWidth,
+                          height: constraints.maxHeight,
+                          frameBuilder: (context, child, frame, loaded) {
+                            if (loaded && frame != null && !_imageLoaded) {
+                              // Compute rendered rect from natural image size + container
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _computeRenderedRect(containerSize, Size(
+                                  widget.videoWidth.toDouble(),
+                                  widget.videoHeight.toDouble(),
+                                ));
+                              });
+                            }
+                            return child;
+                          },
+                        ),
+                        if (_selection != null)
                           Positioned(
-                            left: _selection!.left,
-                            top: _selection!.top,
+                            left: _selection!.left < _selection!.right ? _selection!.left : _selection!.right,
+                            top: _selection!.top < _selection!.bottom ? _selection!.top : _selection!.bottom,
                             child: Container(
                               width: _selection!.width.abs(),
                               height: _selection!.height.abs(),
@@ -975,7 +1007,7 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
           child: const Text('Hủy'),
         ),
         ElevatedButton(
-          onPressed: _selection != null && _displayImgW > 0
+          onPressed: _selection != null && _imageLoaded
               ? () {
                   final rect = _selection!;
                   final normalized = Rect.fromLTRB(
@@ -984,7 +1016,6 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
                     rect.left > rect.right ? rect.left : rect.right,
                     rect.top > rect.bottom ? rect.top : rect.bottom,
                   );
-                  // Return scaled coordinates in video space
                   final videoRect = _toVideoCoords(normalized);
                   Navigator.pop(context, videoRect);
                 }
@@ -992,36 +1023,6 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
           child: const Text('Xác nhận'),
         ),
       ],
-    );
-  }
-
-  Widget _buildImageWithSizeTracker(BoxConstraints constraints) {
-    return Image.memory(
-      base64Decode(widget.frameDataUrl.split(',').last),
-      fit: BoxFit.contain,
-      width: constraints.maxWidth,
-      height: constraints.maxHeight,
-      frameBuilder: (context, child, frame, loaded) {
-        if (!loaded) return child;
-        // After image loads, compute actual displayed size with BoxFit.contain
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final imgWidget = context.findDescendantRenderObjectOfType<RenderImage>();
-          if (imgWidget != null && mounted) {
-            final imgSize = imgWidget.size;
-            // Image is centered within constraints via BoxFit.contain
-            final scaleW = constraints.maxWidth > 0 ? imgSize.width / constraints.maxWidth : 0.0;
-            final scaleH = constraints.maxHeight > 0 ? imgSize.height / constraints.maxHeight : 0.0;
-            // The actual rendered image size in the container
-            final renderedW = constraints.maxWidth * scaleW.clamp(0.0, 1.0);
-            final renderedH = constraints.maxHeight * scaleH.clamp(0.0, 1.0);
-            // Offset if image is smaller than container (centered)
-            final offsetX = (constraints.maxWidth - renderedW) / 2;
-            final offsetY = (constraints.maxHeight - renderedH) / 2;
-            _onImageRendered(Size(renderedW, renderedH), Offset(offsetX, offsetY));
-          }
-        });
-        return child;
-      },
     );
   }
 }
