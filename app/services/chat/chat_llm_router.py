@@ -245,14 +245,14 @@ async def _stream_ollama(
     tools: Optional[List[Dict]],
     model: str,
     temperature: float,
-    num_ctx: int,
+    num_predict: int,
     think: Union[str, bool],
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Stream from Ollama (primary). Returns native Ollama format."""
     from app.services.chat.utils import get_client
 
     client = get_client()
-    options = {"temperature": temperature, "num_ctx": num_ctx}
+    options = {"temperature": temperature, "num_predict": num_predict}
 
     stream = await client.chat(
         model=model,
@@ -723,12 +723,17 @@ class ChatLLMRouter:
 
     async def _classify_needs_tools(
         self, messages: List[Dict], tools: Optional[List[Dict]]
-    ) -> bool:
-        """Extract last user message and classify via standalone function."""
+    ) -> tuple:
+        """
+        Extract last user message and classify via Lumina-small.
+        
+        Returns: (needs_tools: bool, confidence: float)
+        - confidence: 0.0-1.0, how confident the classifier is
+        """
         if not tools:
-            return False
+            return False, 1.0
 
-        # Extract last user message only — no history, no RAG
+        # ── Extract last user message ──
         last_user_msg = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -742,19 +747,46 @@ class ChatLLMRouter:
                 break
 
         if not last_user_msg:
-            return False
+            return False, 1.0
 
-        # Standalone classification — only raw message, no history/RAG
+        # ── Check conversation context: if last assistant msg had tool_calls, follow-up likely needs tools ──
+        context_score = 0.0
+        if len(messages) >= 2:
+            last_assistant = messages[-2] if len(messages) >= 2 else None
+            if last_assistant and last_assistant.get("role") == "assistant":
+                if last_assistant.get("tool_calls"):
+                    context_score = 0.4  # Follow-up on tool result, boost tool likelihood
+                    logger.info("[ToolClassifier] Context: previous assistant had tool_calls → +0.4 tool bias")
+
+        # ── Improved classification prompt with few-shot examples ──
         prompt = (
-            'Classify if this user message needs an external tool to answer.\n'
-            'Tools: web_search, generate_image, edit_image, execute_code, read_file, create_file.\n\n'
-            'Rules:\n'
-            '- Greeting, chitchat, knowledge questions → false\n'
-            '- Real-time info (weather, price, news, current events) → true\n'
-            '- Image generation/editing requests → true\n'
-            '- Web search, file operations, code execution → true\n\n'
-            f'Message: "{last_user_msg}"\n\n'
-            'Reply ONLY with valid JSON: {"is_tool": true} or {"is_tool": false}'
+            'You are a tool classification expert. Determine if this user message NEEDS an external tool to be answered correctly.\n\n'
+            'Available tools:\n'
+            '- web_search: Search the internet for real-time info (weather, prices, news, facts)\n'
+            '- web_fetch: Fetch content from a specific URL\n'
+            '- generate_image: Create images from text descriptions\n'
+            '- edit_image: Modify existing images\n'
+            '- execute_python: Run Python code for calculations, data processing\n'
+            '- execute_code: Run code in other languages\n'
+            '- read_file / search_file: Read or search local files\n'
+            '- cloud_create_file / cloud_delete_file / cloud_create_folder: Cloud storage operations\n'
+            '- search_music / play_music / add_to_queue / stop_music: Music playback control\n'
+            '- create_canvas / update_canvas / read_canvas: Interactive canvas operations\n'
+            '- deep_search: Comprehensive research search\n\n'
+            'EXAMPLES (follow these patterns):\n'
+            '  "Hello, how are you?" → {"is_tool": false, "confidence": 0.95} (greeting, pure chitchat)\n'
+            '  "What is Python?" → {"is_tool": false, "confidence": 0.90} (general knowledge, no tool needed)\n'
+            '  "What is 15% of 1.2 million?" → {"is_tool": true, "confidence": 0.85} (math calculation, execute_python)\n'
+            '  "What is the weather in Hanoi?" → {"is_tool": true, "confidence": 0.95} (real-time, web_search)\n'
+            '  "Play some jazz music" → {"is_tool": true, "confidence": 0.95} (music playback)\n'
+            '  "Draw a cute cat wearing a hat" → {"is_tool": true, "confidence": 0.95} (image generation)\n'
+            '  "Search for the latest iPhone price" → {"is_tool": true, "confidence": 0.95} (real-time price)\n'
+            '  "Continue from where we left off" → {"is_tool": true, "confidence": 0.70} (context-dependent, likely follow-up)\n'
+            '  "Write a poem about love" → {"is_tool": false, "confidence": 0.90} (creative writing, no tool)\n'
+            '  "Explain quantum physics" → {"is_tool": false, "confidence": 0.88} (knowledge explanation)\n\n'
+            f'Message to classify: "{last_user_msg}"\n\n'
+            'Reply ONLY with valid JSON in this exact format: {"is_tool": true/false, "confidence": 0.0-1.0}\n'
+            'The confidence reflects how certain you are about the classification.'
         )
 
         try:
@@ -763,9 +795,10 @@ class ChatLLMRouter:
 
             def _call():
                 return ollama.chat(
-                    model="Lumina-small",
+                    model="Lumina-small:latest",
                     messages=[{"role": "user", "content": prompt}],
-                    options={"temperature": 0.0, "num_ctx": 1024, "num_predict": 20},
+                    options={"temperature": 0.1, "num_predict": 150},
+                    think=False,
                     format="json",
                 )
 
@@ -785,32 +818,44 @@ class ChatLLMRouter:
             logger.info(f"[ToolClassifier] Lumina-small raw: {repr(raw)}")
 
             if not raw:
-                logger.warning("[ToolClassifier] Empty response → default false")
-                return False
+                logger.warning("[ToolClassifier] Empty response → default (false, 0.5)")
+                return False, 0.5
 
-            # Parse JSON
+            # Parse JSON with confidence
             try:
                 data = _json.loads(raw)
-                result = bool(data.get("is_tool", False))
-                logger.info(f"[ToolClassifier] Parsed: is_tool={result}")
-                return result
+                is_tool = bool(data.get("is_tool", False))
+                confidence = float(data.get("confidence", 0.5))
+                confidence = max(0.0, min(1.0, confidence))  # Clamp to 0-1
+                
+                # Apply conversation context bias
+                if context_score > 0 and is_tool == False and confidence < 0.8:
+                    # Context suggests tools, classifier said no, boost confidence of tool=true
+                    is_tool = True
+                    confidence = min(0.85, confidence + context_score)
+                    logger.info(f"[ToolClassifier] Context override: is_tool={is_tool}, confidence={confidence}")
+                else:
+                    logger.info(f"[ToolClassifier] Parsed: is_tool={is_tool}, confidence={confidence}")
+                
+                return is_tool, confidence
+                
             except _json.JSONDecodeError:
                 lower = raw.lower()
-                result = '"is_tool": true' in lower or '"is_tool":true' in lower
-                logger.info(f"[ToolClassifier] JSON parse failed, text fallback: is_tool={result}")
-                return result
+                is_tool = '"is_tool": true' in lower or '"is_tool":true' in lower
+                logger.info(f"[ToolClassifier] JSON parse failed, text fallback: is_tool={is_tool}")
+                return is_tool, 0.5
 
         except Exception as e:
-            logger.warning(f"[ToolClassifier] Classification failed: {e} → default false")
-            return False
+            logger.warning(f"[ToolClassifier] Classification failed: {e} → default (false, 0.5)")
+            return False, 0.5
 
     async def stream_chat(
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
-        model: str = "Lumin-New",
+        model: str = "Lumina",
         temperature: float = 0.2,
-        num_ctx: int = 16384,
+        num_predict: int = 16384,
         think: Union[str, bool] = False,
         force_ollama: bool = False,
     ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -832,7 +877,7 @@ class ChatLLMRouter:
             if ollama_provider:
                 try:
                     async for chunk in self._call_provider(
-                        ollama_provider, messages, tools, model, temperature, num_ctx, think
+                        ollama_provider, messages, tools, model, temperature, num_predict, think
                     ):
                         yield chunk
                     logger.info("[ChatRouter] ✅ Completed with Ollama (force)")
@@ -851,51 +896,125 @@ class ChatLLMRouter:
             return
 
         # ── Classification gate: Lumina-small decides routing ──
-        needs_tools = await self._classify_needs_tools(messages, tools)
+        needs_tools, confidence = await self._classify_needs_tools(messages, tools)
+        logger.info(f"[ChatRouter] Classification result: needs_tools={needs_tools}, confidence={confidence}")
 
-        if needs_tools:
-            # ── Route to Ollama with tools ──
-            logger.info("[ChatRouter] Classification: NEEDS TOOLS → routing to Ollama (Lumina)")
+        # ── High confidence (>0.85): trust classification directly ──
+        if confidence > 0.85:
+            if needs_tools:
+                # Route to Ollama with tools
+                logger.info("[ChatRouter] HIGH CONFIDENCE → NEEDS TOOLS → routing to Ollama (Lumina)")
+                ollama_provider = next((p for p in self.providers if p.name == "Ollama"), None)
+                if ollama_provider:
+                    try:
+                        async for chunk in self._call_provider(
+                            ollama_provider, messages, tools, model, temperature, num_predict, think
+                        ):
+                            yield chunk
+                        logger.info("[ChatRouter] ✅ Completed with Ollama (high conf tools)")
+                        return
+                    except Exception as e:
+                        error_msg = f"Ollama: {str(e)[:200]}"
+                        logger.warning(f"[ChatRouter] ❌ {error_msg}")
+                        errors.append(error_msg)
+                        # Fall through to cloud as backup
+
+            # else: confidence > 0.85 and needs_tools=False → cloud path below
+
+        # ── Medium confidence (0.6-0.85): Cloud first with tools available but discouraged ──
+        elif confidence >= 0.6:
+            logger.info(f"[ChatRouter] MEDIUM CONFIDENCE ({confidence}) → Cloud first, Ollama fallback")
+            
+            # Cloud with tools=[] (empty, not None) - allowed but discouraged via system prompt
+            cloud_errors = []
+            for provider in self.providers:
+                if not provider.enabled or provider.name == "Ollama":
+                    continue
+
+                try:
+                    logger.info(f"[ChatRouter] Trying {provider.name} (medium conf cloud path)...")
+                    
+                    # Inject system instruction to discourage tool use
+                    cloud_messages = self._inject_anti_tool_instruction(messages)
+                    
+                    async for chunk in self._call_provider(
+                        provider, cloud_messages, [], model, temperature, num_predict, think
+                    ):
+                        # Check if cloud LLM is trying to use tools despite instruction
+                        if self._chunk_has_tool_call(chunk):
+                            logger.warning(f"[ChatRouter] {provider.name} attempted tool call → switching to Ollama")
+                            # Don't yield this chunk, switch immediately
+                            break
+                        yield chunk
+                    
+                    logger.info(f"[ChatRouter] ✅ Completed with {provider.name}")
+                    return
+                    
+                except Exception as e:
+                    error_msg = f"{provider.name}: {str(e)[:200]}"
+                    logger.warning(f"[ChatRouter] ❌ {error_msg}")
+                    cloud_errors.append(error_msg)
+                    continue
+
+            # Cloud failed or triggered tool switch → fallback to Ollama
+            logger.info("[ChatRouter] Cloud failed/tool triggered → falling back to Ollama")
             ollama_provider = next((p for p in self.providers if p.name == "Ollama"), None)
             if ollama_provider:
                 try:
                     async for chunk in self._call_provider(
-                        ollama_provider, messages, tools, model, temperature, num_ctx, think
+                        ollama_provider, messages, tools, model, temperature, num_predict, think
                     ):
                         yield chunk
-                    logger.info("[ChatRouter] ✅ Completed with Ollama (tools)")
+                    logger.info("[ChatRouter] ✅ Completed with Ollama (cloud fallback)")
+                    return
+                except Exception as e:
+                    error_msg = f"Ollama: {str(e)[:200]}"
+                    logger.error(f"[ChatRouter] ❌ {error_msg}")
+                    errors.append(error_msg)
+
+        # ── Low confidence (<0.6): Default to Ollama (safer) ──
+        else:
+            logger.info(f"[ChatRouter] LOW CONFIDENCE ({confidence}) → Default to Ollama")
+            ollama_provider = next((p for p in self.providers if p.name == "Ollama"), None)
+            if ollama_provider:
+                try:
+                    async for chunk in self._call_provider(
+                        ollama_provider, messages, tools, model, temperature, num_predict, think
+                    ):
+                        yield chunk
+                    logger.info("[ChatRouter] ✅ Completed with Ollama (low conf default)")
                     return
                 except Exception as e:
                     error_msg = f"Ollama: {str(e)[:200]}"
                     logger.warning(f"[ChatRouter] ❌ {error_msg}")
                     errors.append(error_msg)
-                    # Fall through to cloud as backup
+                    # Fall through to cloud as last resort
 
-        # ── Route to Cloud (no tools, text-only fast path) ──
-        logger.info("[ChatRouter] Classification: NO TOOLS → routing to Cloud providers")
-        for provider in self.providers:
-            if not provider.enabled:
-                continue
-            # Cloud providers: no tools (pure text, fast)
-            # Ollama: also no tools here (classification said not needed)
-            pass_tools = None
+        # ── Cloud path for high confidence + no tools needed ──
+        if confidence > 0.85 and not needs_tools:
+            logger.info("[ChatRouter] Classification: HIGH CONFIDENCE + NO TOOLS → routing to Cloud providers")
+            for provider in self.providers:
+                if not provider.enabled or provider.name == "Ollama":
+                    continue
+                # Cloud providers: no tools (pure text, fast)
+                pass_tools = []
 
-            try:
-                logger.info(f"[ChatRouter] Trying {provider.name}...")
+                try:
+                    logger.info(f"[ChatRouter] Trying {provider.name}...")
 
-                async for chunk in self._call_provider(
-                    provider, messages, pass_tools, model, temperature, num_ctx, think
-                ):
-                    yield chunk
+                    async for chunk in self._call_provider(
+                        provider, messages, pass_tools, model, temperature, num_predict, think
+                    ):
+                        yield chunk
 
-                logger.info(f"[ChatRouter] ✅ Completed with {provider.name}")
-                return
+                    logger.info(f"[ChatRouter] ✅ Completed with {provider.name}")
+                    return
 
-            except Exception as e:
-                error_msg = f"{provider.name}: {str(e)[:200]}"
-                logger.warning(f"[ChatRouter] ❌ {error_msg}")
-                errors.append(error_msg)
-                continue
+                except Exception as e:
+                    error_msg = f"{provider.name}: {str(e)[:200]}"
+                    logger.warning(f"[ChatRouter] ❌ {error_msg}")
+                    errors.append(error_msg)
+                    continue
 
         # All providers failed
         logger.error(f"[ChatRouter] All providers failed: {errors}")
@@ -906,6 +1025,63 @@ class ChatLLMRouter:
             "done": True,
         }
 
+    def _inject_anti_tool_instruction(self, messages: List[Dict]) -> List[Dict]:
+        """
+        Inject system instruction to discourage cloud LLM from using tools.
+        Returns a copy of messages with an added system prompt.
+        """
+        ANTI_TOOL_INSTRUCTION = (
+            "IMPORTANT: You are a text-only assistant. AVOID using tools unless absolutely necessary. "
+            "Prefer giving direct answers based on your knowledge. "
+            "Only call a tool if the user asks for real-time information, calculations, or tasks you cannot do directly. "
+            "When in doubt, DON'T use tools."
+        )
+        
+        # Find first non-system message index
+        insert_idx = 0
+        for i, msg in enumerate(messages):
+            if msg.get("role") != "system":
+                insert_idx = i
+                break
+        
+        injected = messages.copy()
+        if insert_idx == 0:
+            injected.insert(0, {"role": "system", "content": ANTI_TOOL_INSTRUCTION})
+        else:
+            # Merge with existing system message
+            existing = injected[insert_idx]
+            if existing.get("role") == "system":
+                injected[insert_idx] = {
+                    "role": "system",
+                    "content": existing.get("content", "") + "\n\n" + ANTI_TOOL_INSTRUCTION
+                }
+            else:
+                injected.insert(insert_idx, {"role": "system", "content": ANTI_TOOL_INSTRUCTION})
+        
+        return injected
+
+    def _chunk_has_tool_call(self, chunk: Dict[str, Any]) -> bool:
+        """
+        Check if a streaming chunk contains or indicates a tool call.
+        Returns True if the chunk suggests the LLM wants to call a tool.
+        """
+        if not chunk:
+            return False
+        
+        # Direct tool_calls in message
+        if "tool_calls" in chunk.get("message", {}):
+            return True
+        
+        # Ollama format: tool_call in message
+        if chunk.get("message", {}).get("tool_call"):
+            return True
+        
+        # If done=True and we received tool_calls earlier in stream
+        if chunk.get("done") and chunk.get("message", {}).get("tool_calls"):
+            return True
+        
+        return False
+
     async def _call_provider(
         self,
         provider: ChatProvider,
@@ -913,14 +1089,14 @@ class ChatLLMRouter:
         tools: Optional[List[Dict]],
         model: str,
         temperature: float,
-        num_ctx: int,
+        num_predict: int,
         think: Union[str, bool],
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Route to the correct provider implementation."""
 
         if provider.name == "Ollama":
             async for chunk in _stream_ollama(
-                messages, tools, model, temperature, num_ctx, think
+                messages, tools, model, temperature, num_predict, think
             ):
                 yield chunk
 
@@ -1063,7 +1239,7 @@ class ChatLLMRouter:
                     tools=None,
                     model="Lumina-small",  # Use small model for simple tasks
                     temperature=temperature,
-                    num_ctx=4096,
+                    num_predict=4096,
                     think=False,
                 ):
                     content = chunk.get("message", {}).get("content", "")

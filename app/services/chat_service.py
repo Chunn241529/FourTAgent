@@ -614,7 +614,7 @@ class ChatService:
                         tools=tools,
                         model=model_name,
                         temperature=0.2,
-                        num_ctx=16384,
+                        num_predict=16384,
                         think=level_think,
                         force_ollama=has_tool_calls,  # After first tool call, force Ollama
                     )

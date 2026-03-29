@@ -667,7 +667,7 @@ class ToolService:
                         "properties": {
                             "url": {
                                 "type": "string",
-                                "description": "The YouTube video URL to play",
+                                "description": "The YouTube video URL to play (required)",
                             }
                         },
                         "required": ["url"],

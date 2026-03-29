@@ -65,10 +65,10 @@ class MusicService:
     def play_music(self, url: str) -> str:
         """
         Get stream URL and metadata for client-side playback.
-        Accepts a YouTube video URL (from search_music results) and extracts the audio stream URL.
-        Returns JSON with url, title, thumbnail for the Flutter app to play.
+        Accepts a YouTube video URL (from search_music results).
         """
-        logger.info(f"Getting stream URL for: {url}")
+        if not url:
+            return json.dumps({"error": "No URL provided. Use search_music first to get video URLs."})
 
         if not url.startswith(("http://", "https://")):
             return json.dumps(
