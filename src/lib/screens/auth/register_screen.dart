@@ -157,7 +157,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 DropdownButtonFormField<String>(
                   value: _selectedGender,
                   decoration: const InputDecoration(
-                    labelText: 'Giới tính (không bắt buộc)',
+                    labelText: 'Giới tính',
                     prefixIcon: Icon(Icons.wc_outlined),
                   ),
                   items: const [

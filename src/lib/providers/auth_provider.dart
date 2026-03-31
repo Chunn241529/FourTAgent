@@ -40,11 +40,13 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final isAuth = await AuthService.isAuthenticated();
+      print('>>> _checkAuth: isAuth=$isAuth');
       if (isAuth) {
         _user = await StorageService.getUser();
         _isAuthenticated = true;
       }
     } catch (e) {
+      print('>>> _checkAuth error: $e');
       _error = e.toString();
     } finally {
       _isInitializing = false;

@@ -33,14 +33,21 @@ class ApiService {
 
   /// GET request
   static Future<http.Response> get(String endpoint, {Map<String, String>? queryParams}) async {
-    final headers = await _getHeaders();
-    var uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    if (queryParams != null) {
-      uri = uri.replace(queryParameters: queryParams);
+    try {
+      final headers = await _getHeaders();
+      var uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+      if (queryParams != null) {
+        uri = uri.replace(queryParameters: queryParams);
+      }
+      print('>>> ApiService GET: $uri');
+      final response = await _client.get(uri, headers: headers);
+      print('>>> ApiService GET response: ${response.statusCode}');
+      _checkStatus(response);
+      return response;
+    } on SocketException catch (e) {
+      print('>>> SocketException in GET $endpoint: ${e.message}, errno: ${e.osError?.errorCode}');
+      rethrow;
     }
-    final response = await _client.get(uri, headers: headers);
-    _checkStatus(response);
-    return response;
   }
 
   /// POST request

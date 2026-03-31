@@ -18,7 +18,14 @@ class StorageService {
 
   /// Get stored token
   static Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    final token = await _storage.read(key: _tokenKey);
+    print('>>> StorageService.getToken(): ${token != null ? "found (${token.length} chars)" : "NULL"}');
+    if (token != null && token.isEmpty) {
+      print('>>> WARNING: Token is empty string, deleting and returning null');
+      await _storage.delete(key: _tokenKey);
+      return null;
+    }
+    return token;
   }
 
   /// Save user ID
@@ -73,6 +80,8 @@ class StorageService {
   /// Check if user is logged in
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
-    return token != null && token.isNotEmpty;
+    final result = token != null && token.isNotEmpty;
+    print('>>> StorageService.isLoggedIn(): $result (token: ${token == null ? "null" : "${token.length} chars"})');
+    return result;
   }
 }

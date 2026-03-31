@@ -111,6 +111,7 @@ class AuthService {
       final response = await ApiService.get(ApiConfig.validateToken);
       return response.statusCode == 200;
     } catch (e) {
+      print('>>> validateToken error: $e');
       return false;
     }
   }
@@ -237,9 +238,15 @@ class AuthService {
 
   /// Check if user is logged in with valid token
   static Future<bool> isAuthenticated() async {
-    final isLoggedIn = await StorageService.isLoggedIn();
-    if (!isLoggedIn) return false;
-    return await validateToken();
+    try {
+      final isLoggedIn = await StorageService.isLoggedIn();
+      print('>>> isAuthenticated: isLoggedIn=$isLoggedIn');
+      if (!isLoggedIn) return false;
+      return await validateToken();
+    } catch (e) {
+      print('>>> isAuthenticated error: $e');
+      return false;
+    }
   }
 }
 
