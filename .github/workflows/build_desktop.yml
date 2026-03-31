@@ -23,21 +23,21 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Get dependencies
-        working-directory: mobile_app
+        working-directory: src
         run: flutter pub get
 
       - name: Build Windows
-        working-directory: mobile_app
+        working-directory: src
         run: flutter build windows --release
 
       - name: Copy libmpv DLLs
         run: |
-          cp .github/workflows/libmpv-2.dll mobile_app/build/windows/x64/runner/Release/
-          Get-ChildItem mobile_app/build/windows/x64/runner/Release/*.dll
+          cp .github/workflows/libmpv-2.dll src/build/windows/x64/runner/Release/
+          Get-ChildItem src/build/windows/x64/runner/Release/*.dll
 
       - name: Create Windows Archive
         run: |
-          cd mobile_app/build/windows/x64/runner/Release
+          cd src/build/windows/x64/runner/Release
           7z a -tzip Lumina-${{ github.ref_name }}-windows.zip *
           move Lumina-${{ github.ref_name }}-windows.zip ../../../../../..
           cd ../../../../../..

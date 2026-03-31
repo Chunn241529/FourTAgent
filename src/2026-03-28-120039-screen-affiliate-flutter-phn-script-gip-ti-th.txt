@@ -7,7 +7,7 @@
 │                    ▘▘ ▝▝                   │                                 │
 │                                            │                                 │
 │   minimax-m2.7:cloud · API Usage Billing   │                                 │
-│       ~/Documents/4T_task/mobile_app       │                                 │
+│       ~/Documents/4T_task/src       │                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
 ❯ ở screen affiliate flutter phần script giúp tôi thêm logic import file manual 
@@ -375,7 +375,7 @@
 
 ✻ Worked for 35s
 
-❯ trung@trung:~/Documents/4T_task/mobile_app$ flutter run -d linux              
+❯ trung@trung:~/Documents/4T_task/src$ flutter run -d linux              
 Launching lib/main.dart on Linux in debug mode...                               
 ERROR: lib/widgets/affiliate/script_tool.dart:86:24: Error: Member not found:   
 'custom'.                                                                       
@@ -482,7 +482,7 @@ Error: Build process failed
       88          allowMultiple: true,
       89        );
 
-● Bash(cd /home/trung/Documents/4T_task/mobile_app && flutter analyze
+● Bash(cd /home/trung/Documents/4T_task/src && flutter analyze
       lib/widgets/affiliate/script_tool.dart 2>&1 | head -30)
   ⎿  Analyzing script_tool.dart...
 
@@ -1690,7 +1690,7 @@ tôi ẩn rồi, chưa có giải pháp nên ẩn rồi
   - Update GenerateScriptRequest để product_id optional, thêm manual_product
   - Update endpoint để handle cả 2 trường hợp: scraped product hoặc manual entry
 
-  Frontend (mobile_app/.../script_tool.dart):
+  Frontend (src/.../script_tool.dart):
   - Form nhập thủ công: tên, mô tả, giá (không cần Scrape)
   - Import ảnh sản phẩm (hiển thị thumbnail, có thể xóa)
   - Import file tham khảo (txt, md, json)
@@ -2214,12 +2214,12 @@ sub
 
      Frontend
 
-     File: mobile_app/lib/widgets/affiliate/smart_reup_screen.dart
+     File: src/lib/widgets/affiliate/smart_reup_screen.dart
      Changes: Add Subtitle Options section with blur region selector, SRT
      upload,
        text input
      ────────────────────────────────────────
-     File: mobile_app/lib/services/affiliate_service.dart
+     File: src/lib/services/affiliate_service.dart
      Changes: Add extractFrame(), uploadSubtitle() methods
 
      ---
