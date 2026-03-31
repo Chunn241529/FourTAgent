@@ -67,12 +67,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           _statusMessage = 'Connecting to server...';
         });
       } else {
-        // Both failed - Default to Tunnel but maybe show error? 
-        // For now, let's just default to tunnel (original behavior) or local?
-        // Let's default to local as it's safer for dev if tunnel is down.
-        ApiConfig.baseUrl = ApiConfig.localUrl;
+        // Both failed - Default to Tunnel
+        ApiConfig.baseUrl = ApiConfig.tunnelUrl;
         setState(() {
-          _statusMessage = 'Connection failed. Defaulting to Local...';
+          _statusMessage = 'Connection failed. Defaulting to Tunnel...';
         });
       }
     }
@@ -90,10 +88,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<bool> _tryConnect(String url) async {
     try {
       // Just check root endpoint or simple health check
-      // We'll use a short timeout (e.g., 3 seconds)
+      // We'll use a longer timeout (e.g., 10 seconds) for cloudflare tunnel
       print('Checking connection to: $url');
       final response = await http.get(Uri.parse('$url/')).timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
       );
       print('Response status: ${response.statusCode}');
       return response.statusCode == 200;
