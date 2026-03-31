@@ -646,52 +646,11 @@ class ImageGenerationService:
             # Free VRAM before starting
             await self.cleanup_all_vram()
 
-            # Step 1: LLM generates proper Flux2 prompt from user description
-            import ollama as _ollama
-
-            loop = asyncio.get_event_loop()
-
-            lumina_system = (
-                "You are an expert AI image prompt engineer for Stable Diffusion (Flux 2 architecture). "
-                "The user will describe an image they want (possibly in Vietnamese). "
-                "Your job is to create a SINGLE high-quality English prompt for Flux 2 image generation.\n\n"
-                "Rules:\n"
-                "- Output comma-separated English tags/phrases ONLY, no explanations\n"
-                "- Start with the main subject, then style, then quality tags\n"
-                "- Include quality boosters: masterpiece, best quality, highly detailed\n"
-                "- Include relevant style tags: lighting, composition, art style\n"
-                "- Keep it concise (under 80 words)\n"
-                "- Do NOT wrap in quotes or code blocks\n\n"
-                "Examples:\n"
-                "Input: 'con mèo dễ thương trong vườn hoa'\n"
-                "Output: cute cat sitting in a flower garden, soft natural lighting, vibrant colors, "
-                "masterpiece, best quality, highly detailed, bokeh background\n\n"
-                "Input: 'cyberpunk city at night'\n"
-                "Output: cyberpunk city at night, neon lights, rain reflections, futuristic buildings, "
-                "dark atmosphere, cinematic lighting, masterpiece, best quality, highly detailed, 8k"
-            )
-
-            def run_lumina_gen():
-                return _ollama.chat(
-                    model="Lumina:latest",
-                    messages=[
-                        {"role": "system", "content": lumina_system},
-                        {"role": "user", "content": prompt},
-                    ],
-                )
-
-            logger.info(f"Generating Flux2 prompt via Lumina from: '{prompt}'")
-            lumina_response = await loop.run_in_executor(None, run_lumina_gen)
-            flux_prompt = lumina_response.get("message", {}).get("content", "").strip()
-
-            # Clean up LLM output
-            if flux_prompt.startswith("```"):
-                flux_prompt = "\n".join(flux_prompt.split("\n")[1:-1])
-            flux_prompt = flux_prompt.strip('"').strip("'")
-            logger.info(f"Final Flux2 generation prompt: {flux_prompt}")
-
-            # Free VRAM after Ollama, before ComfyUI
-            await self.cleanup_all_vram()
+            # --- LLM TRANSLATION REMOVED: LLM provides final Flux2 prompt directly ---
+            # For Flutter Image Studio: prompt should be in Flux2-compatible English format
+            # For Chat flow: the LLM provides the final English prompt when calling generate_image tool
+            flux_prompt = prompt.strip()
+            logger.info(f"Using prompt directly for Flux2 generation: {flux_prompt}")
 
             width, height = self.parse_size(size)
             workflow, used_seed = self.build_workflow(
@@ -895,9 +854,7 @@ class ImageGenerationService:
             # Aggressively free up VRAM before heavy operations
             await self.cleanup_all_vram()
 
-            import base64
             import shutil
-            import ollama
 
             # Resolve paths
             user_input_dir = (
@@ -925,61 +882,13 @@ class ImageGenerationService:
             if image2_path and not img2_full:
                 return {"success": False, "error": f"Image 2 not found: {image2_path}"}
 
-            # Convert to base64 for vision analysis
-            # --- VISION ANALYSIS REMOVED (caused over-generation/hallucination) ---
+            # --- LLM TRANSLATION REMOVED: LLM passes final prompt directly when calling edit_image tool ---
+            # For Flutter Image Studio: prompt should be provided in Flux2-compatible English format
+            # For Chat flow: the LLM (e.g., Lumina) provides the final English prompt directly
+            flux_prompt = prompt.strip()
+            logger.info(f"Using prompt directly for Flux2 edit: {flux_prompt}")
 
-            loop = asyncio.get_event_loop()
-
-            # Step 1: LLM translates user's edit instruction into Flux2-compatible edit prompt
-            # Flux 2 Edit uses reference images + a prompt. The prompt tells Flux2 what the
-            # RESULT should look like for the changed area. It should NOT describe the whole image.
-            lumina_system = (
-                "You are a Flux 2 image editing prompt specialist. "
-                "The user provides reference image(s) and an editing instruction (possibly in Vietnamese). "
-                "Flux 2 Edit works like inpainting — it keeps the reference image and only changes what "
-                "the prompt describes.\n\n"
-                "Your job: convert the user's editing instruction into a SHORT English prompt.\n\n"
-                "CRITICAL RULES:\n"
-                "- Describe ONLY the change, NOT the entire image\n"
-                "- Use descriptive result phrases, not action verbs\n"
-                "  GOOD: 'red shirt' (describes what should appear)\n"
-                "  BAD: 'change the shirt to red' (action verb — Flux doesn't understand actions)\n"
-                "- Keep it very short (5-15 words max)\n"
-                "- Do NOT add quality tags (no 'masterpiece', 'best quality', '8k', etc.)\n"
-                "- Do NOT describe parts of the image that should stay the same\n"
-                "- Do NOT wrap in quotes or code blocks\n\n"
-                "Examples:\n"
-                "Input: 'Đổi màu áo thành đỏ' → Output: red shirt\n"
-                "Input: 'Thêm kính mát' → Output: wearing sunglasses\n"
-                "Input: 'Đổi nền thành bãi biển' → Output: beach background, sand, ocean\n"
-                "Input: 'Đổi tóc thành màu vàng' → Output: blonde hair\n"
-                "Input: 'Thêm mũ cowboy' → Output: wearing a cowboy hat\n"
-                "Input: 'Remove the person' → Output: empty scene, no person\n\n"
-                "Reply with ONLY the result prompt, nothing else."
-            )
-            lumina_msg = prompt
-
-            def run_lumina():
-                return ollama.chat(
-                    model="Lumina:latest",
-                    messages=[
-                        {"role": "system", "content": lumina_system},
-                        {"role": "user", "content": lumina_msg},
-                    ],
-                )
-
-            logger.info("Translating user edit instruction via Lumina...")
-            lumina_response = await loop.run_in_executor(None, run_lumina)
-            flux_prompt = lumina_response.get("message", {}).get("content", "").strip()
-
-            # Remove any markdown code blocks wrapper from AI output
-            if flux_prompt.startswith("```"):
-                flux_prompt = "\n".join(flux_prompt.split("\n")[1:-1])
-            # Remove quotes if LLM wrapped in quotes
-            flux_prompt = flux_prompt.strip('"').strip("'")
-            logger.info(f"Final Flux2 edit prompt: {flux_prompt}")
-
-            # Step 3: Copy to ComfyUI input directory
+            # Step 2: Copy to ComfyUI input directory
             os.makedirs(COMFYUI_INPUT_DIR, exist_ok=True)
             img1_filename = f"lumina_in_{random.randint(10000, 99999)}_{os.path.basename(img1_full)}"
             img2_filename = (
@@ -997,12 +906,7 @@ class ImageGenerationService:
             )
             used_seed = workflow["prompt"]["92:105"]["inputs"]["noise_seed"]
 
-            # Step 4: Run workflow
-            logger.info(
-                "Aggressively freeing VRAM after Ollama usage and before ComfyUI Flux2 generation..."
-            )
-            await self.cleanup_all_vram()
-
+            # Step 3: Run workflow
             logger.info("Submitting edit workflow to ComfyUI...")
             result = await self.submit_to_comfyui(workflow, user_id=user_id)
             if result.get("success"):

@@ -6,26 +6,27 @@ import 'storage_service.dart';
 import 'api_service.dart';
 
 class ImageService {
-  /// Generate an image from text prompt
+  /// Generate an image from text prompt (Image Studio - uses LLM cloud for translation)
   static Future<Map<String, dynamic>> generateImage(
     String description, {
     String size = '768x768',
   }) async {
-    final response = await ApiService.post('/generate/image', body: {
+    final response = await ApiService.post('/generate/image/studio', body: {
       'description': description,
       'size': size,
     });
     return ApiService.parseResponse(response);
   }
 
-  /// Edit image(s) — image1 required, image2 optional
+  /// Edit image(s) for Image Studio — image1 required, image2 optional
+  /// Uses LLM cloud for prompt translation (no history/RAG)
   static Future<Map<String, dynamic>> editImage({
     required File image1,
     File? image2,
     required String prompt,
   }) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/image/edit');
+    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/image/edit/studio');
 
     var request = http.MultipartRequest('POST', uri);
     if (token != null) {

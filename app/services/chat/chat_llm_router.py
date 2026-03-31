@@ -1208,12 +1208,45 @@ class ChatLLMRouter:
         else:
             raise Exception(f"Unknown provider: {provider.name}")
 
-    async def generate_simple(
+    async def generate_simple_ollama(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
         max_tokens: int = 100,
+        model: str = "Lumina-small",
+    ) -> Optional[str]:
+        """
+        Direct Ollama generation for simple tasks (no cloud fallback).
+        Fast, used for Image Studio prompt translation.
+        """
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            response = ollama.chat(
+                model=model,
+                messages=messages,
+                options={
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                },
+            )
+
+            return response.get("message", {}).get("content", "").strip()
+
+        except Exception as e:
+            logger.error(f"[ChatRouter] generate_simple_ollama failed: {e}")
+            return None
+
+    async def generate_simple(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
     ) -> Optional[str]:
         """
         Non-streaming simple text generation with fallback.
@@ -1239,7 +1272,7 @@ class ChatLLMRouter:
                     tools=None,
                     model="Lumina-small",  # Use small model for simple tasks
                     temperature=temperature,
-                    num_predict=4096,
+                    num_predict=max_tokens,
                     think=False,
                 ):
                     content = chunk.get("message", {}).get("content", "")

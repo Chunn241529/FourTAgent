@@ -928,21 +928,21 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "generate_image",
-                    "description": "Generate an image using Stable Diffusion. ONLY use when user EXPLICITLY asks to create, draw, or generate an image. Do NOT use this for informational queries. You MUST convert the user's description into a detailed, ENGLISH, comma-separated tag-based prompt suitable for Stable Diffusion. After success, respond naturally without showing file paths - just confirm the image was created.",
+                    "description": "Generate an image using Flux 2 via ComfyUI. ONLY use when user EXPLICITLY asks to create, draw, or generate an image. Do NOT use for informational queries. Provide the prompt as English tags separated by commas - start with quantity (1girl, 1boy, 1cat), then subject details, style, lighting, quality tags. After success, respond naturally without showing file paths.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "prompt": {
                                 "type": "string",
-                                "description": "ENGLISH comma-separated tags for Stable Diffusion. IMPORTANT: Start with quantity prefix like '1girl', '1boy', '1cat', '2dogs', etc. Example: '1girl, solo, long hair, blue eyes, school uniform, smile, standing, cherry blossom, outdoors, masterpiece, best quality, highly detailed'. Always include: 1) quantity prefix (1girl/1boy/1cat/etc), 2) subject details, 3) quality tags (masterpiece, best quality). Translate non-English to English.",
+                                "description": "English comma-separated tags for Flux 2. Format: '1girl, solo, long hair, blue eyes, school uniform' etc. Include quality tags: masterpiece, best quality. This is sent directly to Flux 2 without translation.",
                             },
                             "size": {
                                 "type": "string",
-                                "description": "Image size. Options: 'square' (768x768, default), 'landscape' (768x512), 'portrait' (512x768). Use 'square' for general purpose, 'landscape' for scenery, 'portrait' for people/characters. If user asks for 1024 or 'large', you can also specific '1024x1024'.",
+                                "description": "Image size. Options: 'square' (768x768, default), 'landscape' (768x512), 'portrait' (512x768). Use 'square' for general, 'landscape' for scenery, 'portrait' for people.",
                             },
                             "seed": {
                                 "type": "integer",
-                                "description": "Optional seed number. To EDIT an image, use the SAME SEED from the previous result and modify the prompt.",
+                                "description": "Optional seed for reproducibility. Same seed + modified prompt = image variations.",
                             },
                         },
                         "required": ["prompt"],
@@ -953,25 +953,25 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "edit_image",
-                    "description": "Chỉnh sửa ảnh (Image to Image, Inpainting, etc). Sử dụng mô hình Flux 2 qua ComfyUI. Require path to the image to edit and the specific edit request.",
+                    "description": "Edit image using Flux 2 via ComfyUI. Works like inpainting - keeps image1 unchanged except what prompt describes. ONE IMAGE: 'change hair to blonde', 'short hair'. TWO IMAGES: image1=base, image2=product. User wants img2's product on img1. Prompt: 'change clothes', 'black shirt'.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "prompt": {
                                 "type": "string",
-                                "description": "Yêu cầu chỉnh sửa chi tiết (vd: đổi áo thành màu đỏ, thay nền). Bằng tiếng Việt hoặc Anh đều được, tool sẽ tự dùng LLM dịch sang prompt Flux2 hoàn hảo.",
+                                "description": "Describe the change simply. Examples: 'change shirt', 'blonde hair', 'short hair'. Keep it very short.",
                             },
                             "image1_path": {
                                 "type": "string",
-                                "description": "Đường dẫn thư mục nội bộ (filepath) hoặc tên file bức ảnh cũ cần được chỉnh sửa. Đây LÀ TRƯỜNG BẮT BUỘC. Bạn phải lấy tên file ảnh từ user upload context.",
+                                "description": "Required: Base image (will be kept and modified).",
                             },
                             "image2_path": {
                                 "type": "string",
-                                "description": "Tùy chọn: Hình tham chiếu thứ 2 (nếu có).",
+                                "description": "Optional: Product image to apply onto image1.",
                             },
                             "seed": {
                                 "type": "integer",
-                                "description": "Tùy chọn hạt giống để ngẫu nhiên. Mặc định hệ thống tự random.",
+                                "description": "Optional: Seed for reproducibility.",
                             },
                         },
                         "required": ["prompt", "image1_path"],
