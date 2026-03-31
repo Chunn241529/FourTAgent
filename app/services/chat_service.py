@@ -776,57 +776,70 @@ class ChatService:
                                 # Check user intent: Direct keywords or Action+Object pattern
                                 query_lower = effective_query.lower()
 
-                                # 1. Strong keywords (implies creation)
-                                strong_keywords = [
-                                    "vẽ",
-                                    "tạo ảnh",
-                                    "generate image",
-                                    "create image",
-                                    "minh họa",
-                                    "illustrate",
-                                    "sketch",
-                                    "logo",
-                                    "icon",
-                                    "avatar",
-                                    "draw",
-                                    "paint",
-                                    "render",
-                                    "đeo",
-                                    "thêm",
-                                    "sửa",
-                                    "đổi",
-                                    "biến",
-                                    "edit",
-                                    "add",
-                                    "modify",
-                                    "change",
-                                    "wearing",
-                                ]
-                                has_strong = any(
-                                    k in query_lower for k in strong_keywords
+                                # If user explicitly mentions tools, don't block
+                                explicit_tool_mention = any(
+                                    k in query_lower for k in [
+                                        "dùng công cụ", "tool", "use tool", 
+                                        "gọi tool", "call tool", "bằng tool"
+                                    ]
                                 )
-
-                                # 2. Contextual Pattern: Action + Object
-                                # Matches "make a picture", "design an art", "generate photo"
-                                action_pattern = r"(generate|create|make|produce|design).{0,20}(image|picture|photo|art|drawing)"
-                                has_pattern = re.search(action_pattern, query_lower)
-
-                                is_img_request = has_strong or (has_pattern is not None)
-
-                                if not is_img_request:
-                                    logger.warning(
-                                        f"⛔ Blocking implicit generate_image call. User query '{effective_query}' does not contain image keywords."
+                                
+                                if explicit_tool_mention:
+                                    logger.info(f"✅ Explicit tool mention detected - allowing generate_image")
+                                    should_skip = False
+                                else:
+                                    # 1. Strong keywords (implies creation)
+                                    strong_keywords = [
+                                        "vẽ",
+                                        "tạo ảnh",
+                                        "tạo hình",
+                                        "hình ảnh",
+                                        "tạo",
+                                        "generate image",
+                                        "create image",
+                                        "minh họa",
+                                        "illustrate",
+                                        "sketch",
+                                        "logo",
+                                        "icon",
+                                        "avatar",
+                                        "draw",
+                                        "paint",
+                                        "render",
+                                        "đeo",
+                                        "thêm",
+                                        "sửa",
+                                        "đổi",
+                                        "biến",
+                                        "edit",
+                                        "add",
+                                        "modify",
+                                        "change",
+                                        "wearing",
+                                    ]
+                                    has_strong = any(
+                                        k in query_lower for k in strong_keywords
                                     )
-                                    # Feed back to model so it knows to stop and answer text
-                                    messages.append(
-                                        {
-                                            "role": "tool",
-                                            "content": "SYSTEM ALERT: User did NOT ask for an image. STOP generating images. Please synthesize the information you have and Answer the user's question directly in text.",
-                                            "tool_name": function_name,
-                                            "tool_call_id": tool_call.get("id"),
-                                        }
-                                    )
-                                    should_skip = True
+
+                                    # 2. Contextual Pattern: Action + Object
+                                    action_pattern = r"(generate|create|make|produce|design).{0,20}(image|picture|photo|art|drawing)"
+                                    has_pattern = re.search(action_pattern, query_lower)
+
+                                    is_img_request = has_strong or (has_pattern is not None)
+
+                                    if not is_img_request:
+                                        logger.warning(
+                                            f"⛔ Blocking implicit generate_image call. User query '{effective_query}' does not contain image keywords."
+                                        )
+                                        messages.append(
+                                            {
+                                                "role": "tool",
+                                                "content": "SYSTEM ALERT: User did NOT ask for an image. STOP generating images. Please synthesize the information you have and Answer the user's question directly in text.",
+                                                "tool_name": function_name,
+                                                "tool_call_id": tool_call.get("id"),
+                                            }
+                                        )
+                                        should_skip = True
 
                             # Show status message BEFORE execution
                             if function_name == "web_search":
@@ -972,84 +985,9 @@ class ChatService:
                                 if function_name == "generate_image":
                                     yield f"data: {json.dumps({'image_generation_started': True}, separators=(',', ':'))}\n\n"
 
-                                    # --- SEED REUSE LOGIC ---
-                                    # Check if this is an "edit" request and inject seed
-                                    try:
-                                        img_args = (
-                                            json.loads(args_str)
-                                            if isinstance(args_str, str)
-                                            else args_str
-                                        )
-                                        if isinstance(img_args, dict):
-                                            current_query_lower = (
-                                                effective_query.lower()
-                                            )
-                                            edit_keywords = [
-                                                "change",
-                                                "edit",
-                                                "modify",
-                                                "update",
-                                                "replace",
-                                                "thêm",
-                                                "sửa",
-                                                "đổi",
-                                                "chỉnh",
-                                                "bỏ",
-                                                "xoá",
-                                                "fix",
-                                                "biến",
-                                            ]
-                                            is_edit = any(
-                                                k in current_query_lower
-                                                for k in edit_keywords
-                                            )
-
-                                            if is_edit:
-                                                last_seed = None
-                                                # Scan history for previous generate_image seed
-                                                # Look in messages list which contains history
-                                                for msg in reversed(messages):
-                                                    if (
-                                                        msg.get("role") == "tool"
-                                                        or msg.get("role") == "function"
-                                                    ):
-                                                        t_name = msg.get(
-                                                            "tool_name"
-                                                        ) or msg.get("name")
-                                                        if t_name == "generate_image":
-                                                            try:
-                                                                content_json = (
-                                                                    json.loads(
-                                                                        msg.get(
-                                                                            "content",
-                                                                            "{}",
-                                                                        )
-                                                                    )
-                                                                )
-                                                                if (
-                                                                    "seed"
-                                                                    in content_json
-                                                                ):
-                                                                    last_seed = (
-                                                                        content_json[
-                                                                            "seed"
-                                                                        ]
-                                                                    )
-                                                                    break
-                                                            except:
-                                                                pass
-
-                                                if last_seed is not None:
-                                                    img_args["seed"] = last_seed
-                                                    logger.info(
-                                                        f"♻️ Injected seed {last_seed} for image edit request"
-                                                    )
-                                                    # Update args_str with new seed
-                                                    args_str = json.dumps(img_args)
-                                    except Exception as e:
-                                        logger.warning(
-                                            f"Error in seed injection logic: {e}"
-                                        )
+                                # Execute tool with provided args - no seed/prompt injection needed
+                                # For edit_image: LLM provides image1_path (the base image) and prompt describing the change
+                                # For generate_image: LLM provides the prompt directly
 
                                 tasks.append(
                                     tool_service.execute_tool_async(

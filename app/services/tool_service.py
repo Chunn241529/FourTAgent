@@ -953,7 +953,7 @@ class ToolService:
                 "type": "function",
                 "function": {
                     "name": "edit_image",
-                    "description": "Edit image using Flux 2 via ComfyUI. Works like inpainting - keeps image1 unchanged except what prompt describes. ONE IMAGE: 'change hair to blonde', 'short hair'. TWO IMAGES: image1=base, image2=product. User wants img2's product on img1. Prompt: 'change clothes', 'black shirt'.",
+                    "description": "Edit existing image using Flux 2 via ComfyUI. The result from generate_image contains image_path - use that as image1_path for editing. Flux 2 keeps image1 unchanged except what prompt describes. ONE IMAGE: 'change hair to blonde'. TWO IMAGES: image1=base, image2=product to apply.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -963,11 +963,11 @@ class ToolService:
                             },
                             "image1_path": {
                                 "type": "string",
-                                "description": "Required: Base image (will be kept and modified).",
+                                "description": "Required: The image to edit. Use the image_path from generate_image result or user's uploaded image.",
                             },
                             "image2_path": {
                                 "type": "string",
-                                "description": "Optional: Product image to apply onto image1.",
+                                "description": "Optional: Product image to apply onto image1 (for try-on workflows).",
                             },
                             "seed": {
                                 "type": "integer",

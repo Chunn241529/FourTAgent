@@ -765,7 +765,7 @@ class ChatLLMRouter:
             '- web_search: Search the internet for real-time info (weather, prices, news, facts)\n'
             '- web_fetch: Fetch content from a specific URL\n'
             '- generate_image: Create images from text descriptions\n'
-            '- edit_image: Modify existing images\n'
+            '- edit_image: Modify an existing image. IMPORTANT: Use image_path from generate_image result as image1_path\n'
             '- execute_python: Run Python code for calculations, data processing\n'
             '- execute_code: Run code in other languages\n'
             '- read_file / search_file: Read or search local files\n'
