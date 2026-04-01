@@ -18,14 +18,7 @@ class StorageService {
 
   /// Get stored token
   static Future<String?> getToken() async {
-    final token = await _storage.read(key: _tokenKey);
-    print('>>> StorageService.getToken(): ${token != null ? "found (${token.length} chars)" : "NULL"}');
-    if (token != null && token.isEmpty) {
-      print('>>> WARNING: Token is empty string, deleting and returning null');
-      await _storage.delete(key: _tokenKey);
-      return null;
-    }
-    return token;
+    return await _storage.read(key: _tokenKey);
   }
 
   /// Save user ID

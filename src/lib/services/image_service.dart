@@ -11,11 +11,36 @@ class ImageService {
     String description, {
     String size = '768x768',
   }) async {
-    final response = await ApiService.post('/generate/image/studio', body: {
-      'description': description,
-      'size': size,
-    });
-    return ApiService.parseResponse(response);
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/image/studio');
+
+    var request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    request.fields['description'] = description;
+    request.fields['size'] = size;
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = jsonDecode(utf8.decode(response.bodyBytes));
+      if (body['error'] != null) {
+        throw Exception(body['error']);
+      }
+      return body;
+    } else {
+      String errorMessage = 'Failed to generate image';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody['detail'] != null) {
+          errorMessage = errorBody['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(errorMessage);
+    }
   }
 
   /// Edit image(s) for Image Studio — image1 required, image2 optional

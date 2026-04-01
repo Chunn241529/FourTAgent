@@ -22,6 +22,13 @@ class _EditTabState extends State<EditTab> {
   String? _resultImageUrl;
   String? _resultPrompt;
 
+  String? _coerceToString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    if (value is List && value.isNotEmpty) return value.first.toString();
+    return value.toString();
+  }
+
   @override
   void dispose() {
     _promptController.dispose();
@@ -87,10 +94,11 @@ class _EditTabState extends State<EditTab> {
       );
       if (mounted) {
         setState(() {
-          _resultPrompt = result['generated_prompt'] as String?;
-          final filename =
-              result['image_filename'] ?? result['image_path'] ?? '';
-          if (filename.toString().isNotEmpty) {
+          _resultPrompt = _coerceToString(result['generated_prompt']);
+          final filename = _coerceToString(result['image_filename']) ??
+              _coerceToString(result['image_path']) ??
+              '';
+          if (filename.isNotEmpty) {
             _resultImageUrl = ImageService.getImageUrl(filename);
           }
         });

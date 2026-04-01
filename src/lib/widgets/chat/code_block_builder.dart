@@ -12,7 +12,9 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    if (element.tag != 'code') return null;
+    // Handle tag as String or List (some markdown versions return List)
+    final tag = element.tag;
+    if (tag is! String || tag != 'code') return null;
 
     // Determine if this is a code block or inline code
     // Heuristics:

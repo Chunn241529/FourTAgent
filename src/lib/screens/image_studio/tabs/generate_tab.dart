@@ -28,6 +28,13 @@ class _GenerateTabState extends State<GenerateTab> {
     {'value': '1080x1920', 'label': '9:16'},
   ];
 
+  String? _coerceToString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    if (value is List && value.isNotEmpty) return value.first.toString();
+    return value.toString();
+  }
+
   @override
   void dispose() {
     _promptController.dispose();
@@ -48,12 +55,14 @@ class _GenerateTabState extends State<GenerateTab> {
     try {
       final result =
           await ImageService.generateImage(prompt, size: _selectedSize);
+      print('>>> generateImage result: $result');
       if (mounted) {
         setState(() {
-          _generatedPrompt = result['generated_prompt'] as String?;
-          final filename =
-              result['image_filename'] ?? result['image_path'] ?? '';
-          if (filename.toString().isNotEmpty) {
+          _generatedPrompt = _coerceToString(result['generated_prompt']);
+          final filename = _coerceToString(result['image_filename']) ??
+              _coerceToString(result['image_path']) ??
+              '';
+          if (filename.isNotEmpty) {
             _generatedImageUrl = ImageService.getImageUrl(filename);
           }
         });
