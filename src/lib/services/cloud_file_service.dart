@@ -34,7 +34,7 @@ class CloudFileService {
   static Future<List<CloudFile>> listFiles(String directory) async {
     try {
       final response = await ApiService.get(
-        '/cloud/files',
+        ApiConfig.cloudFiles,
         queryParams: {'directory': directory},
       );
       
@@ -50,7 +50,7 @@ class CloudFileService {
   static Future<String> downloadFile(String path) async {
     try {
       final response = await ApiService.get(
-        '/cloud/files/content',
+        ApiConfig.cloudFilesContent,
         queryParams: {'path': path},
       );
       
@@ -69,7 +69,7 @@ class CloudFileService {
   static Future<String> downloadBinaryFile(String cloudPath, String filename) async {
     try {
       final token = await StorageService.getToken();
-      final uri = Uri.parse('${ApiConfig.baseUrl}/cloud/files/download?path=${Uri.encodeComponent(cloudPath)}');
+      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.cloudFilesDownload}?path=${Uri.encodeComponent(cloudPath)}');
       
       final response = await http.get(
         uri,
@@ -103,7 +103,7 @@ class CloudFileService {
   static Future<void> createFolder(String path) async {
     try {
       await ApiService.post(
-        '/cloud/folders',
+        ApiConfig.cloudFolders,
         body: {'path': path},
       );
     } catch (e) {
@@ -116,7 +116,7 @@ class CloudFileService {
   static Future<void> delete(String path) async {
     try {
       // The delete endpoint uses query param for path
-      final response = await ApiService.delete('/cloud/files?path=$path');
+      final response = await ApiService.delete('${ApiConfig.cloudFiles}?path=$path');
       ApiService.parseResponse(response);
     } catch (e) {
       print('Error deleting cloud item: $e');
@@ -128,7 +128,7 @@ class CloudFileService {
   static Future<void> uploadFile(File file, String targetDirectory) async {
     try {
       final token = await StorageService.getToken();
-      final uri = Uri.parse('${ApiConfig.baseUrl}/cloud/files/upload');
+      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.cloudFilesUpload}');
       final request = http.MultipartRequest('POST', uri);
       
       if (token != null) {
@@ -160,12 +160,12 @@ class CloudFileService {
 
   /// Build the stream URL for binary file access (video/image)
   static String getStreamUrl(String path) {
-    return '${ApiConfig.baseUrl}/cloud/files/stream?path=${Uri.encodeComponent(path)}';
+    return '${ApiConfig.baseUrl}${ApiConfig.cloudFilesStream}?path=${Uri.encodeComponent(path)}';
   }
 
   /// Build the download URL for a cloud file (forces attachment download)
   static String getDownloadUrl(String path) {
-    return '${ApiConfig.baseUrl}/cloud/files/download?path=${Uri.encodeComponent(path)}';
+    return '${ApiConfig.baseUrl}${ApiConfig.cloudFilesDownload}?path=${Uri.encodeComponent(path)}';
   }
 
   /// Check if file is a video

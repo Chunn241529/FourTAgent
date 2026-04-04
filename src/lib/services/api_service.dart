@@ -134,7 +134,7 @@ class ApiService {
   /// Upload audio file for transcription
   static Future<Map<String, dynamic>> transcribeAudio(File file) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/voice/transcribe');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.transcribeAudio}');
     
     var request = http.MultipartRequest('POST', uri);
     if (token != null) {

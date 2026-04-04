@@ -12,7 +12,7 @@ class ImageService {
     String size = '768x768',
   }) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/image/studio');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.generateImageStudio}');
 
     var request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -49,9 +49,12 @@ class ImageService {
     required File image1,
     File? image2,
     required String prompt,
+    bool tryon = false,
+    bool detail = false,
+    bool pixel = false,
   }) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/image/edit/studio');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.editImageStudio}');
 
     var request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -59,6 +62,9 @@ class ImageService {
     }
 
     request.fields['prompt'] = prompt;
+    request.fields['tryon'] = tryon.toString();
+    request.fields['detail'] = detail.toString();
+    request.fields['pixel'] = pixel.toString();
 
     // image1 — required
     request.files
@@ -95,6 +101,6 @@ class ImageService {
   static String getImageUrl(String filename) {
     if (filename.isEmpty) return '';
     final safeName = filename.split('/').last.split('\\').last;
-    return '${ApiConfig.baseUrl}/generate/image/view/$safeName';
+    return '${ApiConfig.baseUrl}${ApiConfig.generatedImage}/$safeName';
   }
 }

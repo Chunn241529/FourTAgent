@@ -30,10 +30,48 @@ class ApiConfig {
   
   // Chat endpoint
   static const String chat = '/send';
+  static const String chatToolResult = '/send/tool_result';
   
   // Feedback endpoint
   static const String feedback = '/feedback';
   
-  // Generated image endpoint (ComfyUI proxy)
+  // Audio/Voice endpoints
+  static const String transcribeAudio = '/voice/transcribe';
+  
+  // Cloud files endpoints
+  static const String cloudFiles = '/cloud/files';
+  static const String cloudFilesContent = '/cloud/files/content';
+  static const String cloudFilesDownload = '/cloud/files/download';
+  static const String cloudFilesUpload = '/cloud/files/upload';
+  static const String cloudFilesStream = '/cloud/files/stream';
+  static const String cloudFolders = '/cloud/folders';
+  
+  // Generation endpoints (Text/Image)
+  static const String generateStream = '/generate/stream';
+  static const String generateImageStudio = '/generate/image/studio';
+  static const String editImageStudio = '/generate/image/edit/studio';
   static const String generatedImage = '/generate/image/view';
+  
+  // TTS endpoints
+  static const String ttsTurboVoices = '/tts/turbo/voices';
+  static const String ttsHqVoices = '/tts/hq/voices';
+  static const String ttsTurboSynthesize = '/tts/turbo/synthesize';
+  static const String ttsHqSynthesize = '/tts/hq/synthesize';
+  
+  // Affiliate / Automation endpoints
+  static const String affiliateStatus = '/affiliate/status';
+  static const String affiliateScrape = '/affiliate/scrape';
+  static const String affiliateProducts = '/affiliate/products';
+  static const String affiliateGenerateScript = '/affiliate/generate-script';
+  static const String affiliateRenderVideo = '/affiliate/render-video';
+  static const String affiliateJobs = '/affiliate/jobs';
+  static const String affiliateGenerateAiVideo = '/affiliate/generate-ai-video';
+  static const String affiliateAiVideoJobs = '/affiliate/ai-video-jobs';
+  static const String affiliateSmartReupTransforms = '/affiliate/smart-reup/transforms';
+  static const String affiliateSmartReup = '/affiliate/smart-reup';
+  static const String affiliateSmartReupDouyin = '/affiliate/smart-reup-douyin';
+  static const String affiliateSmartReupExtractFrame = '/affiliate/smart-reup/extract-frame';
+  static const String affiliateUploadSubtitle = '/affiliate/upload-subtitle';
+  static const String affiliateUploadModelImage = '/affiliate/upload-model-image';
+  static const String affiliateLlmProviders = '/affiliate/llm-providers';
 }

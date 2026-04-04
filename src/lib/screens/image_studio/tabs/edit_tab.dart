@@ -24,6 +24,10 @@ class _EditTabState extends State<EditTab> {
   String? _resultImageUrl;
   String? _resultPrompt;
 
+  bool _enableTryOn = false;
+  bool _enableDetail = false;
+  bool _enablePixel = false;
+
   String? _coerceToString(dynamic value) {
     if (value == null) return null;
     if (value is String) return value;
@@ -96,6 +100,9 @@ class _EditTabState extends State<EditTab> {
         image1: _image1!,
         image2: _image2,
         prompt: promptToUse,
+        tryon: _enableTryOn,
+        detail: _enableDetail,
+        pixel: _enablePixel,
       );
       if (mounted) {
         setState(() {
@@ -186,7 +193,7 @@ class _EditTabState extends State<EditTab> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // ── Prompt bar ──
           _buildPromptBar(theme, isDark),
@@ -707,65 +714,233 @@ class _EditTabState extends State<EditTab> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _promptController,
-              focusNode: _focusNode,
-              maxLines: 4,
-              minLines: 1,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w400,
-                height: 1.4,
-              ),
-              decoration: InputDecoration(
-                hintText:
-                    'Mô tả yêu cầu chỉnh sửa (VD: Đổi màu áo sang đỏ, thêm nón...)',
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                hintStyle: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.3),
-                  fontWeight: FontWeight.w400,
+          Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _promptController,
+                  focusNode: _focusNode,
+                  maxLines: 4,
+                  minLines: 1,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        'Mô tả yêu cầu chỉnh sửa (VD: Đổi màu áo sang đỏ, thêm nón...)',
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  onSubmitted: (_) => _handleEdit(),
                 ),
               ),
-              onSubmitted: (_) => _handleEdit(),
-            ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _isLoading ? null : _handleEdit,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white70,
+                          ),
+                        )
+                      : const Icon(Icons.brush, size: 18),
+                  label: const Text(
+                    'Edit Image',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: _isLoading ? null : _handleEdit,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white70,
-                      ),
-                    )
-                  : const Icon(Icons.brush, size: 18),
-              label: const Text(
-                'Edit Image',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+          if (!_isLoading) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Divider(
+                height: 1,
+                color: isDark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.black.withOpacity(0.04),
               ),
             ),
+            SizedBox(
+              height: 40,
+              child: _buildOptionsRow(theme, isDark),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────── Lora Options ───────────────────
+
+  Widget _buildOptionsRow(ThemeData theme, bool isDark) {
+    const tryOnPrompt = 'attach the outfit in Image 2 to the person in Image 1';
+    const detailPrompt = 'transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image.';
+    const pixelPrompt = 'Create a pixel art spritesheet of the character in the image. The spritesheet is a 4 by 4 grid of four rows of frames - first row is 3 walking frames facing down and 1 frame both arms raised, second row is 3 walking frames facing left and 1 frame jumping left, third row is 3 walking frames facing right and 1 frame jumping right, fourth row is 3 walking frames back view facing up and 1 frame lying on floor.';
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          _buildLoraChip(
+            theme: theme,
+            isDark: isDark,
+            icon: Icons.checkroom,
+            label: 'Try-on Clothes',
+            value: _enableTryOn,
+            onChanged: (val) {
+              setState(() {
+                _enableTryOn = val;
+                if (val) {
+                  _enableDetail = false;
+                  _enablePixel = false;
+                  _promptController.text = tryOnPrompt;
+                } else if (_promptController.text == tryOnPrompt) {
+                  _promptController.text = '';
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildLoraChip(
+            theme: theme,
+            isDark: isDark,
+            icon: Icons.high_quality,
+            label: 'Realistic Detail',
+            value: _enableDetail,
+            onChanged: (val) {
+              setState(() {
+                _enableDetail = val;
+                if (val) {
+                  _enableTryOn = false;
+                  _enablePixel = false;
+                  _promptController.text = detailPrompt;
+                } else if (_promptController.text == detailPrompt) {
+                  _promptController.text = '';
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildLoraChip(
+            theme: theme,
+            isDark: isDark,
+            icon: Icons.grid_3x3,
+            label: 'Pixel Spritesheet',
+            value: _enablePixel,
+            onChanged: (val) {
+              setState(() {
+                _enablePixel = val;
+                if (val) {
+                  _enableTryOn = false;
+                  _enableDetail = false;
+                  _promptController.text = pixelPrompt;
+                } else if (_promptController.text == pixelPrompt) {
+                  _promptController.text = '';
+                }
+              });
+            },
           ),
         ],
+      ),
+    ));
+  }
+
+  Widget _buildLoraChip({
+    required ThemeData theme,
+    required bool isDark,
+    required IconData icon,
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => onChanged(!value),
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: value
+                ? theme.colorScheme.primary.withOpacity(0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: value
+                  ? theme.colorScheme.primary.withOpacity(0.3)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: value
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withOpacity(0.4),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(
+                  icon,
+                  size: 13,
+                  color: value
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: value ? FontWeight.w600 : FontWeight.w500,
+                  color: value
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

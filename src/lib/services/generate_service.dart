@@ -21,7 +21,7 @@ class GenerateService {
       throw Exception('Not authenticated');
     }
 
-    final uri = Uri.parse('${ApiConfig.baseUrl}/generate/stream');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.generateStream}');
     
     final request = http.Request('POST', uri);
     request.headers['Content-Type'] = 'application/json';

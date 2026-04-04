@@ -185,7 +185,7 @@ class ChatService {
       'voice_id': voiceId,
     };
     
-    yield* ApiService.postStream('${ApiConfig.chat}/tool_result', body);
+    yield* ApiService.postStream(ApiConfig.chatToolResult, body);
   }
 }
 

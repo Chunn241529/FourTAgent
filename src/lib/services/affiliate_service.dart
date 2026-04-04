@@ -11,7 +11,7 @@ class AffiliateService {
 
   /// Get status of all LLM providers and ComfyUI.
   static Future<Map<String, dynamic>> getStatus() async {
-    final response = await ApiService.get('/affiliate/status');
+    final response = await ApiService.get(ApiConfig.affiliateStatus);
     return ApiService.parseResponse(response);
   }
 
@@ -23,7 +23,7 @@ class AffiliateService {
     int limit = 10,
   }) async {
     final response = await ApiService.post(
-      '/affiliate/scrape',
+      ApiConfig.affiliateScrape,
       body: {
         'platform': platform,
         if (keyword != null) 'keyword': keyword,
@@ -36,14 +36,14 @@ class AffiliateService {
 
   /// List all saved products.
   static Future<List<dynamic>> listProducts() async {
-    final response = await ApiService.get('/affiliate/products');
+    final response = await ApiService.get(ApiConfig.affiliateProducts);
     final data = ApiService.parseResponse(response);
     return data['products'] ?? [];
   }
 
   /// Delete a saved product.
   static Future<void> deleteProduct(String platform, String productId) async {
-    final response = await ApiService.delete('/affiliate/products/$platform/$productId');
+    final response = await ApiService.delete('${ApiConfig.affiliateProducts}/$platform/$productId');
     ApiService.parseResponse(response);
   }
 
@@ -55,7 +55,7 @@ class AffiliateService {
     String? customPrompt,
   }) async {
     final response = await ApiService.post(
-      '/affiliate/generate-script',
+      ApiConfig.affiliateGenerateScript,
       body: {
         'product_id': productId,
         'style': style,
@@ -77,7 +77,7 @@ class AffiliateService {
     List<String>? imageUrls,
   }) async {
     final response = await ApiService.post(
-      '/affiliate/generate-script',
+      ApiConfig.affiliateGenerateScript,
       body: {
         'manual_product': {
           'name': name,
@@ -103,7 +103,7 @@ class AffiliateService {
     double durationPerImage = 3.0,
   }) async {
     final response = await ApiService.post(
-      '/affiliate/render-video',
+      ApiConfig.affiliateRenderVideo,
       body: {
         'product_id': productId,
         'script_text': scriptText,
@@ -119,7 +119,7 @@ class AffiliateService {
 
   /// Check render job status.
   static Future<Map<String, dynamic>> getJobStatus(String jobId) async {
-    final response = await ApiService.get('/affiliate/jobs/$jobId');
+    final response = await ApiService.get('${ApiConfig.affiliateJobs}/$jobId');
     return ApiService.parseResponse(response);
   }
 
@@ -132,7 +132,7 @@ class AffiliateService {
     required String apiKey,
   }) async {
     final response = await ApiService.post(
-      '/affiliate/generate-ai-video',
+      ApiConfig.affiliateGenerateAiVideo,
       body: {
         'prompt': prompt,
         if (imageUrl != null) 'image_url': imageUrl,
@@ -150,14 +150,14 @@ class AffiliateService {
     required String apiKey,
   }) async {
     final response = await ApiService.get(
-      '/affiliate/ai-video-jobs/$jobId/status?api_key=$apiKey',
+      '${ApiConfig.affiliateAiVideoJobs}/$jobId/status?api_key=$apiKey',
     );
     return ApiService.parseResponse(response);
   }
 
   /// Get available smart reup transforms.
   static Future<Map<String, String>> getTransforms() async {
-    final response = await ApiService.get('/affiliate/smart-reup/transforms');
+    final response = await ApiService.get(ApiConfig.affiliateSmartReupTransforms);
     final data = ApiService.parseResponse(response);
     return Map<String, String>.from(data['transforms'] ?? {});
   }
@@ -170,7 +170,7 @@ class AffiliateService {
     required List<String> transforms,
   }) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateSmartReup}');
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -215,7 +215,7 @@ class AffiliateService {
     Map<String, dynamic>? subtitleStyle,
   }) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup-douyin');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateSmartReupDouyin}');
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -269,7 +269,7 @@ class AffiliateService {
   /// Returns map with 'image' (base64 data URL), 'video_width', 'video_height'.
   static Future<Map<String, dynamic>> extractFrame({File? videoFile, String? videoUrl, double timestamp = 1.0}) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/smart-reup/extract-frame');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateSmartReupExtractFrame}');
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -302,7 +302,7 @@ class AffiliateService {
   /// Returns the filename/path of the uploaded subtitle.
   static Future<String> uploadSubtitle(File subtitleFile) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/upload-subtitle');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateUploadSubtitle}');
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -324,7 +324,7 @@ class AffiliateService {
   /// Upload custom model image for AI Video generation.
   static Future<Map<String, dynamic>> uploadModelImage(File imageFile) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/affiliate/upload-model-image');
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateUploadModelImage}');
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) {
@@ -343,7 +343,7 @@ class AffiliateService {
 
   /// Get LLM provider status.
   static Future<List<dynamic>> getLlmProviders() async {
-    final response = await ApiService.get('/affiliate/llm-providers');
+    final response = await ApiService.get(ApiConfig.affiliateLlmProviders);
     final data = ApiService.parseResponse(response);
     return data['providers'] ?? [];
   }

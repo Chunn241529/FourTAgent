@@ -35,9 +35,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
   bool _color = true;
   bool _noise = false;
   bool _recode = false;
-  bool _stripAudio = true;
   bool _speed = true;
-  bool _pitch = false;
   bool _trimEnd = true;
 
   // Audio mode
@@ -206,10 +204,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     if (_color) transforms.add('color');
     if (_noise) transforms.add('noise');
     if (_recode) transforms.add('recode');
-    if (_stripAudio) transforms.add('strip_audio');
     if (_speed) transforms.add('speed');
-    if (_pitch) transforms.add('pitch');
     if (_trimEnd) transforms.add('trim_end');
+    // Note: strip_audio / pitch are handled via audioMode, not as transforms
 
     // Build blur region map (normalized values)
     Map<String, int>? blurRegionMap;
@@ -927,16 +924,6 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                         onSelected: (v) => setState(() => _speed = v),
                       ),
                       FilterChip(
-                        label: const Text('Pitch Shift'),
-                        selected: _pitch,
-                        onSelected: (v) => setState(() => _pitch = v),
-                      ),
-                      FilterChip(
-                        label: const Text('Strip Audio'),
-                        selected: _stripAudio,
-                        onSelected: (v) => setState(() => _stripAudio = v),
-                      ),
-                      FilterChip(
                         label: const Text('Cắt 4s cuối'),
                         selected: _trimEnd,
                         onSelected: (v) => setState(() => _trimEnd = v),
@@ -946,27 +933,40 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
                   const SizedBox(height: 16),
 
-                  // // Audio mode
-                  // Text('Audio Mode', style: theme.textTheme.titleSmall),
-                  // const SizedBox(height: 8),
-                  // Row(
-                  //   children: [
-                  //     Radio<String>(
-                  //       value: 'strip',
-                  //       groupValue: _audioMode,
-                  //       onChanged: (v) => setState(() => _audioMode = v!),
-                  //     ),
-                  //     const Text('Strip audio'),
-                  //     const SizedBox(width: 16),
-                  //     Radio<String>(
-                  //       value: 'shift',
-                  //       groupValue: _audioMode,
-                  //       onChanged: (v) => setState(() => _audioMode = v!),
-                  //     ),
-                  //     const Text('Pitch shift'),
-                  //   ],
-                  // ),
-                  // const SizedBox(height: 16),
+                  // Audio mode
+                  Text('Audio Mode', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('Tách âm thanh'),
+                          subtitle: const Text(
+                            'Xóa audio, lưu MP3 riêng',
+                          ),
+                          value: 'strip',
+                          groupValue: _audioMode,
+                          onChanged: (v) => setState(() => _audioMode = v!),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('Giữ âm thanh'),
+                          subtitle: const Text(
+                            'Đổi tông/nhịp để lách bản quyền',
+                          ),
+                          value: 'shift',
+                          groupValue: _audioMode,
+                          onChanged: (v) => setState(() => _audioMode = v!),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
                   // Logo removal
                   Text('Logo Removal', style: theme.textTheme.titleSmall),
@@ -1050,196 +1050,196 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   const SizedBox(height: 16),
                   const Divider(),
 
-                  // Subtitle Options
-                  Text('Subtitle Options', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
+                  // // Subtitle Options
+                  // Text('Subtitle Options', style: theme.textTheme.titleSmall),
+                  // const SizedBox(height: 8),
 
-                  // Blur existing subtitles
-                  SwitchListTile(
-                    title: const Text('Blur subtitle/caption'),
-                    subtitle: const Text(
-                      'Chọn vùng chứa sub trên video để blur',
-                    ),
-                    value: _blurSubtitles,
-                    onChanged: (v) => setState(() {
-                      _blurSubtitles = v;
-                      if (v && _blurRegion == null) {
-                        _selectBlurRegion();
-                      }
-                    }),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
+                  // // Blur existing subtitles
+                  // SwitchListTile(
+                  //   title: const Text('Blur subtitle/caption'),
+                  //   subtitle: const Text(
+                  //     'Chọn vùng chứa sub trên video để blur',
+                  //   ),
+                  //   value: _blurSubtitles,
+                  //   onChanged: (v) => setState(() {
+                  //     _blurSubtitles = v;
+                  //     if (v && _blurRegion == null) {
+                  //       _selectBlurRegion();
+                  //     }
+                  //   }),
+                  //   contentPadding: EdgeInsets.zero,
+                  //   dense: true,
+                  // ),
 
-                  if (_blurSubtitles) ...[
-                    if (_blurRegion != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.crop,
-                              size: 14,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Region: ${_blurRegion!.left.toInt()}, ${_blurRegion!.top.toInt()} → '
-                              '${_blurRegion!.width.toInt()}x${_blurRegion!.height.toInt()}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: _selectBlurRegion,
-                              child: Icon(
-                                Icons.edit,
-                                size: 14,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      OutlinedButton.icon(
-                        onPressed: _selectBlurRegion,
-                        icon: const Icon(Icons.crop_free, size: 16),
-                        label: const Text('Chọn vùng blur'),
-                      ),
-                  ],
+                  // if (_blurSubtitles) ...[
+                  //   if (_blurRegion != null)
+                  //     Container(
+                  //       padding: const EdgeInsets.symmetric(
+                  //         horizontal: 12,
+                  //         vertical: 6,
+                  //       ),
+                  //       decoration: BoxDecoration(
+                  //         color: theme.colorScheme.primaryContainer,
+                  //         borderRadius: BorderRadius.circular(8),
+                  //       ),
+                  //       child: Row(
+                  //         mainAxisSize: MainAxisSize.min,
+                  //         children: [
+                  //           Icon(
+                  //             Icons.crop,
+                  //             size: 14,
+                  //             color: theme.colorScheme.onPrimaryContainer,
+                  //           ),
+                  //           const SizedBox(width: 4),
+                  //           Text(
+                  //             'Region: ${_blurRegion!.left.toInt()}, ${_blurRegion!.top.toInt()} → '
+                  //             '${_blurRegion!.width.toInt()}x${_blurRegion!.height.toInt()}',
+                  //             style: TextStyle(
+                  //               fontSize: 12,
+                  //               color: theme.colorScheme.onPrimaryContainer,
+                  //             ),
+                  //           ),
+                  //           const SizedBox(width: 8),
+                  //           GestureDetector(
+                  //             onTap: _selectBlurRegion,
+                  //             child: Icon(
+                  //               Icons.edit,
+                  //               size: 14,
+                  //               color: theme.colorScheme.onPrimaryContainer,
+                  //             ),
+                  //           ),
+                  //         ],
+                  //       ),
+                  //     )
+                  //   else
+                  //     OutlinedButton.icon(
+                  //       onPressed: _selectBlurRegion,
+                  //       icon: const Icon(Icons.crop_free, size: 16),
+                  //       label: const Text('Chọn vùng blur'),
+                  //     ),
+                  // ],
 
-                  const SizedBox(height: 8),
+                  // const SizedBox(height: 8),
 
-                  // Burn subtitles
-                  SwitchListTile(
-                    title: const Text('Add/burn subtitles'),
-                    subtitle: const Text(
-                      'Đốt phụ đề vào video (SRT hoặc text tự động chia thời gian)',
-                    ),
-                    value: _burnSubtitles,
-                    onChanged: (v) => setState(() => _burnSubtitles = v),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
+                  // // Burn subtitles
+                  // SwitchListTile(
+                  //   title: const Text('Add/burn subtitles'),
+                  //   subtitle: const Text(
+                  //     'Đốt phụ đề vào video (SRT hoặc text tự động chia thời gian)',
+                  //   ),
+                  //   value: _burnSubtitles,
+                  //   onChanged: (v) => setState(() => _burnSubtitles = v),
+                  //   contentPadding: EdgeInsets.zero,
+                  //   dense: true,
+                  // ),
 
-                  if (_burnSubtitles) ...[
-                    const SizedBox(height: 8),
-                    // Subtitle source: SRT file or text
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _pickSubtitleFile,
-                            icon: const Icon(Icons.subtitles, size: 16),
-                            label: Text(
-                              _subtitleFile != null
-                                  ? _subtitleFile!.path.split('/').last
-                                  : 'Upload SRT/ASS',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'hoặc',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Nhập text...',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              isDense: true,
-                            ),
-                            onChanged: (v) => _subtitleText = v,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Duration input for auto-timing
-                    if (_subtitleText != null && _subtitleText!.isNotEmpty)
-                      Row(
-                        children: [
-                          const Text(
-                            'Thời lượng video (giây):',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 80,
-                            child: TextField(
-                              decoration: const InputDecoration(
-                                hintText: '30',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                              ),
-                              keyboardType: TextInputType.number,
-                              onChanged: (v) =>
-                                  _subtitleDuration = double.tryParse(v),
-                            ),
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 8),
-                    // Subtitle style options
-                    Row(
-                      children: [
-                        const Text('Vị trí:', style: TextStyle(fontSize: 12)),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Dưới'),
-                          selected: _subtitlePosition == 'bottom',
-                          onSelected: (_) =>
-                              setState(() => _subtitlePosition = 'bottom'),
-                        ),
-                        const SizedBox(width: 4),
-                        ChoiceChip(
-                          label: const Text('Trên'),
-                          selected: _subtitlePosition == 'top',
-                          onSelected: (_) =>
-                              setState(() => _subtitlePosition = 'top'),
-                        ),
-                        const SizedBox(width: 16),
-                        const Text('Cỡ chữ:', style: TextStyle(fontSize: 12)),
-                        const SizedBox(width: 4),
-                        DropdownButton<int>(
-                          value: _subtitleFontSize,
-                          items: [14, 16, 18, 22, 24, 28]
-                              .map(
-                                (s) => DropdownMenuItem(
-                                  value: s,
-                                  child: Text('$s'),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) =>
-                              setState(() => _subtitleFontSize = v!),
-                          isDense: true,
-                          underline: const SizedBox(),
-                        ),
-                      ],
-                    ),
-                  ],
+                  // if (_burnSubtitles) ...[
+                  //   const SizedBox(height: 8),
+                  //   // Subtitle source: SRT file or text
+                  //   Row(
+                  //     children: [
+                  //       Expanded(
+                  //         child: OutlinedButton.icon(
+                  //           onPressed: _pickSubtitleFile,
+                  //           icon: const Icon(Icons.subtitles, size: 16),
+                  //           label: Text(
+                  //             _subtitleFile != null
+                  //                 ? _subtitleFile!.path.split('/').last
+                  //                 : 'Upload SRT/ASS',
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       const SizedBox(width: 8),
+                  //       const Text(
+                  //         'hoặc',
+                  //         style: TextStyle(color: Colors.grey),
+                  //       ),
+                  //       const SizedBox(width: 8),
+                  //       Expanded(
+                  //         child: TextField(
+                  //           decoration: const InputDecoration(
+                  //             hintText: 'Nhập text...',
+                  //             border: OutlineInputBorder(),
+                  //             contentPadding: EdgeInsets.symmetric(
+                  //               horizontal: 8,
+                  //               vertical: 6,
+                  //             ),
+                  //             isDense: true,
+                  //           ),
+                  //           onChanged: (v) => _subtitleText = v,
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  //   const SizedBox(height: 8),
+                  //   // Duration input for auto-timing
+                  //   if (_subtitleText != null && _subtitleText!.isNotEmpty)
+                  //     Row(
+                  //       children: [
+                  //         const Text(
+                  //           'Thời lượng video (giây):',
+                  //           style: TextStyle(fontSize: 12),
+                  //         ),
+                  //         const SizedBox(width: 8),
+                  //         SizedBox(
+                  //           width: 80,
+                  //           child: TextField(
+                  //             decoration: const InputDecoration(
+                  //               hintText: '30',
+                  //               border: OutlineInputBorder(),
+                  //               isDense: true,
+                  //               contentPadding: EdgeInsets.symmetric(
+                  //                 horizontal: 8,
+                  //                 vertical: 6,
+                  //               ),
+                  //             ),
+                  //             keyboardType: TextInputType.number,
+                  //             onChanged: (v) =>
+                  //                 _subtitleDuration = double.tryParse(v),
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   const SizedBox(height: 8),
+                  //   // Subtitle style options
+                  //   Row(
+                  //     children: [
+                  //       const Text('Vị trí:', style: TextStyle(fontSize: 12)),
+                  //       const SizedBox(width: 8),
+                  //       ChoiceChip(
+                  //         label: const Text('Dưới'),
+                  //         selected: _subtitlePosition == 'bottom',
+                  //         onSelected: (_) =>
+                  //             setState(() => _subtitlePosition = 'bottom'),
+                  //       ),
+                  //       const SizedBox(width: 4),
+                  //       ChoiceChip(
+                  //         label: const Text('Trên'),
+                  //         selected: _subtitlePosition == 'top',
+                  //         onSelected: (_) =>
+                  //             setState(() => _subtitlePosition = 'top'),
+                  //       ),
+                  //       const SizedBox(width: 16),
+                  //       const Text('Cỡ chữ:', style: TextStyle(fontSize: 12)),
+                  //       const SizedBox(width: 4),
+                  //       DropdownButton<int>(
+                  //         value: _subtitleFontSize,
+                  //         items: [14, 16, 18, 22, 24, 28]
+                  //             .map(
+                  //               (s) => DropdownMenuItem(
+                  //                 value: s,
+                  //                 child: Text('$s'),
+                  //               ),
+                  //             )
+                  //             .toList(),
+                  //         onChanged: (v) =>
+                  //             setState(() => _subtitleFontSize = v!),
+                  //         isDense: true,
+                  //         underline: const SizedBox(),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ],
 
                   const SizedBox(height: 24),
 
