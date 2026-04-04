@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../../services/affiliate_service.dart';
 
 /// Script tool panel - independent script generation without Scrape dependency.
@@ -236,6 +237,59 @@ class _ScriptToolState extends State<ScriptTool> {
       }
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  // --- Download Script Section ---
+  Future<void> _downloadScript(String section) async {
+    if (_generatedScript == null) return;
+    
+    String? content;
+    String filename;
+    
+    if (section == 'caption') {
+      content = _generatedScript!['script']?['caption'];
+      filename = 'caption.txt';
+    } else if (section == 'ai_video_prompt') {
+      content = _generatedScript!['script']?['ai_video_prompt'];
+      filename = 'ai_video_prompt.txt';
+    } else {
+      // full_script
+      content = _generatedScript!['script']?['full_script'];
+      filename = 'script.txt';
+    }
+    
+    if (content == null || content.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không có nội dung để tải')),
+        );
+      }
+      return;
+    }
+
+    try {
+      // Get downloads directory
+      Directory? downloadsDir;
+      if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+        downloadsDir = await getDownloadsDirectory();
+      }
+      downloadsDir ??= Directory.systemTemp;
+      
+      final localFile = File('${downloadsDir.path}/$filename');
+      await localFile.writeAsString(content);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã lưu: ${localFile.path}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi tải: $e')),
+        );
+      }
     }
   }
 
@@ -484,6 +538,23 @@ class _ScriptToolState extends State<ScriptTool> {
                               Text(
                                 '${_generatedScript!['provider']} (${_generatedScript!['model']})',
                                 style: theme.textTheme.labelSmall,
+                              ),
+                              const Spacer(),
+                              // Download buttons
+                              IconButton(
+                                icon: const Icon(Icons.download, size: 18),
+                                tooltip: 'Tải Script',
+                                onPressed: () => _downloadScript('full_script'),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.download, size: 18),
+                                tooltip: 'Tải Caption',
+                                onPressed: () => _downloadScript('caption'),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.download, size: 18),
+                                tooltip: 'Tải AI Video Prompt',
+                                onPressed: () => _downloadScript('ai_video_prompt'),
                               ),
                             ],
                           ),

@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/affiliate_service.dart';
+import '../../services/cloud_file_service.dart';
 
 /// Render tool panel - independent video rendering.
 class RenderTool extends StatefulWidget {
@@ -238,6 +240,74 @@ class _RenderToolState extends State<RenderTool> {
     }
   }
 
+  Future<void> _downloadVideo() async {
+    if (_activeJobId == null) return;
+    
+    try {
+      String cloudPath;
+      String filename;
+      
+      if (_isAiVideoJob && _jobStatus?['result_url'] != null) {
+        // AI video - result_url might be a local path or cloud path
+        final resultUrl = _jobStatus!['result_url'] as String;
+        if (resultUrl.startsWith('http')) {
+          // Direct URL - open in browser
+          final uri = Uri.parse(resultUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+          return;
+        }
+        // It's a local path, use the download endpoint
+        cloudPath = resultUrl;
+        filename = '${_activeJobId}_ai.mp4';
+      } else if (_jobStatus?['output_path'] != null) {
+        // Regular render job with cloud path
+        cloudPath = _jobStatus!['output_path'] as String;
+        filename = cloudPath.split('/').last;
+      } else {
+        // Fall back to direct URL
+        final downloadUrl = '${AffiliateService.baseUrl}/affiliate/jobs/$_activeJobId/download';
+        final uri = Uri.parse(downloadUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        return;
+      }
+      
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tải video...'),
+            ],
+          ),
+        ),
+      );
+      
+      final localPath = await CloudFileService.downloadBinaryFile(cloudPath, filename);
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã tải: $localPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading if still open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi tải video: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -358,6 +428,14 @@ class _RenderToolState extends State<RenderTool> {
                           'Job: $_activeJobId',
                           style: theme.textTheme.titleSmall,
                         ),
+                        const Spacer(),
+                        // Download button when done
+                        if (_jobStatus!['status'] == 'done' && _activeJobId != null)
+                          IconButton(
+                            icon: const Icon(Icons.download),
+                            tooltip: 'Tải Video',
+                            onPressed: () => _downloadVideo(),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -374,6 +452,29 @@ class _RenderToolState extends State<RenderTool> {
                           style: TextStyle(color: theme.colorScheme.error),
                         ),
                       ),
+                    // Show video preview URL when done
+                    if (_jobStatus!['status'] == 'done') ...[
+                      if (_jobStatus!['output_path'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Video: ${_jobStatus!['output_path']}',
+                            style: TextStyle(fontSize: 11, color: theme.hintColor),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      if (_jobStatus!['result_url'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'AI Video: ${_jobStatus!['result_url']}',
+                            style: TextStyle(fontSize: 11, color: theme.hintColor),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

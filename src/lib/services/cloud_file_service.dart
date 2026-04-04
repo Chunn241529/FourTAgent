@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../config/api_config.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
@@ -60,6 +61,40 @@ class CloudFileService {
       }
     } catch (e) {
       print('Error downloading file: $e');
+      rethrow;
+    }
+  }
+
+  /// Download binary file (video, image) to downloads folder and return local path
+  static Future<String> downloadBinaryFile(String cloudPath, String filename) async {
+    try {
+      final token = await StorageService.getToken();
+      final uri = Uri.parse('${ApiConfig.baseUrl}/cloud/files/download?path=${Uri.encodeComponent(cloudPath)}');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        // Get downloads directory
+        Directory? downloadsDir;
+        if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+          downloadsDir = await getDownloadsDirectory();
+        }
+        // Fallback to temp if no downloads dir found
+        downloadsDir ??= Directory.systemTemp;
+        
+        final localFile = File('${downloadsDir.path}/$filename');
+        await localFile.writeAsBytes(response.bodyBytes);
+        return localFile.path;
+      } else {
+        throw ApiException('Failed to download file', response.statusCode);
+      }
+    } catch (e) {
+      print('Error downloading binary file: $e');
       rethrow;
     }
   }
@@ -128,6 +163,11 @@ class CloudFileService {
     return '${ApiConfig.baseUrl}/cloud/files/stream?path=${Uri.encodeComponent(path)}';
   }
 
+  /// Build the download URL for a cloud file (forces attachment download)
+  static String getDownloadUrl(String path) {
+    return '${ApiConfig.baseUrl}/cloud/files/download?path=${Uri.encodeComponent(path)}';
+  }
+
   /// Check if file is a video
   static bool isVideoFile(String filename) {
     final ext = filename.split('.').last.toLowerCase();
@@ -138,5 +178,24 @@ class CloudFileService {
   static bool isImageFile(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+
+  /// Download file to local storage (returns local file path)
+  static Future<String> downloadToLocal(String cloudPath, String localPath) async {
+    try {
+      final streamUrl = getStreamUrl(cloudPath);
+      final response = await http.get(Uri.parse(streamUrl));
+      
+      if (response.statusCode == 200) {
+        final file = File(localPath);
+        await file.writeAsBytes(response.bodyBytes);
+        return localPath;
+      } else {
+        throw ApiException('Failed to download file', response.statusCode);
+      }
+    } catch (e) {
+      print('Error downloading file to local: $e');
+      rethrow;
+    }
   }
 }

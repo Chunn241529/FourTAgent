@@ -13,24 +13,29 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
+        Widget child;
         // Show loading only during initial auth check (app startup)
         if (authProvider.isInitializing) {
           debugPrint('AuthWrapper: Initializing... Showing LoadingIndicator');
-          return const Scaffold(
+          child = const Scaffold(
+            key: ValueKey('loading'),
             body: Center(
               child: LoadingIndicator(message: 'Đang tải...'),
             ),
           );
-        }
-
-        // Navigate based on auth state
-        if (authProvider.isAuthenticated) {
+        } else if (authProvider.isAuthenticated) {
+          // Navigate based on auth state
           debugPrint('AuthWrapper: Authenticated! Removing LoadingIndicator, showing DesktopHomeScreen');
-          return const DesktopHomeScreen(); 
+          child = const DesktopHomeScreen(key: ValueKey('home')); 
+        } else {
+          debugPrint('AuthWrapper: Not authenticated. Showing LoginScreen');
+          child = const LoginScreen(key: ValueKey('login'));
         }
 
-        debugPrint('AuthWrapper: Not authenticated. Showing LoginScreen');
-        return const LoginScreen();
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: child,
+        );
       },
     );
   }

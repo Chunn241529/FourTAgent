@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/cloud_file_service.dart';
 import '../widgets/file_viewer_dialog.dart';
+import '../widgets/common/download_progress_dialog.dart';
 
 class CloudFilesScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -182,6 +183,43 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
     }
   }
 
+  Future<void> _downloadFile(CloudFile file) async {
+    try {
+      final cloudPath = _currentPath == '/' ? file.name : '$_currentPath/${file.name}';
+      
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tải...'),
+            ],
+          ),
+        ),
+      );
+      
+      final localPath = await CloudFileService.downloadBinaryFile(cloudPath, file.name);
+      
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã tải: $localPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -303,10 +341,21 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
                         },
                         trailing: PopupMenuButton(
                            itemBuilder: (context) => [
+                             if (!isDir) PopupMenuItem(
+                               value: 'download',
+                               child: Row(
+                                 children: const [
+                                   Icon(Icons.download, size: 18),
+                                   SizedBox(width: 8),
+                                   Text('Download'),
+                                 ],
+                               ),
+                             ),
                              const PopupMenuItem(value: 'delete', child: Text('Delete')),
                            ],
                            onSelected: (value) {
                              if (value == 'delete') _deleteItem(file);
+                             if (value == 'download') _downloadFile(file);
                            },
                         ),
                       );

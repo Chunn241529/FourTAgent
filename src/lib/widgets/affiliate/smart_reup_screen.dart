@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/affiliate_service.dart';
+import '../../services/cloud_file_service.dart';
 import '../../widgets/file_viewer_dialog.dart';
 
 /// Smart Reup Douyin screen - paste Douyin URL or upload local video.
@@ -300,6 +302,46 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     }
   }
 
+  Future<void> _downloadResult() async {
+    if (_jobStatus?['output_path'] == null) return;
+    
+    final cloudPath = _jobStatus!['output_path'] as String;
+    final filename = cloudPath.split('/').last;
+    
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tải video...'),
+            ],
+          ),
+        ),
+      );
+      
+      final localPath = await CloudFileService.downloadBinaryFile(cloudPath, filename);
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã tải: $localPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi tải: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -367,6 +409,13 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                           ),
+                        ),
+                      const SizedBox(height: 8),
+                      if (_jobStatus?['output_path'] != null)
+                        OutlinedButton.icon(
+                          onPressed: _downloadResult,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Tải video'),
                         ),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(

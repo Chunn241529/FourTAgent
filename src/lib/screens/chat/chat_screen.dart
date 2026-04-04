@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../providers/music_player_provider.dart';
-import '../../models/conversation.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
-import '../../widgets/settings/settings_dialog.dart';
 import '../../widgets/voice/voice_agent_overlay.dart';
 import '../../providers/canvas_provider.dart';
 import '../../widgets/canvas/canvas_panel.dart';
@@ -22,12 +18,11 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
-  bool _autoScrollEnabled = true; // Whether auto-scroll is active
-  bool _isProgrammaticScroll = false; // Guard against scroll listener during jumpTo
-  bool _scrollPending = false; // Debounce flag to prevent multiple scroll calls per frame
-  String? _selectedTool; // Tool state: image, canvas, deep_research
-  bool _sidebarCollapsed = false; // Sidebar collapse state
-  
+  bool _autoScrollEnabled = true;
+  bool _isProgrammaticScroll = false;
+  bool _scrollPending = false;
+  String? _selectedTool;
+
   late ChatProvider _chatProvider;
   late CanvasProvider _canvasProvider;
 
@@ -40,7 +35,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Load conversations when screen is first displayed
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _chatProvider.loadConversations();
-      
+
       // Set music callback for voice mode and tool actions
       final musicPlayer = context.read<MusicPlayerProvider>();
       context.read<ChatProvider>().setMusicCallbacks(
@@ -53,24 +48,24 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         },
         onQueueAdd: (item) {
-           musicPlayer.addToQueue(
-             url: item['url'],
-             title: item['title'],
-             thumbnail: item['thumbnail'],
-             duration: item['duration'],
-           );
-           if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
-               SnackBar(
-                 content: Text('Đã thêm vào danh sách phát: ${item['title']}'),
-                 behavior: SnackBarBehavior.floating,
-                 width: 400,
-               ),
-             );
-           }
+          musicPlayer.addToQueue(
+            url: item['url'],
+            title: item['title'],
+            thumbnail: item['thumbnail'],
+            duration: item['duration'],
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã thêm vào danh sách phát: ${item['title']}'),
+                behavior: SnackBarBehavior.floating,
+                width: 400,
+              ),
+            );
+          }
         },
         onControl: (action) {
-           musicPlayer.handleControl(action);
+          musicPlayer.handleControl(action);
         },
       );
     });
@@ -79,25 +74,25 @@ class _ChatScreenState extends State<ChatScreen> {
     _chatProvider.addListener(_handleProviderUpdate);
     // Add listener for canvas updates
     _canvasProvider.addListener(_handleCanvasUpdate);
-    
+
     // Register callback for socket events
     _chatProvider.setOnCanvasUpdate((canvasId) {
-       if (mounted) {
-         print('>>> ChatScreen: Received canvas update $canvasId');
-         print('DEBUG: Init with canvasId=$canvasId');
-         final canvasProvider = context.read<CanvasProvider>();
-         
-         // Open panel immediately (via Settings)
-         context.read<SettingsProvider>().setShowCanvas(true);
-         
-         if (canvasId > 0) {
-           // Real canvas ID - fetch and select
-           canvasProvider.fetchAndSelectCanvas(canvasId);
-         } else {
-           // Pending canvas (canvasId=0) - set loading state
-           canvasProvider.setPendingCanvas(true);
-         }
-       }
+      if (mounted) {
+        print('>>> ChatScreen: Received canvas update $canvasId');
+        print('DEBUG: Init with canvasId=$canvasId');
+        final canvasProvider = context.read<CanvasProvider>();
+
+        // Open panel immediately (via Settings)
+        context.read<SettingsProvider>().setShowCanvas(true);
+
+        if (canvasId > 0) {
+          // Real canvas ID - fetch and select
+          canvasProvider.fetchAndSelectCanvas(canvasId);
+        } else {
+          // Pending canvas (canvasId=0) - set loading state
+          canvasProvider.setPendingCanvas(true);
+        }
+      }
     });
   }
 
@@ -114,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     final canvasProvider = context.read<CanvasProvider>();
     final settingsProvider = context.read<SettingsProvider>();
-    
+
     // Auto-open panel if a canvas is selected and panel is closed
     if (canvasProvider.currentCanvas != null && !settingsProvider.showCanvas) {
       settingsProvider.setShowCanvas(true);
@@ -124,7 +119,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _handleProviderUpdate() {
     if (!mounted) return;
     final chatProvider = context.read<ChatProvider>();
-    
+
     // Handle pending client tool calls
     if (chatProvider.pendingClientTool != null) {
       _showToolPermissionDialog(context, chatProvider);
@@ -134,13 +129,13 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Scroll listener — only tracks USER scrolling, ignores programmatic jumps.
   void _onScroll() {
     if (!_scrollController.hasClients || _isProgrammaticScroll) return;
-    
+
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
     const threshold = 150.0;
-    
+
     final isNearBottom = (maxScroll - currentScroll) <= threshold;
-    
+
     if (isNearBottom && !_autoScrollEnabled) {
       // User scrolled back to bottom → re-enable auto-scroll
       _autoScrollEnabled = true;
@@ -157,20 +152,20 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted || !_autoScrollEnabled) return;
     if (_scrollPending) return; // Already scheduled for this frame
     _scrollPending = true;
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollPending = false;
       if (!mounted || !_scrollController.hasClients) return;
       if (!_autoScrollEnabled) return;
-      
+
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
-      
+
       // Nothing to scroll if already at bottom
       if ((maxScroll - currentScroll).abs() < 1.0) return;
-      
+
       _isProgrammaticScroll = true;
-      
+
       if (isStreaming) {
         // Instant jump during streaming — no animation = no jitter
         _scrollController.jumpTo(maxScroll);
@@ -195,466 +190,60 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Remove top-level Consumer to prevent whole screen rebuild on every tick
     // Individual parts will listen to provider as needed
-    return Row(
+    return Column(
       children: [
-        // Left sidebar - Collapsible conversation list
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: _sidebarCollapsed ? 60 : 280,
-          clipBehavior: Clip.hardEdge,
-          decoration: const BoxDecoration(),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            child: SizedBox(
-              width: _sidebarCollapsed ? 60 : 280,
-              child: _sidebarCollapsed 
-                  ? _buildCollapsedSidebar(context, theme)
-                  : _buildConversationSidebar(context, theme),
-            ),
-          ),
-        ),
-        const VerticalDivider(width: 1, thickness: 1),
-        // Main content area
+        // Header - always full width above canvas
+        _buildChatHeader(context, theme),
+        // Chat + Canvas row below header
         Expanded(
-          child: Column(
-            children: [
-              // Header - always full width above canvas
-              _buildChatHeader(context, theme),
-              // Chat + Canvas row below header
-              Expanded(
-                child: Consumer<CanvasProvider>(
-                  builder: (context, canvasProvider, _) {
-                    final showCanvas = context.watch<SettingsProvider>().showCanvas;
-                    if (showCanvas) {
-                       print('DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}');
-                    }
-                    
-                    return Row(
-                      children: [
-                        // Chat messages area
-                        Expanded(
-                          flex: showCanvas ? 2 : 1,
-                          child: _buildChatContent(context, theme),
-                        ),
-                        // Canvas Panel (List or Content)
-                        if (showCanvas)
-                          const Expanded(
-                            flex: 3,
-                            child: CanvasPanel(),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
+          child: Consumer<CanvasProvider>(
+            builder: (context, canvasProvider, _) {
+              final showCanvas = context.watch<SettingsProvider>().showCanvas;
+              if (showCanvas) {
+                print(
+                  'DEBUG: Canvas Panel is ON. Current Canvas: ${canvasProvider.currentCanvas?.id}',
+                );
+              }
+
+              return Row(
+                children: [
+                  // Chat messages area
+                  Expanded(
+                    flex: showCanvas ? 2 : 1,
+                    child: _buildChatContent(context, theme),
+                  ),
+                  // Canvas Panel (List or Content)
+                  if (showCanvas) const Expanded(flex: 3, child: CanvasPanel()),
+                ],
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildConversationSidebar(BuildContext context, ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-    final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final hoverColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
-    final selectedColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06);
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
-            blurRadius: 12,
-            offset: const Offset(2, 0),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header - subtle with no harsh borders
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              child: Container(
-                width: 248,
-                child: Row(
-              children: [
-                Expanded(
-                  child: Consumer<AuthProvider>(
-                    builder: (context, auth, _) {
-                      final user = auth.user;
-                      return InkWell(
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => const SettingsDialog(),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: theme.colorScheme.surface,
-                                  border: Border.all(
-                                    color: theme.dividerColor.withOpacity(0.5),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: CircleAvatar(
-                                  backgroundColor: theme.colorScheme.primaryContainer,
-                                  backgroundImage: (user?.avatar != null && user!.avatar!.isNotEmpty)
-                                      ? NetworkImage(user.avatar!)
-                                      : null,
-                                  onBackgroundImageError: (user?.avatar != null && user!.avatar!.isNotEmpty)
-                                      ? (_, __) {}
-                                      : null,
-                                  child: (user?.avatar == null || user!.avatar!.isEmpty)
-                                      ? Text(
-                                          (user?.fullName?.isNotEmpty == true)
-                                              ? user!.fullName![0].toUpperCase()
-                                              : (user?.username.isNotEmpty == true
-                                                  ? user!.username[0].toUpperCase()
-                                                  : '?'),
-                                          style: TextStyle(
-                                            color: theme.colorScheme.primary,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      user?.fullName?.isNotEmpty == true
-                                          ? user!.fullName!
-                                          : (user?.username ?? 'Lumina AI'),
-                                      style: theme.textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.3,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (user?.fullName?.isNotEmpty == true &&
-                                        user?.username.isNotEmpty == true)
-                                      Text(
-                                        '@${user!.username}',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: theme.textTheme.bodySmall?.color
-                                              ?.withOpacity(0.7),
-                                          fontSize: 11,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: hoverColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: IconButton(
-                    icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-                    iconSize: 20,
-                    onPressed: () {
-                      final themeProvider = context.read<ThemeProvider>();
-                      themeProvider.toggleTheme();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-          // New chat button - modern gradient style
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.secondary,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () async {
-                      await context.read<ChatProvider>().createConversation();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add, color: Colors.white, size: 20),
-                          SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Cuộc trò chuyện mới',
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Conversation list - clean and modern
-          Expanded(
-            child: Selector<ChatProvider, (List<Conversation>, int?)>(
-              selector: (_, provider) => (provider.conversations, provider.currentConversation?.id),
-              shouldRebuild: (prev, next) => prev != next,
-              builder: (context, data, child) {
-                final conversations = data.$1;
-                final currentId = data.$2;
-                
-                if (conversations.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: hoverColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.chat_bubble_outline, size: 28, color: theme.disabledColor),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Chưa có cuộc trò chuyện nào',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.disabledColor),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                
-                return ListView.builder(
-                    itemCount: conversations.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemBuilder: (context, index) {
-                      final conversation = conversations[index];
-                      final isSelected = currentId == conversation.id;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () => context.read<ChatProvider>().selectConversation(conversation),
-                            hoverColor: hoverColor,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                color: isSelected ? selectedColor : Colors.transparent,
-                                border: isSelected 
-                                    ? Border.all(color: theme.dividerColor.withOpacity(0.5), width: 1)
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: isSelected 
-                                          ? theme.colorScheme.primary.withOpacity(0.15)
-                                          : hoverColor,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      Icons.chat_bubble_outline,
-                                      size: 16,
-                                      color: isSelected 
-                                          ? theme.colorScheme.primary
-                                          : theme.iconTheme.color?.withOpacity(0.6),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      conversation.title ?? 'Cuộc trò chuyện',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                        color: isSelected 
-                                            ? theme.textTheme.bodyLarge?.color
-                                            : theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildBottomAction(IconData icon, String label, Color hoverColor, VoidCallback onTap, {bool isDestructive = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          hoverColor: hoverColor,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Icon(
-                  icon, 
-                  size: 20, 
-                  color: isDestructive ? Colors.red.shade400 : null,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDestructive ? Colors.red.shade400 : null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Collapsed sidebar - only icons
-  Widget _buildCollapsedSidebar(BuildContext context, ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-    final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: surfaceColor,
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 8),
-          // Expand button
-          IconButton(
-            icon: const Icon(Icons.menu),
-            tooltip: 'Mở rộng',
-            onPressed: () => setState(() => _sidebarCollapsed = false),
-          ),
-          const SizedBox(height: 8),
-          // New conversation
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Cuộc trò chuyện mới',
-            onPressed: () => context.read<ChatProvider>().createConversation(),
-          ),
-          const Spacer(),
-          // Settings
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Cài đặt',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const SettingsDialog(),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
   // Chat header - always full width above canvas
   Widget _buildChatHeader(BuildContext context, ThemeData theme) {
     return Selector<ChatProvider, (String?, int?)>(
-      selector: (_, provider) => (provider.currentConversation?.title, provider.currentConversation?.id),
+      selector: (_, provider) => (
+        provider.currentConversation?.title,
+        provider.currentConversation?.id,
+      ),
       builder: (context, data, _) {
         final title = data.$1;
         final conversationId = data.$2;
-        
+
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            border: Border(bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2))),
+            border: Border(
+              bottom: BorderSide(color: theme.dividerColor.withOpacity(0.2)),
+            ),
           ),
           child: Row(
             children: [
-              // Toggle sidebar (only show when expanded, collapsed sidebar has its own toggle)
-              if (!_sidebarCollapsed)
-                IconButton(
-                  icon: const Icon(Icons.menu_open),
-                  tooltip: 'Thu gọn sidebar',
-                  onPressed: () => setState(() => _sidebarCollapsed = true),
-                ),
               const SizedBox(width: 8),
               Expanded(
                 child: Row(
@@ -671,7 +260,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     Flexible(
                       child: Text(
                         title ?? 'Lumina AI',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -680,7 +271,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               // Canvas toggle moved to Settings
-              
+
               // More options
               if (conversationId != null)
                 PopupMenuButton<String>(
@@ -722,13 +313,14 @@ class _ChatScreenState extends State<ChatScreen> {
         messageCount: provider.messages.length,
         isStreaming: provider.isStreaming,
         voiceModeEnabled: provider.voiceModeEnabled,
-        lastMessageContent: provider.messages.isNotEmpty 
-            ? provider.messages.last.content.length : 0,
+        lastMessageContent: provider.messages.isNotEmpty
+            ? provider.messages.last.content.length
+            : 0,
       ),
       shouldRebuild: (prev, next) => prev != next,
       builder: (context, state, _) {
         final chatProvider = context.read<ChatProvider>();
-        
+
         // Trigger scroll after frame — debounced by _scrollToBottom itself
         if (state.messageCount > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -739,7 +331,7 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
         }
-        
+
         return PopScope(
           canPop: !chatProvider.voiceModeEnabled,
           onPopInvoked: (didPop) {
@@ -748,277 +340,310 @@ class _ChatScreenState extends State<ChatScreen> {
               chatProvider.setVoiceMode(false);
             }
           },
-      child: Stack(
-        children: [
-          // Voice Agent Overlay (covers everything when voice mode active)
-          // Voice Agent Overlay (covers everything when voice mode active)
-          if (chatProvider.voiceModeEnabled)
-            Positioned.fill(
-              child: VoiceAgentOverlay(
-                isActive: true,
-                isPlaying: chatProvider.isPlayingVoice,
-                isProcessing: chatProvider.isVoiceProcessing,
-                isRecording: chatProvider.isRecording,
-                currentSentence: chatProvider.currentVoiceSentence,
-                currentVoice: chatProvider.currentVoiceId,
-                onClose: () => chatProvider.setVoiceMode(false),
-                onMicPressed: () => chatProvider.startRecording(),
-                onMicReleased: () => chatProvider.stopRecording(),
-                onVoiceSwitch: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) {
-                      final theme = Theme.of(context);
-                      final isDark = theme.brightness == Brightness.dark;
-                      
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                'Chọn giọng đọc',
-                                style: theme.textTheme.titleLarge,
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Flexible(
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: chatProvider.availableVoices.length,
-                                itemBuilder: (context, index) {
-                                  final voice = chatProvider.availableVoices[index];
-                                  final isSelected = voice == chatProvider.currentVoiceId;
-                                  
-                                  return ListTile(
-                                    leading: Icon(
-                                      Icons.record_voice_over,
-                                      color: isSelected ? theme.colorScheme.primary : null,
-                                    ),
-                                    title: Text(
-                                      voice,
-                                      style: TextStyle(
-                                        color: isSelected ? theme.colorScheme.primary : null,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                                    trailing: isSelected 
-                                        ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
-                                        : null,
-                                    onTap: () {
-                                      chatProvider.setVoice(voice);
-                                      Navigator.pop(ctx);
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          
-          // Normal chat UI (hidden when voice overlay active)
-          if (!chatProvider.voiceModeEnabled) ...[
-          if (chatProvider.currentConversation != null && chatProvider.messages.isNotEmpty)
-            Positioned.fill(
-              bottom: 120, // Space for input
-              child: Selector<ChatProvider, (int, bool)>(
-                // Only rebuild when message count or streaming state changes
-                selector: (_, provider) => (provider.messages.length, provider.isStreaming),
-                builder: (context, data, _) {
-                  final messageCount = data.$1;
-                  final isStreaming = data.$2;
-                  
-                  return ListView.builder(
-                    controller: _scrollController,
-                    reverse: false, // Start from top
-                    // Use fixed generous bottom padding to avoid layout jumps when streaming toggles
-                    padding: const EdgeInsets.only(
-                      top: 16, 
-                      bottom: 120, 
-                      left: 24, 
-                      right: 24,
-                    ),
-                    itemCount: messageCount,
-                    itemBuilder: (context, index) {
-                      // Use Selector for individual message to minimize rebuilds
-                      return Selector<ChatProvider, _MessageSnapshot>(
-                        selector: (_, provider) {
-                          final msg = provider.messages[index];
-                          return _MessageSnapshot(
-                            id: msg.id,
-                            content: msg.content,
-                            thinking: msg.thinking,
-                            plan: msg.plan,
-                            deepSearchLength: msg.deepSearchUpdates.length,
-                            codeExecLength: msg.codeExecutions.length,
-                            isStreaming: msg.isStreaming,
-                            isGeneratingImage: msg.isGeneratingImage,
-                            generatedImages: msg.generatedImages.length,
-                          );
-                        },
-                        shouldRebuild: (prev, next) => prev != next,
-                        builder: (context, snapshot, _) {
-                          final messages = context.read<ChatProvider>().messages;
-                          if (index >= messages.length) return const SizedBox.shrink();
-                          return MessageBubble(
-                            key: ValueKey('msg_${snapshot.id ?? index}'),
-                            message: messages[index],
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
+          child: Stack(
+            children: [
+              // Voice Agent Overlay (covers everything when voice mode active)
+              // Voice Agent Overlay (covers everything when voice mode active)
+              if (chatProvider.voiceModeEnabled)
+                Positioned.fill(
+                  child: VoiceAgentOverlay(
+                    isActive: true,
+                    isPlaying: chatProvider.isPlayingVoice,
+                    isProcessing: chatProvider.isVoiceProcessing,
+                    isRecording: chatProvider.isRecording,
+                    currentSentence: chatProvider.currentVoiceSentence,
+                    currentVoice: chatProvider.currentVoiceId,
+                    onClose: () => chatProvider.setVoiceMode(false),
+                    onMicPressed: () => chatProvider.startRecording(),
+                    onMicReleased: () => chatProvider.stopRecording(),
+                    onVoiceSwitch: () {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        builder: (ctx) {
+                          final theme = Theme.of(context);
+                          final isDark = theme.brightness == Brightness.dark;
 
-          // 2. Welcome/Suggestions Layer (Visible only when empty)
-          if (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              // Input is at Alignment(0, 0.4), approx 70% down. 
-              // Make bottom aligned just above the input.
-              bottom: MediaQuery.of(context).size.height * 0.3 + 80, 
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _buildWelcomeView(theme),
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF1E1E2C)
+                                  : Colors.white,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    'Chọn giọng đọc',
+                                    style: theme.textTheme.titleLarge,
+                                  ),
+                                ),
+                                const Divider(height: 1),
+                                Flexible(
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount:
+                                        chatProvider.availableVoices.length,
+                                    itemBuilder: (context, index) {
+                                      final voice =
+                                          chatProvider.availableVoices[index];
+                                      final isSelected =
+                                          voice == chatProvider.currentVoiceId;
+
+                                      return ListTile(
+                                        leading: Icon(
+                                          Icons.record_voice_over,
+                                          color: isSelected
+                                              ? theme.colorScheme.primary
+                                              : null,
+                                        ),
+                                        title: Text(
+                                          voice,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? theme.colorScheme.primary
+                                                : null,
+                                            fontWeight: isSelected
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                        trailing: isSelected
+                                            ? Icon(
+                                                Icons.check_circle,
+                                                color:
+                                                    theme.colorScheme.primary,
+                                              )
+                                            : null,
+                                        onTap: () {
+                                          chatProvider.setVoice(voice);
+                                          Navigator.pop(ctx);
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+              // Normal chat UI (hidden when voice overlay active)
+              if (!chatProvider.voiceModeEnabled) ...[
+                if (chatProvider.currentConversation != null &&
+                    chatProvider.messages.isNotEmpty)
+                  Positioned.fill(
+                    bottom: 120, // Space for input
+                    child: Selector<ChatProvider, (int, bool)>(
+                      // Only rebuild when message count or streaming state changes
+                      selector: (_, provider) =>
+                          (provider.messages.length, provider.isStreaming),
+                      builder: (context, data, _) {
+                        final messageCount = data.$1;
+                        final isStreaming = data.$2;
+
+                        return ListView.builder(
+                          controller: _scrollController,
+                          reverse: false, // Start from top
+                          // Use fixed generous bottom padding to avoid layout jumps when streaming toggles
+                          padding: const EdgeInsets.only(
+                            top: 16,
+                            bottom: 120,
+                            left: 24,
+                            right: 24,
+                          ),
+                          itemCount: messageCount,
+                          itemBuilder: (context, index) {
+                            // Use Selector for individual message to minimize rebuilds
+                            return Selector<ChatProvider, _MessageSnapshot>(
+                              selector: (_, provider) {
+                                final msg = provider.messages[index];
+                                return _MessageSnapshot(
+                                  id: msg.id,
+                                  content: msg.content,
+                                  thinking: msg.thinking,
+                                  plan: msg.plan,
+                                  deepSearchLength:
+                                      msg.deepSearchUpdates.length,
+                                  codeExecLength: msg.codeExecutions.length,
+                                  isStreaming: msg.isStreaming,
+                                  isGeneratingImage: msg.isGeneratingImage,
+                                  generatedImages: msg.generatedImages.length,
+                                );
+                              },
+                              shouldRebuild: (prev, next) => prev != next,
+                              builder: (context, snapshot, _) {
+                                final messages = context
+                                    .read<ChatProvider>()
+                                    .messages;
+                                if (index >= messages.length)
+                                  return const SizedBox.shrink();
+                                return MessageBubble(
+                                  key: ValueKey('msg_${snapshot.id ?? index}'),
+                                  message: messages[index],
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                // 2. Welcome/Suggestions Layer (Visible only when empty)
+                if (chatProvider.currentConversation == null ||
+                    chatProvider.messages.isEmpty)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    // Input is at Alignment(0, 0.4), approx 70% down.
+                    // Make bottom aligned just above the input.
+                    bottom: MediaQuery.of(context).size.height * 0.3 + 80,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 800),
+                        child: SingleChildScrollView(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: _buildWelcomeView(theme),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 3. Input Layer
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeOutCubic,
+                  alignment:
+                      (chatProvider.currentConversation == null ||
+                          chatProvider.messages.isEmpty)
+                      ? const Alignment(0, 0.4)
+                      : Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 800),
+                      child: MessageInput(
+                        voiceModeEnabled: chatProvider.voiceModeEnabled,
+                        onVoiceModeChanged: (enabled) =>
+                            chatProvider.setVoiceMode(enabled),
+                        selectedTool: _selectedTool,
+                        onToolSelected: (tool) =>
+                            setState(() => _selectedTool = tool),
+                        onSend: (message) async {
+                          // Auto-create conversation if none exists
+                          if (chatProvider.currentConversation == null) {
+                            await chatProvider.createConversation();
+                          }
+                          if (!mounted) return;
+
+                          final musicPlayer = context
+                              .read<MusicPlayerProvider>();
+                          String messageToSend = message;
+                          if (_selectedTool == 'image') {
+                            messageToSend += ' (Dùng công cụ tạo hình ảnh)';
+                          } else if (_selectedTool == 'deep_research') {
+                            messageToSend += ' (Dùng công cụ deep research)';
+                          }
+
+                          chatProvider.sendMessage(
+                            messageToSend, // Send message with tool cues
+                            displayContent: message,
+                            onMusicPlay: (url, title, thumbnail, duration) {
+                              musicPlayer.playFromUrl(
+                                url: url,
+                                title: title,
+                                thumbnail: thumbnail,
+                                duration: duration,
+                              );
+                            },
+                            forceTool: _selectedTool,
+                          );
+
+                          // Clear selected tool after send if desired. But typically keep it or clear it. We will clear it.
+                          // setState(() {
+                          //   _selectedTool = null;
+                          // });
+                          _autoScrollEnabled = true;
+                          _scrollToBottom(isStreaming: false);
+                        },
+                        onSendWithFile: (message, file) async {
+                          // Auto-create conversation if none exists
+                          if (chatProvider.currentConversation == null) {
+                            await chatProvider.createConversation();
+                          }
+                          if (!mounted) return;
+
+                          final musicPlayer = context
+                              .read<MusicPlayerProvider>();
+
+                          // Append cues
+                          String messageToSend = message;
+                          if (_selectedTool == 'image') {
+                            messageToSend += ' (Vui lòng tạo hình ảnh)';
+                          } else if (_selectedTool == 'deep_research') {
+                            messageToSend +=
+                                ' (Vui lòng dùng công cụ deep research)';
+                          } else if (_selectedTool == 'canvas') {
+                            messageToSend += ' dùng canvas';
+                          }
+
+                          chatProvider.sendMessage(
+                            messageToSend,
+                            displayContent:
+                                message, // Show original message to user
+                            file: file,
+                            onMusicPlay: (url, title, thumbnail, duration) {
+                              musicPlayer.playFromUrl(
+                                url: url,
+                                title: title,
+                                thumbnail: thumbnail,
+                                duration: duration,
+                              );
+                            },
+                            forceTool: _selectedTool,
+                          );
+
+                          // Scroll to bottom after user sends
+                          // setState(() {
+                          //   _selectedTool = null;
+                          // });
+                          _autoScrollEnabled = true;
+                          _scrollToBottom(isStreaming: false);
+                        },
+                        isLoading: chatProvider.isStreaming,
+                        onStop: () => chatProvider.stopStreaming(),
+                        onMusicTap: () {
+                          final musicPlayer = context
+                              .read<MusicPlayerProvider>();
+                          if (musicPlayer.isVisible) {
+                            musicPlayer.hide();
+                          } else {
+                            musicPlayer.show();
+                          }
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-
-          // 3. Input Layer
-          AnimatedAlign(
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.easeOutCubic,
-            alignment: (chatProvider.currentConversation == null || chatProvider.messages.isEmpty)
-                ? const Alignment(0, 0.4)
-                : Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 800),
-                child: MessageInput(
-                  voiceModeEnabled: chatProvider.voiceModeEnabled,
-                  onVoiceModeChanged: (enabled) => chatProvider.setVoiceMode(enabled),
-                  selectedTool: _selectedTool,
-                  onToolSelected: (tool) => setState(() => _selectedTool = tool),
-                  onSend: (message) async {
-                    // Auto-create conversation if none exists
-                    if (chatProvider.currentConversation == null) {
-                      await chatProvider.createConversation();
-                    }
-                    if (!mounted) return;
-                    
-                    final musicPlayer = context.read<MusicPlayerProvider>();
-                    String messageToSend = message;
-                    if (_selectedTool == 'image') {
-                      messageToSend += ' (Dùng công cụ tạo hình ảnh)';
-                    } else if (_selectedTool == 'deep_research') {
-                      messageToSend += ' (Dùng công cụ deep research)';
-                    }
-                    
-                    chatProvider.sendMessage(
-                      messageToSend, // Send message with tool cues
-                      displayContent: message, 
-                      onMusicPlay: (url, title, thumbnail, duration) {
-                        musicPlayer.playFromUrl(
-                          url: url,
-                          title: title,
-                          thumbnail: thumbnail,
-                          duration: duration,
-                        );
-                      },
-                      forceTool: _selectedTool,
-                    );
-                    
-                    // Clear selected tool after send if desired. But typically keep it or clear it. We will clear it.
-                    // setState(() {
-                    //   _selectedTool = null;
-                    // });
-                    _autoScrollEnabled = true;
-                    _scrollToBottom(isStreaming: false);
-                  },
-                  onSendWithFile: (message, file) async {
-                    // Auto-create conversation if none exists
-                    if (chatProvider.currentConversation == null) {
-                      await chatProvider.createConversation();
-                    }
-                    if (!mounted) return;
-                    
-                    final musicPlayer = context.read<MusicPlayerProvider>();
-
-                    // Append cues
-                    String messageToSend = message;
-                    if (_selectedTool == 'image') {
-                      messageToSend += ' (Vui lòng tạo hình ảnh)';
-                    } else if (_selectedTool == 'deep_research') {
-                      messageToSend += ' (Vui lòng dùng công cụ deep research)';
-                    } else if (_selectedTool == 'canvas') {
-                      messageToSend += ' dùng canvas';
-                    }
-
-                    chatProvider.sendMessage(
-                      messageToSend,
-                      displayContent: message, // Show original message to user
-                      file: file,
-                      onMusicPlay: (url, title, thumbnail, duration) {
-                        musicPlayer.playFromUrl(
-                          url: url,
-                          title: title,
-                          thumbnail: thumbnail,
-                          duration: duration,
-                        );
-                      },
-                      forceTool: _selectedTool,
-                    );
-
-                    // Scroll to bottom after user sends
-                    // setState(() {
-                    //   _selectedTool = null;
-                    // });
-                    _autoScrollEnabled = true;
-                    _scrollToBottom(isStreaming: false);
-                  },
-                  isLoading: chatProvider.isStreaming,
-                  onStop: () => chatProvider.stopStreaming(),
-                  onMusicTap: () {
-                    final musicPlayer = context.read<MusicPlayerProvider>();
-                    if (musicPlayer.isVisible) {
-                      musicPlayer.hide();
-                    } else {
-                      musicPlayer.show();
-                    }
-                  },
-                ),
-              ),
-            ),
+              ], // End of spread operator for normal chat UI
+            ],
           ),
-          ],  // End of spread operator for normal chat UI
-        ],
-      ),
-    );
+        );
       },
     );
   }
@@ -1076,7 +701,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildSuggestionChip(String text, IconData icon, ThemeData theme) {
     final chatProvider = context.read<ChatProvider>();
     final musicPlayer = context.read<MusicPlayerProvider>();
-    
+
     return ActionChip(
       avatar: Icon(icon, size: 16),
       label: Text(text),
@@ -1104,7 +729,9 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa cuộc trò chuyện?'),
-        content: const Text('Bạn có chắc muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.'),
+        content: const Text(
+          'Bạn có chắc muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1112,7 +739,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           TextButton(
             onPressed: () {
-              chatProvider.deleteConversation(chatProvider.currentConversation!.id);
+              chatProvider.deleteConversation(
+                chatProvider.currentConversation!.id,
+              );
               Navigator.pop(context);
             },
             child: Text(
@@ -1127,14 +756,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _isToolDialogShowing = false;
 
-  void _showToolPermissionDialog(BuildContext context, ChatProvider chatProvider) {
+  void _showToolPermissionDialog(
+    BuildContext context,
+    ChatProvider chatProvider,
+  ) {
     if (_isToolDialogShowing) return;
     _isToolDialogShowing = true;
 
     final tool = chatProvider.pendingClientTool!;
     final name = tool['name'] as String;
     final args = tool['args'] as Map<String, dynamic>;
-    
+
     String actionDesc = '';
     IconData icon = Icons.security;
 
@@ -1164,7 +796,9 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('AI đang yêu cầu thực hiện hành động sau trên thiết bị của bạn:'),
+            const Text(
+              'AI đang yêu cầu thực hiện hành động sau trên thiết bị của bạn:',
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -1174,7 +808,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               child: Text(
                 actionDesc,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -1189,7 +826,11 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {
               _isToolDialogShowing = false;
               Navigator.pop(context);
-              chatProvider.submitToolResult(name, 'Error: Quyền bị từ chối bởi người dùng.', tool['tool_call_id']);
+              chatProvider.submitToolResult(
+                name,
+                'Error: Quyền bị từ chối bởi người dùng.',
+                tool['tool_call_id'],
+              );
               chatProvider.clearPendingTool();
             },
             child: const Text('Từ chối'),
@@ -1250,15 +891,15 @@ class _MessageSnapshot {
 
   @override
   int get hashCode => Object.hash(
-    id, 
-    content, 
-    thinking, 
-    plan, 
-    deepSearchLength, 
-    codeExecLength, 
-    isStreaming, 
-    isGeneratingImage, 
-    generatedImages
+    id,
+    content,
+    thinking,
+    plan,
+    deepSearchLength,
+    codeExecLength,
+    isStreaming,
+    isGeneratingImage,
+    generatedImages,
   );
 }
 
