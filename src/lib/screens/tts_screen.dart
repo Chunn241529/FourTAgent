@@ -208,7 +208,8 @@ class _SynthesisViewState extends State<SynthesisView> {
 
   Future<void> _loadVoices() async {
     try {
-      final voices = await TtsService.getVoices();
+      // TTS Studio always uses High Quality (GPU) engine
+      final voices = await TtsService.getVoices(isTurbo: false);
       if (mounted) {
         setState(() {
           _voices = voices;
@@ -234,6 +235,7 @@ class _SynthesisViewState extends State<SynthesisView> {
       final bytes = await TtsService.synthesize(
         _textController.text,
         _selectedVoiceId!,
+        isTurbo: false,
       );
       setState(() {
         _audioBytes = Uint8List.fromList(bytes);

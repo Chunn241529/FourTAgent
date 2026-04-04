@@ -5,9 +5,10 @@ import '../config/api_config.dart';
 import 'storage_service.dart';
 
 class TtsService {
-  static Future<List<Voice>> getVoices() async {
+  static Future<List<Voice>> getVoices({bool isTurbo = true}) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/tts/voices');
+    final endpoint = isTurbo ? '/tts/turbo/voices' : '/tts/hq/voices';
+    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
     final response = await http.get(uri, headers: {
       'Accept': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
@@ -21,9 +22,10 @@ class TtsService {
     }
   }
 
-  static Future<List<int>> synthesize(String text, String voiceId) async {
+  static Future<List<int>> synthesize(String text, String voiceId, {bool isTurbo = true}) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/tts/synthesize');
+    final endpoint = isTurbo ? '/tts/turbo/synthesize' : '/tts/hq/synthesize';
+    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
     
     final response = await http.post(
       uri,
@@ -46,7 +48,7 @@ class TtsService {
 
   static Future<Voice> createVoice(String name, File audioFile) async {
     final token = await StorageService.getToken();
-    final uri = Uri.parse('${ApiConfig.baseUrl}/tts/voices');
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tts/hq/voices');
     
     var request = http.MultipartRequest('POST', uri);
     if (token != null) {

@@ -43,4 +43,30 @@ class WavParser {
     
     return amplitudes;
   }
+  static Duration? getDuration(Uint8List wavBytes) {
+    if (wavBytes.length < 44) return null;
+    
+    // Find 'data' chunk
+    int dataSizeOffset = -1;
+    for (int i = 0; i < wavBytes.length - 4; i++) {
+      if (String.fromCharCodes(wavBytes.sublist(i, i + 4)) == 'data') {
+        dataSizeOffset = i + 4;
+        break;
+      }
+    }
+    if (dataSizeOffset == -1 || dataSizeOffset + 4 > wavBytes.length) return null;
+
+    // Read byte rate from header (offset 28 usually, but let's read properly if standard header)
+    // Assuming standard 44-byte header for byte parsing
+    int byteRate = wavBytes[28] | (wavBytes[29] << 8) | (wavBytes[30] << 16) | (wavBytes[31] << 24);
+    if (byteRate <= 0) return null;
+
+    int dataSize = wavBytes[dataSizeOffset] | 
+                   (wavBytes[dataSizeOffset + 1] << 8) | 
+                   (wavBytes[dataSizeOffset + 2] << 16) | 
+                   (wavBytes[dataSizeOffset + 3] << 24);
+                   
+    double seconds = dataSize / byteRate;
+    return Duration(milliseconds: (seconds * 1000).round());
+  }
 }

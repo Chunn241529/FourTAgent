@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../utils/wav_parser.dart';
 
 class WaveformPlayer extends StatefulWidget {
@@ -25,17 +28,18 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
   Duration _position = Duration.zero;
   List<double> _amplitudes = [];
   bool _isDragging = false;
+  bool _isReady = false;
+  String? _tempFilePath;
   
   // Cache the waveform samples to avoid re-parsing on every build
-  // We'll calculate enough samples for a decent resolution
   static const int _waveformResolution = 100;
 
   @override
   void initState() {
     super.initState();
     _player = AudioPlayer();
-    _initAudio();
     _parseWaveform();
+    _initAudio();
     
     // Listeners
     _player.onPlayerStateChanged.listen((state) {
@@ -53,23 +57,57 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
         setState(() => _position = p);
       }
     });
+
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
   }
   
   Future<void> _initAudio() async {
-    // Set source from bytes
-    await _player.setSource(BytesSource(widget.audioBytes));
-    // Provide an initial duration guess if metadata is available or wait for event
+    try {
+      // Write audio bytes to a temp file — BytesSource is unreliable on Linux desktop
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/tts_preview_${DateTime.now().millisecondsSinceEpoch}.wav');
+      await tempFile.writeAsBytes(widget.audioBytes);
+      _tempFilePath = tempFile.path;
+      
+      // Set source from file
+      await _player.setSource(DeviceFileSource(tempFile.path));
+
+      // Try to get duration from WAV header as fallback
+      if (_duration == Duration.zero) {
+        final wavDuration = WavParser.getDuration(widget.audioBytes);
+        if (wavDuration != null && mounted) {
+          setState(() => _duration = wavDuration);
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isReady = true);
+      }
+    } catch (e) {
+      debugPrint('WaveformPlayer: Failed to init audio: $e');
+    }
   }
 
   void _parseWaveform() {
-    // Determine resolution based on screen width roughly? Start with fixed for now
-    // Or parse in background isolate if heavy, but for < 10MB WAV is fast in main isolate.
     _amplitudes = WavParser.getAmplitudes(widget.audioBytes, samples: _waveformResolution);
   }
 
   @override
   void dispose() {
     _player.dispose();
+    // Clean up temp file
+    if (_tempFilePath != null) {
+      try {
+        File(_tempFilePath!).deleteSync();
+      } catch (_) {}
+    }
     widget.onDispose?.call();
     super.dispose();
   }
@@ -131,16 +169,12 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
               Text(_formatDuration(_position), style: TextStyle(color: Theme.of(context).hintColor, fontSize: 12)),
               
               IconButton(
-                onPressed: () {
-                   if (_isPlaying) {
-                     _player.pause();
-                   } else {
-                     _player.resume();
-                   }
-                },
+                onPressed: _isReady ? _togglePlayPause : null,
                 icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
                 iconSize: 48,
-                color: Theme.of(context).primaryColor,
+                color: _isReady 
+                    ? Theme.of(context).primaryColor 
+                    : Theme.of(context).disabledColor,
               ),
               
               Text(_formatDuration(_duration), style: TextStyle(color: Theme.of(context).hintColor, fontSize: 12)),
@@ -149,6 +183,20 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
         ],
       ),
     );
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (_isPlaying) {
+      await _player.pause();
+    } else {
+      if (_position == Duration.zero || _position >= _duration) {
+        if (_tempFilePath != null) {
+          await _player.play(DeviceFileSource(_tempFilePath!));
+          return;
+        }
+      }
+      await _player.resume();
+    }
   }
   
   void _seekTo(double dx, double width) {
@@ -170,8 +218,6 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
 
   String _formatDuration(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String threeDigits(int n) => n.toString().padLeft(3, "0");
-    // Show minutes:seconds.milliseconds? No, just M:SS
     return "${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
   }
 }
@@ -219,7 +265,6 @@ class WaveformPainter extends CustomPainter {
       double bottom = midY + barHeight / 2;
 
       // Color depends on progress
-      // Progress position in X
       double progressX = progress * width;
       
       if (x < progressX) {

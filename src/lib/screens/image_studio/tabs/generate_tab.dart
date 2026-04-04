@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,13 +20,13 @@ class _GenerateTabState extends State<GenerateTab> {
   String _selectedSize = '768x768';
   final _focusNode = FocusNode();
 
-  final List<Map<String, String>> _sizes = [
-    {'value': '512x512', 'label': '1:1  512'},
-    {'value': '768x768', 'label': '1:1  768'},
-    {'value': '1024x1024', 'label': '1:1  1K'},
-    {'value': '768x1024', 'label': '3:4'},
-    {'value': '1024x768', 'label': '4:3'},
-    {'value': '1080x1920', 'label': '9:16'},
+  final List<Map<String, dynamic>> _sizes = [
+    {'value': '512x512', 'label': '1:1', 'width': 18.0, 'height': 18.0},
+    {'value': '768x768', 'label': 'HQ', 'width': 22.0, 'height': 22.0},
+    {'value': '1024x1024', 'label': '4K', 'width': 26.0, 'height': 26.0},
+    {'value': '768x1024', 'label': '3:4', 'width': 18.0, 'height': 24.0},
+    {'value': '1024x768', 'label': '4:3', 'width': 24.0, 'height': 18.0},
+    {'value': '1080x1920', 'label': '16:9', 'width': 14.0, 'height': 26.0},
   ];
 
   String? _coerceToString(dynamic value) {
@@ -42,37 +43,44 @@ class _GenerateTabState extends State<GenerateTab> {
     super.dispose();
   }
 
-  Future<void> _handleGenerate() async {
-    final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) return;
+  Future<void> _handleGenerate([String? customPrompt]) async {
+    final promptToUse = customPrompt ?? _promptController.text.trim();
+    if (promptToUse.isEmpty) return;
 
     setState(() {
       _isLoading = true;
       _generatedImageUrl = null;
-      _generatedPrompt = null;
     });
 
     try {
-      final result =
-          await ImageService.generateImage(prompt, size: _selectedSize);
-      print('>>> generateImage result: $result');
+      final result = await ImageService.generateImage(
+        promptToUse,
+        size: _selectedSize,
+      );
       if (mounted) {
         setState(() {
-          _generatedPrompt = _coerceToString(result['generated_prompt']);
-          final filename = _coerceToString(result['image_filename']) ??
+          _generatedPrompt =
+              _coerceToString(result['generated_prompt']) ?? promptToUse;
+          final filename =
+              _coerceToString(result['image_filename']) ??
               _coerceToString(result['image_path']) ??
               '';
           if (filename.isNotEmpty) {
             _generatedImageUrl = ImageService.getImageUrl(filename);
+            if (_promptController.text.isEmpty) {
+              _promptController.text = _generatedPrompt!;
+            }
           }
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -91,18 +99,20 @@ class _GenerateTabState extends State<GenerateTab> {
           // ── Canvas area ──
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 500),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
               child: _isLoading
                   ? _buildLoadingState(theme, isDark)
                   : _generatedImageUrl != null
-                      ? _buildResultView(theme, isDark)
-                      : _buildEmptyState(theme, isDark),
+                  ? _buildResultView(theme, isDark)
+                  : _buildEmptyState(theme, isDark),
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
-          // ── Prompt bar ──
+          // ── Glowing Prompt bar ──
           _buildPromptBar(theme, isDark),
         ],
       ),
@@ -114,13 +124,13 @@ class _GenerateTabState extends State<GenerateTab> {
       key: const ValueKey('empty'),
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.03)
-            : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(20),
+            ? Colors.white.withOpacity(0.02)
+            : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.06)
-              : Colors.black.withOpacity(0.06),
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.05),
         ),
       ),
       child: Center(
@@ -128,27 +138,45 @@ class _GenerateTabState extends State<GenerateTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.08),
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary.withOpacity(0.15),
+                    theme.colorScheme.secondary.withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                  ),
+                ],
               ),
-              child: Icon(Icons.auto_awesome,
-                  size: 48,
-                  color: theme.colorScheme.primary.withOpacity(0.5)),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Nhập ý tưởng để tạo ảnh AI',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              child: Icon(
+                Icons.auto_awesome,
+                size: 56,
+                color: theme.colorScheme.primary.withOpacity(0.8),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
             Text(
-              'Hỗ trợ tiếng Việt & tiếng Anh — Lumina × FLUX-2',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.3),
+              'What will you create today?',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.8),
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Lumina × FLUX-2 — Professional AI Generation',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
               ),
             ),
           ],
@@ -162,28 +190,62 @@ class _GenerateTabState extends State<GenerateTab> {
       key: const ValueKey('loading'),
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.03)
-            : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(20),
+            ? Colors.white.withOpacity(0.02)
+            : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withOpacity(0.05),
+            blurRadius: 40,
+            spreadRadius: -10,
+          ),
+        ],
       ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 56,
-              height: 56,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: theme.colorScheme.primary,
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.primary.withOpacity(0.3),
+                  ),
+                ),
+                SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                Icon(
+                  Icons.brush,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Synthesizing Image...',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 24),
-            Text('Đang tạo ảnh...', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text('Lumina đang sáng tạo cho bạn',
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.5))),
+            Text(
+              'Applying textures and finalizing lighting',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
           ],
         ),
       ),
@@ -197,12 +259,19 @@ class _GenerateTabState extends State<GenerateTab> {
         color: isDark
             ? Colors.white.withOpacity(0.03)
             : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.06)
-              : Colors.black.withOpacity(0.06),
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.08),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -219,66 +288,101 @@ class _GenerateTabState extends State<GenerateTab> {
                   if (progress == null) return child;
                   return Center(
                     child: CircularProgressIndicator(
+                      color: theme.colorScheme.primary,
                       value: progress.expectedTotalBytes != null
                           ? progress.cumulativeBytesLoaded /
-                              progress.expectedTotalBytes!
+                                progress.expectedTotalBytes!
                           : null,
                     ),
                   );
                 },
                 errorBuilder: (_, __, ___) => const Center(
-                    child: Icon(Icons.broken_image,
-                        size: 48, color: Colors.grey)),
+                  child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                ),
               ),
             ),
           ),
 
-          // Prompt overlay pill (top-left)
+          // Glassmorphism Prompt pill (bottom-left)
           if (_generatedPrompt != null)
             Positioned(
-              left: 12,
-              top: 12,
+              left: 16,
+              bottom: 16,
               right: 80,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  _generatedPrompt!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: Text(
+                      _generatedPrompt!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
 
-          // Download button (top-right)
+          // Actions (top-right)
           Positioned(
-            top: 10,
-            right: 10,
-            child: _buildDownloadButton(theme),
+            top: 16,
+            right: 16,
+            child: Row(
+              children: [
+                _buildActionButton(
+                  icon: Icons.refresh,
+                  tooltip: 'Tạo lại',
+                  onTap: () => _handleGenerate(),
+                ),
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  icon: Icons.download_rounded,
+                  tooltip: 'Tải ảnh',
+                  onTap: _handleDownload,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDownloadButton(ThemeData theme) {
+  Widget _buildActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
     return Tooltip(
-      message: 'Tải ảnh về',
-      child: Material(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: _handleDownload,
-          borderRadius: BorderRadius.circular(10),
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.download_rounded, size: 20, color: Colors.white),
+      message: tooltip,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Material(
+            color: Colors.black.withOpacity(0.4),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(icon, size: 20, color: Colors.white),
+              ),
+            ),
           ),
         ),
       ),
@@ -289,20 +393,21 @@ class _GenerateTabState extends State<GenerateTab> {
     if (_generatedImageUrl == null) return;
     try {
       final uri = Uri.parse(_generatedImageUrl!);
-      // Extract filename from URL
       final segments = uri.pathSegments;
-      final defaultName = segments.isNotEmpty ? segments.last : 'lumina_image.png';
+      final defaultName = segments.isNotEmpty
+          ? segments.last
+          : 'lumina_image.png';
 
-      // Let user pick save location
       final savePath = await FilePicker.platform.saveFile(
         dialogTitle: 'Lưu ảnh',
         fileName: defaultName,
         type: FileType.image,
       );
-      if (savePath == null) return; // user cancelled
+      if (savePath == null) return;
 
-      // Download and save
-      final response = await HttpClient().getUrl(uri).then((req) => req.close());
+      final response = await HttpClient()
+          .getUrl(uri)
+          .then((req) => req.close());
       final bytes = await consolidateHttpClientResponseBytes(response);
       final file = File(savePath);
       await file.writeAsBytes(bytes);
@@ -318,7 +423,10 @@ class _GenerateTabState extends State<GenerateTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải ảnh: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi tải ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -326,113 +434,173 @@ class _GenerateTabState extends State<GenerateTab> {
 
   Widget _buildPromptBar(ThemeData theme, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF2F2F2F)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+            ? Colors.white.withOpacity(0.04)
+            : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
               ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.08),
+              : Colors.black.withOpacity(0.05),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          )
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _promptController,
-              focusNode: _focusNode,
-              maxLines: 2,
-              minLines: 1,
-              style: theme.textTheme.bodyLarge,
-              decoration: InputDecoration(
-                hintText: 'Mô tả ảnh bạn muốn tạo...',
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.35)),
+          // Row 1: TextField + Generate Btn
+          Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _promptController,
+                  focusNode: _focusNode,
+                  maxLines: 4,
+                  minLines: 1,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Describe the scene you want to bring to life...',
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  onSubmitted: (_) => _handleGenerate(),
+                ),
               ),
-              onSubmitted: (_) => _handleGenerate(),
-            ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _isLoading ? null : _handleGenerate,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white70,
+                          ),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text(
+                    'Generate',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(width: 8),
-
-          // Size chips
-          PopupMenuButton<String>(
-            initialValue: _selectedSize,
-            onSelected: (v) => setState(() => _selectedSize = v),
-            itemBuilder: (_) => _sizes
-                .map((s) => PopupMenuItem(
-                    value: s['value'], child: Text(s['label']!)))
-                .toList(),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
+          if (!_isLoading) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Divider(
+                height: 1,
                 color: isDark
                     ? Colors.white.withOpacity(0.06)
                     : Colors.black.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.aspect_ratio,
-                      size: 16,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5)),
-                  const SizedBox(width: 6),
-                  Text(
-                    _sizes.firstWhere(
-                        (s) => s['value'] == _selectedSize)['label']!,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            theme.colorScheme.onSurface.withOpacity(0.6)),
-                  ),
-                ],
               ),
             ),
-          ),
 
-          const SizedBox(width: 8),
+            // Row 2: Aspect Ratio visual selector
+            SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _sizes.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemBuilder: (context, index) {
+                  final size = _sizes[index];
+                  final isSelected = size['value'] == _selectedSize;
 
-          // Generate button
-          SizedBox(
-            height: 44,
-            child: FilledButton.icon(
-              onPressed: _isLoading ? null : _handleGenerate,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white70))
-                  : const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('Generate'),
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () =>
+                          setState(() => _selectedSize = size['value']),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.colorScheme.primary.withOpacity(0.1)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary.withOpacity(0.3)
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: size['width'],
+                              height: size['height'],
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withOpacity(
+                                          0.4,
+                                        ),
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              size['label'],
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withOpacity(
+                                        0.6,
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-          ),
-          const SizedBox(width: 4),
+          ],
         ],
       ),
     );

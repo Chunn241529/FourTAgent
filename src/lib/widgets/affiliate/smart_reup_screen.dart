@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/affiliate_service.dart';
 import '../../services/cloud_file_service.dart';
 import '../../widgets/file_viewer_dialog.dart';
+import '../../widgets/common/download_progress_dialog.dart';
 
 /// Smart Reup Douyin screen - paste Douyin URL or upload local video.
 class SmartReupScreen extends StatefulWidget {
@@ -40,10 +41,10 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
   bool _trimEnd = true;
 
   // Audio mode
-  String _audioMode = 'strip';  // 'strip' | 'shift'
+  String _audioMode = 'strip'; // 'strip' | 'shift'
 
   // Logo removal
-  String _logoRemoval = 'none';  // 'none' | 'manual' | 'ai'
+  String _logoRemoval = 'none'; // 'none' | 'manual' | 'ai'
 
   // Manual logo crop settings
   double _logoCropTop = 0.0;
@@ -53,12 +54,12 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
   // Subtitle options
   bool _blurSubtitles = false;
-  Rect? _blurRegion;  // user-selected region on frame
+  Rect? _blurRegion; // user-selected region on frame
   bool _burnSubtitles = false;
-  File? _subtitleFile;  // uploaded SRT
+  File? _subtitleFile; // uploaded SRT
   String? _subtitleText;
   double? _subtitleDuration;
-  String _subtitlePosition = 'bottom';  // 'top' | 'bottom'
+  String _subtitlePosition = 'bottom'; // 'top' | 'bottom'
   int _subtitleFontSize = 18;
 
   // Job state
@@ -101,9 +102,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking video: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error picking video: $e')));
       }
     }
   }
@@ -132,7 +133,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       int? videoWidth;
       int? videoHeight;
       if (_videoFile != null) {
-        final result = await AffiliateService.extractFrame(videoFile: _videoFile);
+        final result = await AffiliateService.extractFrame(
+          videoFile: _videoFile,
+        );
         frameData = result['image'] as String;
         videoWidth = result['video_width'] as int?;
         videoHeight = result['video_height'] as int?;
@@ -160,9 +163,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi trích xuất frame: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi trích xuất frame: $e')));
       }
     }
   }
@@ -180,9 +183,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi chọn file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi chọn file: $e')));
       }
     }
   }
@@ -268,9 +271,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       _startPolling(jobId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Smart Reup error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Smart Reup error: $e')));
       }
     }
   }
@@ -304,42 +307,489 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
   Future<void> _downloadResult() async {
     if (_jobStatus?['output_path'] == null) return;
-    
+
     final cloudPath = _jobStatus!['output_path'] as String;
     final filename = cloudPath.split('/').last;
-    
-    try {
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Đang tải video...'),
-            ],
-          ),
+
+    await DownloadProgressDialog.show(
+      context: context,
+      filename: filename,
+      downloadTask: CloudFileService.downloadBinaryFile(cloudPath, filename),
+    );
+  }
+
+  Widget _buildJobStateUI(ThemeData theme) {
+    if (_jobStatus?['status'] == 'done') {
+      return _buildSuccessState(theme);
+    } else if (_jobStatus?['status'] == 'failed') {
+      return _buildFailedState(theme);
+    } else {
+      return _buildProcessingState(theme);
+    }
+  }
+
+  Widget _buildSuccessState(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.green.withOpacity(0.05) : Colors.green.shade50,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.green.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.green.withOpacity(0.1),
+              blurRadius: 40,
+              spreadRadius: -10,
+            ),
+          ],
         ),
-      );
-      
-      final localPath = await CloudFileService.downloadBinaryFile(cloudPath, filename);
-      
-      if (mounted) {
-        Navigator.pop(context); // Close loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã tải: $localPath')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Close loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi khi tải: $e')),
-        );
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_outline,
+                color: Colors.green,
+                size: 64,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Xử lý hoàn tất!',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            if (_jobStatus?['transforms_applied'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Bộ lọc: ${(_jobStatus!['transforms_applied'] as List).join(", ")}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_jobStatus?['output_path'] != null) ...[
+                  FilledButton.icon(
+                    onPressed: () {
+                      final cloudPath = _jobStatus!['output_path'] as String;
+                      FileViewerDialog.showByPath(context, cloudPath);
+                    },
+                    icon: const Icon(Icons.play_circle),
+                    label: const Text('Xem video'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _downloadResult,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Tải về'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _activeJobId = null;
+                      _jobStatus = null;
+                      _isProcessing = false;
+                    });
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Xử lý video khác'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFailedState(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.red.withOpacity(0.05) : Colors.red.shade50,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.red.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.red.withOpacity(0.1),
+              blurRadius: 40,
+              spreadRadius: -10,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 64,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Xử lý thất bại',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _jobStatus?['error'] ?? 'Unknown error',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.red.shade700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: () {
+                setState(() {
+                  _activeJobId = null;
+                  _jobStatus = null;
+                  _isProcessing = false;
+                });
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Thử lại'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessingState(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Timeline stages dynamically built based on selected options
+    final stages = <Map<String, dynamic>>[];
+
+    if (_url != null) {
+      stages.add({
+        'key': 'scrape',
+        'label': 'Cào dữ liệu (Scraping)',
+        'icon': Icons.public,
+      });
+      stages.add({
+        'key': 'download',
+        'label': 'Đang tải (Downloading)',
+        'icon': Icons.downloading,
+      });
+    }
+
+    // We always have some sort of transform/processing
+    stages.add({
+      'key': 'transform',
+      'label': 'Bộ lọc (Transforming)',
+      'icon': Icons.movie_filter,
+    });
+
+    if (_logoRemoval == 'ai') {
+      stages.add({
+        'key': 'ai_logo_removal',
+        'label': 'Xóa logo (AI Inpaint)',
+        'icon': Icons.auto_fix_high,
+      });
+    }
+
+    if (_blurSubtitles) {
+      stages.add({
+        'key': 'blur_subtitles',
+        'label': 'Che phụ đề (Blur)',
+        'icon': Icons.blur_on,
+      });
+    }
+
+    if (_burnSubtitles) {
+      stages.add({
+        'key': 'burn_subtitles',
+        'label': 'Đốt phụ đề (Subtitles)',
+        'icon': Icons.subtitles,
+      });
+    }
+
+    stages.add({
+      'key': 'assemble',
+      'label': 'Ghép nối (Assembling)',
+      'icon': Icons.smart_display,
+    });
+    stages.add({
+      'key': 'save',
+      'label': 'Đang lưu (Saving)',
+      'icon': Icons.cloud_done,
+    });
+
+    final backendStages = _jobStatus?['stages'] as List? ?? [];
+    final currentStage = backendStages.isNotEmpty ? backendStages.last : 'init';
+
+    int activeIndex = -1;
+    for (int i = 0; i < stages.length; i++) {
+      // Match perfectly or try to find fallback
+      if (currentStage == stages[i]['key']) {
+        activeIndex = i;
+        break;
       }
     }
+
+    // Fallback if current Stage is somehow not perfectly matched due to timing or skips
+    if (activeIndex == -1 &&
+        currentStage != 'init' &&
+        currentStage != 'starting') {
+      if (currentStage == 'blur_subtitles' ||
+          currentStage == 'burn_subtitles') {
+        activeIndex = stages.indexWhere(
+          (e) => e['key'] == 'blur_subtitles' || e['key'] == 'burn_subtitles',
+        );
+        if (activeIndex == -1)
+          activeIndex = stages.indexWhere((e) => e['key'] == 'transform');
+      }
+    }
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.02)
+              : Colors.black.withOpacity(0.01),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.primary.withOpacity(0.03),
+              blurRadius: 40,
+              spreadRadius: 10,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Circular Progress
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 140,
+                      height: 140,
+                      child: CircularProgressIndicator(
+                        value: (_jobStatus?['progress'] ?? 0) / 100,
+                        strokeWidth: 10,
+                        backgroundColor: theme.colorScheme.primary.withOpacity(
+                          0.1,
+                        ),
+                        color: theme.colorScheme.primary,
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        Text(
+                          '${_jobStatus?['progress'] ?? 0}%',
+                          style: theme.textTheme.headlineLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Đang xử lý',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : Colors.black.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Job: $_activeJobId',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(width: 48),
+            Container(
+              width: 1,
+              height: 250,
+              color: theme.colorScheme.onSurface.withOpacity(0.1),
+            ),
+            const SizedBox(width: 48),
+
+            // Timeline stepper
+            SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: List.generate(stages.length, (index) {
+                  final isCompleted =
+                      activeIndex > index || _jobStatus?['progress'] == 100;
+                  final isActive =
+                      activeIndex == index && _jobStatus?['progress'] != 100;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isCompleted
+                                ? Colors.green
+                                : isActive
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                            boxShadow: isActive
+                                ? [
+                                    BoxShadow(
+                                      color: theme.colorScheme.primary
+                                          .withOpacity(0.3),
+                                      blurRadius: 10,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: isCompleted
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 16,
+                                  color: Colors.white,
+                                )
+                              : Icon(
+                                  stages[index]['icon'] as IconData,
+                                  size: 14,
+                                  color: isActive
+                                      ? Colors.white
+                                      : theme.colorScheme.onSurface.withOpacity(
+                                          0.5,
+                                        ),
+                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            stages[index]['label'] as String,
+                            style: TextStyle(
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: isActive
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      isCompleted ? 0.8 : 0.4,
+                                    ),
+                            ),
+                          ),
+                        ),
+                        if (isActive)
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -364,151 +814,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         ),
         const SizedBox(height: 12),
 
-        if (_jobStatus?['status'] == 'done') ...[
-          // Success result
-          Expanded(
-            child: Center(
-              child: Card(
-                color: Colors.green.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 48),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Xử lý hoàn tất!',
-                        style: theme.textTheme.titleLarge?.copyWith(color: Colors.green.shade700),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_jobStatus?['output_path'] != null)
-                        Text(
-                          'Cloud: ${_jobStatus!['output_path']}',
-                          style: const TextStyle(fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                      if (_jobStatus?['transforms_applied'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Transforms: ${(_jobStatus!['transforms_applied'] as List).join(", ")}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      if (_jobStatus?['output_path'] != null)
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            final cloudPath = _jobStatus!['output_path'] as String;
-                            FileViewerDialog.showByPath(context, cloudPath);
-                          },
-                          icon: const Icon(Icons.play_circle),
-                          label: const Text('Xem video'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      if (_jobStatus?['output_path'] != null)
-                        OutlinedButton.icon(
-                          onPressed: _downloadResult,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Tải video'),
-                        ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _activeJobId = null;
-                            _jobStatus = null;
-                            _isProcessing = false;
-                          });
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Xử lý video khác'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ] else if (_jobStatus?['status'] == 'failed') ...[
-          // Error result
-          Expanded(
-            child: Center(
-              child: Card(
-                color: Colors.red.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error, color: Colors.red, size: 48),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Xử lý thất bại',
-                        style: theme.textTheme.titleLarge?.copyWith(color: Colors.red.shade700),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _jobStatus?['error'] ?? 'Unknown error',
-                        style: TextStyle(color: Colors.red.shade700),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _activeJobId = null;
-                            _jobStatus = null;
-                            _isProcessing = false;
-                          });
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Thử lại'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ] else if (_isProcessing) ...[
-          // Processing
-          Expanded(
-            child: Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: CircularProgressIndicator(),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Job: $_activeJobId',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: ((_jobStatus?['progress'] ?? 0) / 100),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('${_jobStatus?['progress'] ?? 0}% • ${_getStageText()}'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ] else ...[
+        if (_jobStatus != null || _isProcessing)
+          Expanded(child: _buildJobStateUI(theme))
+        else ...[
           // Input form
           Expanded(
             child: SingleChildScrollView(
@@ -526,7 +834,10 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                           decoration: InputDecoration(
                             hintText: 'https://v.douyin.com/...',
                             border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             filled: true,
                             fillColor: theme.colorScheme.surface,
                           ),
@@ -549,14 +860,19 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Text('— hoặc —', style: TextStyle(color: Colors.grey)),
+                      const Text(
+                        '— hoặc —',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                       const SizedBox(width: 12),
                       OutlinedButton.icon(
                         onPressed: _pickVideo,
                         icon: const Icon(Icons.video_file, size: 18),
-                        label: Text(_videoFile != null
-                            ? _videoFile!.path.split('/').last
-                            : 'Chọn file video'),
+                        label: Text(
+                          _videoFile != null
+                              ? _videoFile!.path.split('/').last
+                              : 'Chọn file video',
+                        ),
                       ),
                     ],
                   ),
@@ -689,17 +1005,44 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   // Manual logo crop settings
                   if (_logoRemoval == 'manual') ...[
                     const SizedBox(height: 8),
-                    Text('Logo Crop Settings (%)', style: theme.textTheme.bodySmall),
+                    Text(
+                      'Logo Crop Settings (%)',
+                      style: theme.textTheme.bodySmall,
+                    ),
                     Row(
                       children: [
-                        Expanded(child: _cropSlider('Top', _logoCropTop, (v) => setState(() => _logoCropTop = v))),
-                        Expanded(child: _cropSlider('Right', _logoCropRight, (v) => setState(() => _logoCropRight = v))),
+                        Expanded(
+                          child: _cropSlider(
+                            'Top',
+                            _logoCropTop,
+                            (v) => setState(() => _logoCropTop = v),
+                          ),
+                        ),
+                        Expanded(
+                          child: _cropSlider(
+                            'Right',
+                            _logoCropRight,
+                            (v) => setState(() => _logoCropRight = v),
+                          ),
+                        ),
                       ],
                     ),
                     Row(
                       children: [
-                        Expanded(child: _cropSlider('Bottom', _logoCropBottom, (v) => setState(() => _logoCropBottom = v))),
-                        Expanded(child: _cropSlider('Left', _logoCropLeft, (v) => setState(() => _logoCropLeft = v))),
+                        Expanded(
+                          child: _cropSlider(
+                            'Bottom',
+                            _logoCropBottom,
+                            (v) => setState(() => _logoCropBottom = v),
+                          ),
+                        ),
+                        Expanded(
+                          child: _cropSlider(
+                            'Left',
+                            _logoCropLeft,
+                            (v) => setState(() => _logoCropLeft = v),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -714,7 +1057,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   // Blur existing subtitles
                   SwitchListTile(
                     title: const Text('Blur subtitle/caption'),
-                    subtitle: const Text('Chọn vùng chứa sub trên video để blur'),
+                    subtitle: const Text(
+                      'Chọn vùng chứa sub trên video để blur',
+                    ),
                     value: _blurSubtitles,
                     onChanged: (v) => setState(() {
                       _blurSubtitles = v;
@@ -729,7 +1074,10 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   if (_blurSubtitles) ...[
                     if (_blurRegion != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(8),
@@ -737,17 +1085,28 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.crop, size: 14, color: theme.colorScheme.onPrimaryContainer),
+                            Icon(
+                              Icons.crop,
+                              size: 14,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Region: ${_blurRegion!.left.toInt()}, ${_blurRegion!.top.toInt()} → '
                               '${_blurRegion!.width.toInt()}x${_blurRegion!.height.toInt()}',
-                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onPrimaryContainer),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: _selectBlurRegion,
-                              child: Icon(Icons.edit, size: 14, color: theme.colorScheme.onPrimaryContainer),
+                              child: Icon(
+                                Icons.edit,
+                                size: 14,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
                             ),
                           ],
                         ),
@@ -765,7 +1124,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   // Burn subtitles
                   SwitchListTile(
                     title: const Text('Add/burn subtitles'),
-                    subtitle: const Text('Đốt phụ đề vào video (SRT hoặc text tự động chia thời gian)'),
+                    subtitle: const Text(
+                      'Đốt phụ đề vào video (SRT hoặc text tự động chia thời gian)',
+                    ),
                     value: _burnSubtitles,
                     onChanged: (v) => setState(() => _burnSubtitles = v),
                     contentPadding: EdgeInsets.zero,
@@ -781,20 +1142,28 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                           child: OutlinedButton.icon(
                             onPressed: _pickSubtitleFile,
                             icon: const Icon(Icons.subtitles, size: 16),
-                            label: Text(_subtitleFile != null
-                                ? _subtitleFile!.path.split('/').last
-                                : 'Upload SRT/ASS'),
+                            label: Text(
+                              _subtitleFile != null
+                                  ? _subtitleFile!.path.split('/').last
+                                  : 'Upload SRT/ASS',
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text('hoặc', style: TextStyle(color: Colors.grey)),
+                        const Text(
+                          'hoặc',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
                             decoration: const InputDecoration(
                               hintText: 'Nhập text...',
                               border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
                               isDense: true,
                             ),
                             onChanged: (v) => _subtitleText = v,
@@ -807,7 +1176,10 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                     if (_subtitleText != null && _subtitleText!.isNotEmpty)
                       Row(
                         children: [
-                          const Text('Thời lượng video (giây):', style: TextStyle(fontSize: 12)),
+                          const Text(
+                            'Thời lượng video (giây):',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           const SizedBox(width: 8),
                           SizedBox(
                             width: 80,
@@ -816,10 +1188,14 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                                 hintText: '30',
                                 border: OutlineInputBorder(),
                                 isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                               ),
                               keyboardType: TextInputType.number,
-                              onChanged: (v) => _subtitleDuration = double.tryParse(v),
+                              onChanged: (v) =>
+                                  _subtitleDuration = double.tryParse(v),
                             ),
                           ),
                         ],
@@ -833,21 +1209,31 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                         ChoiceChip(
                           label: const Text('Dưới'),
                           selected: _subtitlePosition == 'bottom',
-                          onSelected: (_) => setState(() => _subtitlePosition = 'bottom'),
+                          onSelected: (_) =>
+                              setState(() => _subtitlePosition = 'bottom'),
                         ),
                         const SizedBox(width: 4),
                         ChoiceChip(
                           label: const Text('Trên'),
                           selected: _subtitlePosition == 'top',
-                          onSelected: (_) => setState(() => _subtitlePosition = 'top'),
+                          onSelected: (_) =>
+                              setState(() => _subtitlePosition = 'top'),
                         ),
                         const SizedBox(width: 16),
                         const Text('Cỡ chữ:', style: TextStyle(fontSize: 12)),
                         const SizedBox(width: 4),
                         DropdownButton<int>(
                           value: _subtitleFontSize,
-                          items: [14, 16, 18, 22, 24, 28].map((s) => DropdownMenuItem(value: s, child: Text('$s'))).toList(),
-                          onChanged: (v) => setState(() => _subtitleFontSize = v!),
+                          items: [14, 16, 18, 22, 24, 28]
+                              .map(
+                                (s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text('$s'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _subtitleFontSize = v!),
                           isDense: true,
                           underline: const SizedBox(),
                         ),
@@ -861,7 +1247,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: (_url != null || _videoFile != null) ? _startSmartReup : null,
+                      onPressed: (_url != null || _videoFile != null)
+                          ? _startSmartReup
+                          : null,
                       icon: const Icon(Icons.smart_display),
                       label: const Text('Smart Reup Douyin'),
                       style: ElevatedButton.styleFrom(
@@ -881,11 +1269,18 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     );
   }
 
-  Widget _cropSlider(String label, double value, ValueChanged<double> onChanged) {
+  Widget _cropSlider(
+    String label,
+    double value,
+    ValueChanged<double> onChanged,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$label: ${value.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10)),
+        Text(
+          '$label: ${value.toStringAsFixed(1)}%',
+          style: const TextStyle(fontSize: 10),
+        ),
         Slider(
           value: value,
           min: 0,
@@ -900,7 +1295,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
 /// Dialog for selecting a blur region on a video frame.
 class _BlurRegionSelectorDialog extends StatefulWidget {
-  final String frameDataUrl;  // base64 data URL
+  final String frameDataUrl; // base64 data URL
   final int videoWidth;
   final int videoHeight;
 
@@ -911,7 +1306,8 @@ class _BlurRegionSelectorDialog extends StatefulWidget {
   });
 
   @override
-  State<_BlurRegionSelectorDialog> createState() => _BlurRegionSelectorDialogState();
+  State<_BlurRegionSelectorDialog> createState() =>
+      _BlurRegionSelectorDialogState();
 }
 
 class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
@@ -937,10 +1333,21 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
 
     final leftVideo = (imgLeft * scaleX).round().clamp(0, widget.videoWidth);
     final topVideo = (imgTop * scaleY).round().clamp(0, widget.videoHeight);
-    final wVideo = (displayRect.width * scaleX).round().clamp(0, widget.videoWidth);
-    final hVideo = (displayRect.height * scaleY).round().clamp(0, widget.videoHeight);
+    final wVideo = (displayRect.width * scaleX).round().clamp(
+      0,
+      widget.videoWidth,
+    );
+    final hVideo = (displayRect.height * scaleY).round().clamp(
+      0,
+      widget.videoHeight,
+    );
 
-    return Rect.fromLTWH(leftVideo.toDouble(), topVideo.toDouble(), wVideo.toDouble(), hVideo.toDouble());
+    return Rect.fromLTWH(
+      leftVideo.toDouble(),
+      topVideo.toDouble(),
+      wVideo.toDouble(),
+      hVideo.toDouble(),
+    );
   }
 
   /// Compute rendered image rect after image loads, given container constraints.
@@ -987,7 +1394,10 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final containerSize = Size(constraints.maxWidth, constraints.maxHeight);
+                  final containerSize = Size(
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  );
                   return GestureDetector(
                     onPanStart: (details) {
                       setState(() {
@@ -1019,10 +1429,13 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
                             if (loaded && frame != null && !_imageLoaded) {
                               // Compute rendered rect from natural image size + container
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                _computeRenderedRect(containerSize, Size(
-                                  widget.videoWidth.toDouble(),
-                                  widget.videoHeight.toDouble(),
-                                ));
+                                _computeRenderedRect(
+                                  containerSize,
+                                  Size(
+                                    widget.videoWidth.toDouble(),
+                                    widget.videoHeight.toDouble(),
+                                  ),
+                                );
                               });
                             }
                             return child;
@@ -1030,8 +1443,12 @@ class _BlurRegionSelectorDialogState extends State<_BlurRegionSelectorDialog> {
                         ),
                         if (_selection != null)
                           Positioned(
-                            left: _selection!.left < _selection!.right ? _selection!.left : _selection!.right,
-                            top: _selection!.top < _selection!.bottom ? _selection!.top : _selection!.bottom,
+                            left: _selection!.left < _selection!.right
+                                ? _selection!.left
+                                : _selection!.right,
+                            top: _selection!.top < _selection!.bottom
+                                ? _selection!.top
+                                : _selection!.bottom,
                             child: Container(
                               width: _selection!.width.abs(),
                               height: _selection!.height.abs(),

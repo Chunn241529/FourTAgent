@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +16,7 @@ class EditTab extends StatefulWidget {
 class _EditTabState extends State<EditTab> {
   final TextEditingController _promptController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  final _focusNode = FocusNode();
 
   bool _isLoading = false;
   File? _image1;
@@ -32,13 +34,13 @@ class _EditTabState extends State<EditTab> {
   @override
   void dispose() {
     _promptController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   Future<void> _pickImage(int slot) async {
     try {
-      final XFile? image =
-          await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null && mounted) {
         setState(() {
           if (slot == 1) {
@@ -51,8 +53,9 @@ class _EditTabState extends State<EditTab> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Không thể chọn ảnh: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Không thể chọn ảnh: $e')));
       }
     }
   }
@@ -67,16 +70,18 @@ class _EditTabState extends State<EditTab> {
     });
   }
 
-  Future<void> _handleEdit() async {
+  Future<void> _handleEdit([String? customPrompt]) async {
     if (_image1 == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chọn ít nhất 1 ảnh (Image 1)')));
+        const SnackBar(content: Text('Vui lòng chọn ảnh gốc (Image 1)')),
+      );
       return;
     }
-    final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) {
+    final promptToUse = customPrompt ?? _promptController.text.trim();
+    if (promptToUse.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nhập mô tả yêu cầu chỉnh sửa')));
+        const SnackBar(content: Text('Nhập mô tả yêu cầu chỉnh sửa')),
+      );
       return;
     }
 
@@ -90,25 +95,32 @@ class _EditTabState extends State<EditTab> {
       final result = await ImageService.editImage(
         image1: _image1!,
         image2: _image2,
-        prompt: prompt,
+        prompt: promptToUse,
       );
       if (mounted) {
         setState(() {
-          _resultPrompt = _coerceToString(result['generated_prompt']);
-          final filename = _coerceToString(result['image_filename']) ??
+          _resultPrompt =
+              _coerceToString(result['generated_prompt']) ?? promptToUse;
+          final filename =
+              _coerceToString(result['image_filename']) ??
               _coerceToString(result['image_path']) ??
               '';
           if (filename.isNotEmpty) {
             _resultImageUrl = ImageService.getImageUrl(filename);
+            if (_promptController.text.isEmpty) {
+              _promptController.text = _resultPrompt!;
+            }
           }
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -137,25 +149,27 @@ class _EditTabState extends State<EditTab> {
                     children: [
                       // Image 1 (required)
                       Expanded(
+                        flex: 5,
                         child: _buildImageSlot(
                           theme: theme,
                           isDark: isDark,
                           slot: 1,
-                          label: 'Image 1',
-                          sublabel: 'Bắt buộc',
+                          label: 'Upload Source Image',
+                          sublabel: 'Required • Reference Image',
                           file: _image1,
                           required_: true,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       // Image 2 (optional)
                       Expanded(
+                        flex: 4,
                         child: _buildImageSlot(
                           theme: theme,
                           isDark: isDark,
                           slot: 2,
-                          label: 'Image 2',
-                          sublabel: 'Tuỳ chọn',
+                          label: 'Secondary Image',
+                          sublabel: 'Optional • Mask or Style',
                           file: _image2,
                           required_: false,
                         ),
@@ -167,14 +181,12 @@ class _EditTabState extends State<EditTab> {
                 const SizedBox(width: 20),
 
                 // ── Right: Result ──
-                Expanded(
-                  child: _buildResultArea(theme, isDark),
-                ),
+                Expanded(child: _buildResultArea(theme, isDark)),
               ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           // ── Prompt bar ──
           _buildPromptBar(theme, isDark),
@@ -194,121 +206,144 @@ class _EditTabState extends State<EditTab> {
     required File? file,
     required bool required_,
   }) {
+    final hasFile = file != null;
     return Container(
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.03)
-            : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(16),
+            ? Colors.white.withOpacity(0.02)
+            : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: file != null
-              ? theme.colorScheme.primary.withOpacity(0.3)
+          color: hasFile
+              ? theme.colorScheme.primary.withOpacity(0.4)
               : (isDark
-                  ? Colors.white.withOpacity(0.06)
-                  : Colors.black.withOpacity(0.06)),
-          width: file != null ? 1.5 : 1,
+                    ? Colors.white.withOpacity(0.05)
+                    : Colors.black.withOpacity(0.05)),
+          width: hasFile ? 2 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: file != null
+      child: hasFile
           ? _buildImagePreview(theme, isDark, file, slot)
-          : _buildImagePlaceholder(theme, isDark, slot, label, sublabel, required_),
+          : _buildImagePlaceholder(
+              theme,
+              isDark,
+              slot,
+              label,
+              sublabel,
+              required_,
+            ),
     );
   }
 
-  Widget _buildImagePlaceholder(ThemeData theme, bool isDark, int slot,
-      String label, String sublabel, bool required_) {
+  Widget _buildImagePlaceholder(
+    ThemeData theme,
+    bool isDark,
+    int slot,
+    String label,
+    String sublabel,
+    bool required_,
+  ) {
     return InkWell(
       onTap: () => _pickImage(slot),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(24),
+      hoverColor: theme.colorScheme.primary.withOpacity(0.05),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: required_
-                    ? theme.colorScheme.primary.withOpacity(0.08)
+                    ? theme.colorScheme.primary.withOpacity(0.1)
                     : (isDark
-                        ? Colors.white.withOpacity(0.04)
-                        : Colors.black.withOpacity(0.04)),
+                          ? Colors.white.withOpacity(0.04)
+                          : Colors.black.withOpacity(0.04)),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.add_photo_alternate_outlined,
-                size: 28,
+                size: 32,
                 color: required_
-                    ? theme.colorScheme.primary.withOpacity(0.6)
-                    : theme.colorScheme.onSurface.withOpacity(0.3),
+                    ? theme.colorScheme.primary.withOpacity(0.8)
+                    : theme.colorScheme.onSurface.withOpacity(0.4),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(label,
-                style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(sublabel,
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.4))),
+            const SizedBox(height: 16),
+            Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.8),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              sublabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildImagePreview(
-      ThemeData theme, bool isDark, File file, int slot) {
+  Widget _buildImagePreview(ThemeData theme, bool isDark, File file, int slot) {
     return Stack(
       fit: StackFit.expand,
       children: [
         Image.file(file, fit: BoxFit.cover),
-        // Gradient scrim at top
         Positioned(
           top: 0,
           left: 0,
           right: 0,
-          height: 48,
           child: Container(
-            decoration: BoxDecoration(
+            height: 80,
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.black54, Colors.transparent],
+                colors: [Colors.black87, Colors.transparent],
+              ),
+            ),
+          ),
+        ),
+        // Slot label
+        Positioned(
+          top: 12,
+          left: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Text(
+              slot == 1 ? 'Source Image' : 'Mask/Style',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ),
         // Actions row
         Positioned(
-          top: 6,
-          right: 6,
+          top: 10,
+          right: 10,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _miniButton(Icons.refresh, 'Đổi ảnh', () => _pickImage(slot)),
-              const SizedBox(width: 4),
-              _miniButton(Icons.close, 'Xoá', () => _removeImage(slot)),
+              _miniButton(Icons.sync, 'Đổi ảnh', () => _pickImage(slot)),
+              const SizedBox(width: 8),
+              _miniButton(Icons.close, 'Huỷ bỏ', () => _removeImage(slot)),
             ],
-          ),
-        ),
-        // Slot label
-        Positioned(
-          top: 8,
-          left: 10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.black45,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              slot == 1 ? 'Image 1' : 'Image 2',
-              style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600),
-            ),
           ),
         ),
       ],
@@ -318,14 +353,20 @@ class _EditTabState extends State<EditTab> {
   Widget _miniButton(IconData icon, String tooltip, VoidCallback onTap) {
     return Tooltip(
       message: tooltip,
-      child: Material(
-        color: Colors.black38,
-        borderRadius: BorderRadius.circular(6),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child:
-              Padding(padding: const EdgeInsets.all(5), child: Icon(icon, size: 14, color: Colors.white70)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Material(
+            color: Colors.black.withOpacity(0.4),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(icon, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -334,140 +375,266 @@ class _EditTabState extends State<EditTab> {
   // ─────────────────── Result Area ───────────────────
 
   Widget _buildResultArea(ThemeData theme, bool isDark) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: _isLoading
+          ? _buildLoadingState(theme, isDark)
+          : _resultImageUrl != null
+          ? _buildResultView(theme, isDark)
+          : _buildEmptyState(theme, isDark),
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme, bool isDark) {
     return Container(
+      key: const ValueKey('empty'),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.02)
+            : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.compare_rounded,
+                size: 56,
+                color: theme.colorScheme.onSurface.withOpacity(0.2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Advanced Image Editing',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Upload an image and describe what you want to change.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(ThemeData theme, bool isDark) {
+    return Container(
+      key: const ValueKey('loading'),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.02)
+            : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withOpacity(0.05),
+            blurRadius: 40,
+            spreadRadius: -10,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.primary.withOpacity(0.3),
+                  ),
+                ),
+                SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                Icon(
+                  Icons.auto_fix_high,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Processing Edit...',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Analyzing structure and applying edits',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultView(ThemeData theme, bool isDark) {
+    return Container(
+      key: const ValueKey('result'),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withOpacity(0.03)
             : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.06)
-              : Colors.black.withOpacity(0.06),
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.08),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: _isLoading
-          ? _buildLoading(theme)
-          : _resultImageUrl != null
-              ? _buildResult(theme)
-              : _buildResultEmpty(theme, isDark),
-    );
-  }
-
-  Widget _buildResultEmpty(ThemeData theme, bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.06),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.image_outlined,
-                size: 48,
-                color: theme.colorScheme.onSurface.withOpacity(0.25)),
-          ),
-          const SizedBox(height: 16),
-          Text('Kết quả chỉnh sửa',
-              style: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.4))),
-          const SizedBox(height: 6),
-          Text(
-            'Chọn ảnh → Nhập yêu cầu → Bấm Edit',
-            style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.25)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoading(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: CircularProgressIndicator(
-                strokeWidth: 3, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(height: 24),
-          Text('Đang chỉnh sửa...', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text('Quá trình này có thể mất đến 1 phút',
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResult(ThemeData theme) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 5.0,
-            child: Image.network(
-              _resultImageUrl!,
-              fit: BoxFit.contain,
-              loadingBuilder: (_, child, progress) {
-                if (progress == null) return child;
-                return const Center(child: CircularProgressIndicator());
-              },
-              errorBuilder: (_, __, ___) =>
-                  const Center(child: Icon(Icons.broken_image, size: 48)),
-            ),
-          ),
-        ),
-        // Prompt overlay
-        if (_resultPrompt != null)
-          Positioned(
-            left: 12,
-            top: 12,
-            right: 80,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(10),
+          Positioned.fill(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5.0,
+              child: Image.network(
+                _resultImageUrl!,
+                fit: BoxFit.contain,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      color: theme.colorScheme.primary,
+                      value: progress.expectedTotalBytes != null
+                          ? progress.cumulativeBytesLoaded /
+                                progress.expectedTotalBytes!
+                          : null,
+                    ),
+                  );
+                },
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                ),
               ),
-              child: Text(_resultPrompt!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11)),
             ),
           ),
-        // Download button (top-right)
-        Positioned(
-          top: 10,
-          right: 10,
-          child: _buildDownloadButton(theme),
-        ),
-      ],
+
+          // Glassmorphism Prompt pill (bottom-left)
+          if (_resultPrompt != null)
+            Positioned(
+              left: 16,
+              bottom: 16,
+              right: 80,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: Text(
+                      _resultPrompt!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // Actions (top-right)
+          Positioned(
+            top: 16,
+            right: 16,
+            child: Row(
+              children: [
+                _buildActionButton(
+                  icon: Icons.refresh,
+                  tooltip: 'Chỉnh sửa lại',
+                  onTap: () => _handleEdit(),
+                ),
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  icon: Icons.download_rounded,
+                  tooltip: 'Tải ảnh',
+                  onTap: _handleDownload,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildDownloadButton(ThemeData theme) {
+  Widget _buildActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
     return Tooltip(
-      message: 'Tải ảnh về',
-      child: Material(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: _handleDownload,
-          borderRadius: BorderRadius.circular(10),
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.download_rounded, size: 20, color: Colors.white),
+      message: tooltip,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Material(
+            color: Colors.black.withOpacity(0.4),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(icon, size: 20, color: Colors.white),
+              ),
+            ),
           ),
         ),
       ),
@@ -479,7 +646,9 @@ class _EditTabState extends State<EditTab> {
     try {
       final uri = Uri.parse(_resultImageUrl!);
       final segments = uri.pathSegments;
-      final defaultName = segments.isNotEmpty ? segments.last : 'lumina_edit.png';
+      final defaultName = segments.isNotEmpty
+          ? segments.last
+          : 'lumina_edit.png';
 
       final savePath = await FilePicker.platform.saveFile(
         dialogTitle: 'Lưu ảnh',
@@ -488,7 +657,9 @@ class _EditTabState extends State<EditTab> {
       );
       if (savePath == null) return;
 
-      final response = await HttpClient().getUrl(uri).then((req) => req.close());
+      final response = await HttpClient()
+          .getUrl(uri)
+          .then((req) => req.close());
       final bytes = await consolidateHttpClientResponseBytes(response);
       final file = File(savePath);
       await file.writeAsBytes(bytes);
@@ -504,7 +675,10 @@ class _EditTabState extends State<EditTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải ảnh: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi tải ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -514,51 +688,56 @@ class _EditTabState extends State<EditTab> {
 
   Widget _buildPromptBar(ThemeData theme, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2F2F2F) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
               ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.08),
+              : Colors.black.withOpacity(0.05),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          )
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
       child: Row(
         children: [
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: _promptController,
-              maxLines: 2,
+              focusNode: _focusNode,
+              maxLines: 4,
               minLines: 1,
-              style: theme.textTheme.bodyLarge,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w400,
+                height: 1.4,
+              ),
               decoration: InputDecoration(
                 hintText:
                     'Mô tả yêu cầu chỉnh sửa (VD: Đổi màu áo sang đỏ, thêm nón...)',
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.35)),
+                  color: theme.colorScheme.onSurface.withOpacity(0.3),
+                  fontWeight: FontWeight.w400,
+                ),
               ),
               onSubmitted: (_) => _handleEdit(),
             ),
           ),
-
-          const SizedBox(width: 8),
-
-          // Edit button
+          const SizedBox(width: 12),
           SizedBox(
-            height: 44,
+            height: 48,
             child: FilledButton.icon(
               onPressed: _isLoading ? null : _handleEdit,
               icon: _isLoading
@@ -566,20 +745,26 @@ class _EditTabState extends State<EditTab> {
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white70))
+                        strokeWidth: 2,
+                        color: Colors.white70,
+                      ),
+                    )
                   : const Icon(Icons.brush, size: 18),
-              label: const Text('Edit'),
+              label: const Text(
+                'Edit Image',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               style: FilledButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 4),
         ],
       ),
     );
