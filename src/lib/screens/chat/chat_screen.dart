@@ -553,16 +553,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
                           final musicPlayer = context
                               .read<MusicPlayerProvider>();
-                          String messageToSend = message;
-                          if (_selectedTool == 'image') {
-                            messageToSend += ' (Dùng công cụ tạo hình ảnh)';
-                          } else if (_selectedTool == 'deep_research') {
-                            messageToSend += ' (Dùng công cụ deep research)';
-                          }
-
                           chatProvider.sendMessage(
-                            messageToSend, // Send message with tool cues
-                            displayContent: message,
+                            message, // Clean message sent to backend and DB
                             onMusicPlay: (url, title, thumbnail, duration) {
                               musicPlayer.playFromUrl(
                                 url: url,
@@ -571,7 +563,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                 duration: duration,
                               );
                             },
-                            forceTool: _selectedTool,
+                            isCanvas: _selectedTool == 'canvas',
+                            isGenerateImage: _selectedTool == 'image',
+                            isDeepSearch: _selectedTool == 'deep_research',
                           );
 
                           // Clear selected tool after send if desired. But typically keep it or clear it. We will clear it.
@@ -591,21 +585,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           final musicPlayer = context
                               .read<MusicPlayerProvider>();
 
-                          // Append cues
-                          String messageToSend = message;
-                          if (_selectedTool == 'image') {
-                            messageToSend += ' (Vui lòng tạo hình ảnh)';
-                          } else if (_selectedTool == 'deep_research') {
-                            messageToSend +=
-                                ' (Vui lòng dùng công cụ deep research)';
-                          } else if (_selectedTool == 'canvas') {
-                            messageToSend += ' dùng canvas';
-                          }
-
                           chatProvider.sendMessage(
-                            messageToSend,
-                            displayContent:
-                                message, // Show original message to user
+                            message, // Clean message sent to backend and DB
                             file: file,
                             onMusicPlay: (url, title, thumbnail, duration) {
                               musicPlayer.playFromUrl(
@@ -615,7 +596,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                 duration: duration,
                               );
                             },
-                            forceTool: _selectedTool,
+                            isCanvas: _selectedTool == 'canvas',
+                            isGenerateImage: _selectedTool == 'image',
+                            isDeepSearch: _selectedTool == 'deep_research',
                           );
 
                           // Scroll to bottom after user sends

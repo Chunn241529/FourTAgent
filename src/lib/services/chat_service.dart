@@ -82,7 +82,9 @@ class ChatService {
     String? file,
     bool voiceEnabled = false,
     String? voiceId,
-    String? forceTool,
+    bool isCanvas = false,
+    bool isGenerateImage = false,
+    bool isDeepSearch = false,
   }) async* {
     // userId is handled by backend via token
     
@@ -90,8 +92,14 @@ class ChatService {
       'message': message,
       'voice_enabled': voiceEnabled,
     };
-    if (forceTool != null) {
-      body['force_tool'] = forceTool;
+    if (isCanvas) {
+      body['is_canvas'] = true;
+    }
+    if (isGenerateImage) {
+      body['is_generate_image'] = true;
+    }
+    if (isDeepSearch) {
+      body['is_deep_search'] = true;
     }
     if (voiceId != null) {
       body['voice_id'] = voiceId;
