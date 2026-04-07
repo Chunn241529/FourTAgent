@@ -412,18 +412,18 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_widget_from_html
-      sha256: "7f1daefcd3009c43c7e7fb37501e6bb752d79aa7bfad0085fb0444da14e89bd0"
+      sha256: "4fa9a0d34df0a40ac8dd20765dc83bbd8f36ceecfffa2a72a7ab178548804a04"
       url: "https://pub.dev"
     source: hosted
-    version: "0.17.1"
+    version: "0.17.2"
   flutter_widget_from_html_core:
     dependency: transitive
     description:
       name: flutter_widget_from_html_core
-      sha256: "1120ee6ed3509ceff2d55aa6c6cbc7b6b1291434422de2411b5a59364dd6ff03"
+      sha256: "7ff010b116f6abc16429923e616fbc727f3f65ef4cee12ffdb280aeecbc21e7f"
       url: "https://pub.dev"
     source: hosted
-    version: "0.17.0"
+    version: "0.17.2"
   fwfh_cached_network_image:
     dependency: transitive
     description:
@@ -468,10 +468,10 @@ packages:
     dependency: transitive
     description:
       name: fwfh_webview
-      sha256: f71b0aa16e15d82f3c017f33560201ff5ae04e91e970cab5d12d3bcf970b870c
+      sha256: "30de1ce10ee789cbd23732558a4b837d9cfd9d6b6352acf686a0113969fb2f85"
       url: "https://pub.dev"
     source: hosted
-    version: "0.15.6"
+    version: "0.15.7"
   glob:
     dependency: transitive
     description:
@@ -524,10 +524,10 @@ packages:
     dependency: "direct main"
     description:
       name: hugeicons
-      sha256: d19c0e2b57ccf455dd8ef08b84da40ae6dbba898c92960a0a0ada77df7865b8a
+      sha256: "03845d6fc8fed4a9df27d3710c94499f6f624e2cd343e858be2578a4ec69ad0a"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.5"
+    version: "1.1.6"
   image:
     dependency: transitive
     description:
@@ -548,10 +548,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_android
-      sha256: "9eae0cbd672549dacc18df855c2a23782afe4854ada5190b7d63b30ee0b0d3fd"
+      sha256: "66810af8e99b2657ee98e5c6f02064f69bb63f7a70e343937f70946c5f8c6622"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.13+15"
+    version: "0.8.13+16"
   image_picker_for_web:
     dependency: transitive
     description:
@@ -608,6 +608,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.20.2"
+  jni:
+    dependency: transitive
+    description:
+      name: jni
+      sha256: c2230682d5bc2362c1c9e8d3c7f406d9cbba23ab3f2e203a025dd47e0fb2e68f
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
+  jni_flutter:
+    dependency: transitive
+    description:
+      name: jni_flutter
+      sha256: "8b59e590786050b1cd866677dddaf76b1ade5e7bc751abe04b86e84d379d3ba6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   json_annotation:
     dependency: transitive
     description:
@@ -784,14 +800,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.7.0"
+  package_config:
+    dependency: transitive
+    description:
+      name: package_config
+      sha256: f096c55ebb7deb7e384101542bfba8c52696c1b56fca2eb62827989ef2353bbc
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   package_info_plus:
     dependency: "direct main"
     description:
       name: package_info_plus
-      sha256: f69da0d3189a4b4ceaeb1a3defb0f329b3b352517f52bed4290f83d4f06bc08d
+      sha256: "468c26b4254ab01979fa5e4a98cb343ea3631b9acee6f21028997419a80e1a20"
       url: "https://pub.dev"
     source: hosted
-    version: "9.0.0"
+    version: "9.0.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
@@ -828,10 +852,10 @@ packages:
     dependency: transitive
     description:
       name: path_provider_android
-      sha256: "149441ca6e4f38193b2e004c0ca6376a3d11f51fa5a77552d8bd4d2b0c0912ba"
+      sha256: "914a07484c4380e572998d30486e77e0d9cd2faec72fee268086d07bf7f302c9"
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.23"
+    version: "2.3.0"
   path_provider_foundation:
     dependency: transitive
     description:
@@ -1305,10 +1329,10 @@ packages:
     dependency: transitive
     description:
       name: vector_graphics
-      sha256: "7076216a10d5c390315fbe536a30f1254c341e7543e6c4c8a815e591307772b1"
+      sha256: "81da85e9ca8885ade47f9685b953cb098970d11be4821ac765580a6607ea4373"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.20"
+    version: "1.1.21"
   vector_graphics_codec:
     dependency: transitive
     description:

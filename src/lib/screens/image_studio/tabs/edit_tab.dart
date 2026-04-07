@@ -800,8 +800,8 @@ class _EditTabState extends State<EditTab> {
   // ─────────────────── Lora Options ───────────────────
 
   Widget _buildOptionsRow(ThemeData theme, bool isDark) {
-    const tryOnPrompt = 'attach the outfit in Image 2 to the person in Image 1';
-    const detailPrompt = 'transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image.';
+    const tryOnPrompt = 'Attach the outfit in Image 2 to the person in Image 1';
+    const detailPrompt = 'Transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image.';
     const pixelPrompt = 'Create a pixel art spritesheet of the character in the image. The spritesheet is a 4 by 4 grid of four rows of frames - first row is 3 walking frames facing down and 1 frame both arms raised, second row is 3 walking frames facing left and 1 frame jumping left, third row is 3 walking frames facing right and 1 frame jumping right, fourth row is 3 walking frames back view facing up and 1 frame lying on floor.';
 
     return Align(

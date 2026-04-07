@@ -376,110 +376,91 @@ class _MessageInputState extends State<MessageInput> {
                     ],
                   ),
                   
-                  // Tool Dropdown (Công cụ)
-                  PopupMenuButton<String>(
-                    tooltip: 'Chọn công cụ',
-                    offset: const Offset(0, -150),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    onSelected: (value) {
-                       widget.onToolSelected?.call(value == 'none' ? null : value);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.tune,
-                            size: 20,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Công cụ',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.onSurface.withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'image',
-                        child: Row(
-                          children: [
-                            const Text('🍌', style: TextStyle(fontSize: 16)),
-                            const SizedBox(width: 12),
-                            Text('Tạo hình ảnh', style: theme.textTheme.bodyMedium),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'canvas',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_document, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.7)),
-                            const SizedBox(width: 12),
-                            Text('Canvas', style: theme.textTheme.bodyMedium),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'deep_research',
-                        child: Row(
-                          children: [
-                            Icon(Icons.travel_explore, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.7)),
-                            const SizedBox(width: 12),
-                            Text('Deep Research', style: theme.textTheme.bodyMedium),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  // // Tool Dropdown (Công cụ)
+                  // PopupMenuButton<String>(
+                  //   tooltip: 'Chọn công cụ',
+                  //   offset: const Offset(0, -150),
+                  //   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  //   onSelected: (value) {
+                  //      widget.onToolSelected?.call(value == 'none' ? null : value);
+                  //   },
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  //     child: Row(
+                  //       mainAxisSize: MainAxisSize.min,
+                  //       children: [
+                  //         Icon(
+                  //           Icons.tune,
+                  //           size: 20,
+                  //           color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  //         ),
+                  //         const SizedBox(width: 6),
+                  //         Text(
+                  //           'Công cụ',
+                  //           style: TextStyle(
+                  //             fontSize: 13,
+                  //             fontWeight: FontWeight.w500,
+                  //             color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   ),
+                  //   itemBuilder: (context) => [
+                      
+                  //     PopupMenuItem(
+                  //       value: 'deep_research',
+                  //       child: Row(
+                  //         children: [
+                  //           Icon(Icons.travel_explore, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.7)),
+                  //           const SizedBox(width: 12),
+                  //           Text('Deep Research', style: theme.textTheme.bodyMedium),
+                  //         ],
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
 
-                  // Selected Tool Chip
-                  if (widget.selectedTool != null)
-                    Container(
-                      margin: const EdgeInsets.only(left: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.selectedTool == 'image')
-                            const Text('🍌', style: TextStyle(fontSize: 14))
-                          else
-                            Icon(
-                              widget.selectedTool == 'canvas' ? Icons.edit_document : Icons.travel_explore,
-                              size: 14,
-                              color: theme.colorScheme.primary,
-                            ),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.selectedTool == 'image' ? 'Tạo hình ảnh' :
-                            widget.selectedTool == 'canvas' ? 'Canvas' : 'Deep Research',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          InkWell(
-                            onTap: () => widget.onToolSelected?.call(null),
-                            child: Icon(Icons.close, size: 14, color: theme.colorScheme.primary),
-                          ),
-                        ],
-                      ),
-                    ),
+                  // // Selected Tool Chip
+                  // if (widget.selectedTool != null)
+                  //   Container(
+                  //     margin: const EdgeInsets.only(left: 4),
+                  //     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  //     decoration: BoxDecoration(
+                  //       color: theme.colorScheme.primary.withOpacity(0.1),
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     child: Row(
+                  //       mainAxisSize: MainAxisSize.min,
+                  //       children: [
+                  //         if (widget.selectedTool == 'image')
+                  //           const Text('🍌', style: TextStyle(fontSize: 14))
+                  //         else
+                  //           Icon(
+                  //             widget.selectedTool == 'canvas' ? Icons.edit_document : Icons.travel_explore,
+                  //             size: 14,
+                  //             color: theme.colorScheme.primary,
+                  //           ),
+                  //         const SizedBox(width: 4),
+                  //         Text(
+                  //           widget.selectedTool == 'image' ? 'Tạo hình ảnh' :
+                  //           widget.selectedTool == 'canvas' ? 'Canvas' : 'Deep Research',
+                  //           style: TextStyle(
+                  //             fontSize: 12,
+                  //             fontWeight: FontWeight.w500,
+                  //             color: theme.colorScheme.primary,
+                  //           ),
+                  //         ),
+                  //         const SizedBox(width: 4),
+                  //         InkWell(
+                  //           onTap: () => widget.onToolSelected?.call(null),
+                  //           child: Icon(Icons.close, size: 14, color: theme.colorScheme.primary),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   ),
 
-                  const SizedBox(width: 8),
+                  // const SizedBox(width: 8),
 
                   // // Mode Dropdown (Nhanh, Tư duy, Tư duy sâu)
                   // PopupMenuButton<String>(
@@ -525,14 +506,14 @@ class _MessageInputState extends State<MessageInput> {
                   const Spacer(),
                   
                   // Music toggle (Right side)
-                  if (widget.onMusicTap != null)
-                    _IconBtn(
-                      icon: isMusicActive ? Icons.music_note : Icons.music_note_outlined,
-                      onTap: widget.onMusicTap!,
-                      color: isMusicActive 
-                          ? theme.colorScheme.primary 
-                          : theme.colorScheme.onSurface.withOpacity(0.5),
-                    ),
+                  // if (widget.onMusicTap != null)
+                  //   _IconBtn(
+                  //     icon: isMusicActive ? Icons.music_note : Icons.music_note_outlined,
+                  //     onTap: widget.onMusicTap!,
+                  //     color: isMusicActive 
+                  //         ? theme.colorScheme.primary 
+                  //         : theme.colorScheme.onSurface.withOpacity(0.5),
+                  //   ),
 
                   // Voice Mode Toggle (microphone)
                   _IconBtn(
