@@ -351,7 +351,7 @@ class _ScriptToolState extends State<ScriptTool> {
                   decoration: const InputDecoration(
                     labelText: 'Giá',
                     border: OutlineInputBorder(),
-                    hintText: 'VD: 150.000đ',
+                    hintText: 'VD: 150,000đ',
                   ),
                 ),
                 const SizedBox(height: 12),

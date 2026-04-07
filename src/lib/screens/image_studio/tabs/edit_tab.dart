@@ -27,6 +27,7 @@ class _EditTabState extends State<EditTab> {
   bool _enableTryOn = false;
   bool _enableDetail = false;
   bool _enablePixel = false;
+  bool _enablePose = false;
 
   String? _coerceToString(dynamic value) {
     if (value == null) return null;
@@ -103,6 +104,7 @@ class _EditTabState extends State<EditTab> {
         tryon: _enableTryOn,
         detail: _enableDetail,
         pixel: _enablePixel,
+        pose: _enablePose,
       );
       if (mounted) {
         setState(() {
@@ -803,6 +805,8 @@ class _EditTabState extends State<EditTab> {
     const tryOnPrompt = 'Attach the outfit in Image 2 to the person in Image 1';
     const detailPrompt = 'Transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image.';
     const pixelPrompt = 'Create a pixel art spritesheet of the character in the image. The spritesheet is a 4 by 4 grid of four rows of frames - first row is 3 walking frames facing down and 1 frame both arms raised, second row is 3 walking frames facing left and 1 frame jumping left, third row is 3 walking frames facing right and 1 frame jumping right, fourth row is 3 walking frames back view facing up and 1 frame lying on floor.';
+    const posePrompt = 'Change the actions and poses in Image 1 to match those in Image 2';
+
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -824,6 +828,7 @@ class _EditTabState extends State<EditTab> {
                 if (val) {
                   _enableDetail = false;
                   _enablePixel = false;
+                  _enablePose = false;
                   _promptController.text = tryOnPrompt;
                 } else if (_promptController.text == tryOnPrompt) {
                   _promptController.text = '';
@@ -844,6 +849,7 @@ class _EditTabState extends State<EditTab> {
                 if (val) {
                   _enableTryOn = false;
                   _enablePixel = false;
+                  _enablePose = false;
                   _promptController.text = detailPrompt;
                 } else if (_promptController.text == detailPrompt) {
                   _promptController.text = '';
@@ -864,8 +870,30 @@ class _EditTabState extends State<EditTab> {
                 if (val) {
                   _enableTryOn = false;
                   _enableDetail = false;
+                  _enablePose = false;
                   _promptController.text = pixelPrompt;
                 } else if (_promptController.text == pixelPrompt) {
+                  _promptController.text = '';
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildLoraChip(
+            theme: theme,
+            isDark: isDark,
+            icon: Icons.person,
+            label: 'Pose Transfer',
+            value: _enablePose,
+            onChanged: (val) {
+              setState(() {
+                _enablePose = val;
+                if (val) {
+                  _enableTryOn = false;
+                  _enableDetail = false;
+                  _enablePixel = false;
+                  _promptController.text = posePrompt;
+                } else if (_promptController.text == posePrompt) {
                   _promptController.text = '';
                 }
               });

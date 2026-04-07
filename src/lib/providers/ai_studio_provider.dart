@@ -7,6 +7,7 @@ class AiStudioProvider extends ChangeNotifier {
   String _inputText = '';
   String _translatedText = '';
   String _scriptText = '';
+  String _contextPrompt = '';
   
   bool _isTranslating = false;
   bool _isGeneratingScript = false;
@@ -15,6 +16,7 @@ class AiStudioProvider extends ChangeNotifier {
   String get inputText => _inputText;
   String get translatedText => _translatedText;
   String get scriptText => _scriptText;
+  String get contextPrompt => _contextPrompt;
   bool get isTranslating => _isTranslating;
   bool get isGeneratingScript => _isGeneratingScript;
 
@@ -29,30 +31,26 @@ class AiStudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setContextPrompt(String text) {
+    _contextPrompt = text;
+    notifyListeners();
+  }
+
   // Actions
-  Future<void> translate() async {
+  Future<void> translate({bool withContext = false}) async {
     if (_inputText.isEmpty) return;
-    
+
     _isTranslating = true;
     _translatedText = ''; // Clear previous
     notifyListeners();
 
     try {
-      const systemPrompt = """You are a professional subtitle translator.
-Your task is to translate the following subtitle text to Vietnamese (vi-VN).
-
-STRICT OUTPUT RULES:
-1. Output ONLY the translated text.
-2. Maintain the original SRT timestamps and numbering EXACTLY if present.
-3. Do NOT add any notes, explanations, or conversational filler.
-4. If the input is plain text, translate line-by-line.""";
-
-      final stream = GenerateService.generate(
-        prompt: _inputText,
-        systemPrompt: systemPrompt,
-        temperature: 0.3, // Lower for more accurate translation
+      final stream = GenerateService.translate(
+        text: _inputText,
+        withContext: withContext,
+        context: withContext ? _contextPrompt : "",
       );
-      
+
       await for (final chunk in stream) {
         _parseAndAppend(chunk, (text) {
           _translatedText += text;
@@ -61,6 +59,8 @@ STRICT OUTPUT RULES:
       }
     } catch (e) {
       debugPrint("Translation error: $e");
+      _translatedText = ''; // clear on error
+      notifyListeners();
     } finally {
       _isTranslating = false;
       notifyListeners();

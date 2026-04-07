@@ -250,6 +250,8 @@ class _TranslatorTabState extends State<TranslatorTab>
       child: Column(
         children: [
           _buildActionBar(provider, theme),
+          const SizedBox(height: 8),
+          _buildContextBar(provider, theme),
           const SizedBox(height: 16),
           Expanded(
             child: Row(
@@ -328,6 +330,75 @@ class _TranslatorTabState extends State<TranslatorTab>
                       await File(
                         outputFile,
                       ).writeAsString(provider.translatedText);
+                  },
+            theme: theme,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContextBar(AiStudioProvider provider, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            "Bối cảnh:",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              onChanged: (val) => provider.setContextPrompt(val),
+              decoration: const InputDecoration(
+                hintText: "VD: phim cổ trang, 2 người yêu nhau, giọng trang...",
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildActionButton(
+            icon: provider.isTranslating
+                ? Icons.hourglass_empty
+                : Icons.auto_fix_high,
+            label: "Dịch theo bối cảnh",
+            isPrimary: true,
+            isLoading: provider.isTranslating,
+            onTap: provider.isTranslating
+                ? null
+                : () {
+                    if (provider.contextPrompt.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Hãy nhập bối cảnh trước khi dịch!"),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+                    context.read<AiStudioProvider>().setInputText(
+                      _inputController.text,
+                    );
+                    context.read<AiStudioProvider>().translate(withContext: true);
                   },
             theme: theme,
           ),

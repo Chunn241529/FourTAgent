@@ -51,6 +51,9 @@ class ApiConfig {
   static const String generateImageStudio = '/generate/image/studio';
   static const String editImageStudio = '/generate/image/edit/studio';
   static const String generatedImage = '/generate/image/view';
+
+  // Translate endpoints
+  static const String translate = '/generate/translate/stream';
   
   // TTS endpoints
   static const String ttsTurboVoices = '/tts/turbo/voices';

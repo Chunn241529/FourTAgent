@@ -52,6 +52,7 @@ class ImageService {
     bool tryon = false,
     bool detail = false,
     bool pixel = false,
+    bool pose = false,
   }) async {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.editImageStudio}');
@@ -65,7 +66,8 @@ class ImageService {
     request.fields['tryon'] = tryon.toString();
     request.fields['detail'] = detail.toString();
     request.fields['pixel'] = pixel.toString();
-
+    request.fields['pose'] = pose.toString();
+    
     // image1 — required
     request.files
         .add(await http.MultipartFile.fromPath('image1', image1.path));

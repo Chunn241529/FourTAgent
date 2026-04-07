@@ -13,7 +13,7 @@ class GenerateService {
   static Stream<String> generate({
     required String prompt,
     String? systemPrompt,
-    String model = 'translategemma:4b',
+    String model = 'gemma4:e4b',
     double temperature = 0.2,
   }) async* {
     final token = await StorageService.getToken();
@@ -22,27 +22,11 @@ class GenerateService {
     }
 
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.generateStream}');
-    
+
     final request = http.Request('POST', uri);
     request.headers['Content-Type'] = 'application/json';
     request.headers['Authorization'] = 'Bearer $token';
-    
-    final body = {
-      'prompt': prompt,
-      'model': model,
-      'temperature': temperature,
-    };
-    if (systemPrompt != null) {
-      body['system_prompt'] = systemPrompt;
-    }
-    
-    request.body = Uri(queryParameters: {}).replace(
-      queryParameters: null,
-    ).toString().isEmpty 
-        ? '{"prompt": "$prompt", "model": "$model", "temperature": $temperature${systemPrompt != null ? ', "system_prompt": "$systemPrompt"' : ''}}'
-        : '';
-    
-    // Build proper JSON body
+
     final StringBuffer jsonBody = StringBuffer('{');
     jsonBody.write('"prompt": ${_jsonEncode(prompt)}');
     jsonBody.write(', "model": "$model"');
@@ -56,7 +40,7 @@ class GenerateService {
     final client = http.Client();
     try {
       final response = await client.send(request);
-      
+
       if (response.statusCode != 200) {
         throw Exception('Generate failed: ${response.statusCode}');
       }
@@ -72,5 +56,51 @@ class GenerateService {
   /// Helper to properly encode JSON string
   static String _jsonEncode(String value) {
     return '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n').replaceAll('\r', '\\r').replaceAll('\t', '\\t')}"';
+  }
+
+  /// Translate subtitle/text using backend service
+  /// Returns stream of translated text chunks
+  /// Backend handles prompt building + model selection
+  static Stream<String> translate({
+    required String text,
+    bool withContext = false,
+    String context = "",
+    double temperature = 0.4,
+  }) async* {
+    final token = await StorageService.getToken();
+    if (token == null) {
+      throw Exception('Not authenticated');
+    }
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.translate}');
+
+    final request = http.Request('POST', uri);
+    request.headers['Content-Type'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+
+    final StringBuffer jsonBody = StringBuffer('{');
+    jsonBody.write('"text": ${_jsonEncode(text)}');
+    jsonBody.write(', "with_context": $withContext');
+    if (context.isNotEmpty) {
+      jsonBody.write(', "context": ${_jsonEncode(context)}');
+    }
+    jsonBody.write(', "temperature": $temperature');
+    jsonBody.write('}');
+    request.body = jsonBody.toString();
+
+    final client = http.Client();
+    try {
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Translate failed: ${response.statusCode}');
+      }
+
+      await for (final chunk in response.stream.transform(const Utf8Decoder())) {
+        yield chunk;
+      }
+    } finally {
+      client.close();
+    }
   }
 }
