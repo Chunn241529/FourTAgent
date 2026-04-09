@@ -564,41 +564,6 @@ class _EditTabState extends State<EditTab> {
             ),
           ),
 
-          // Glassmorphism Prompt pill (bottom-left)
-          if (_resultPrompt != null)
-            Positioned(
-              left: 16,
-              bottom: 16,
-              right: 80,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
-                    ),
-                    child: Text(
-                      _resultPrompt!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
           // Actions (top-right)
           Positioned(
             top: 16,

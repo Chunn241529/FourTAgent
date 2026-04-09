@@ -165,7 +165,7 @@ class _GenerateTabState extends State<GenerateTab> {
             ),
             const SizedBox(height: 24),
             Text(
-              'What will you create today?',
+              'Bạn sẽ tạo ảnh gì hôm nay?',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface.withOpacity(0.8),
@@ -174,7 +174,7 @@ class _GenerateTabState extends State<GenerateTab> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Lumina × FLUX-2 — Professional AI Generation',
+              'Lumina - Professional AI Generation',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withOpacity(0.4),
               ),
@@ -304,39 +304,6 @@ class _GenerateTabState extends State<GenerateTab> {
           ),
 
           // Glassmorphism Prompt pill (bottom-left)
-          if (_generatedPrompt != null)
-            Positioned(
-              left: 16,
-              bottom: 16,
-              right: 80,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
-                    ),
-                    child: Text(
-                      _generatedPrompt!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
 
           // Actions (top-right)
           Positioned(

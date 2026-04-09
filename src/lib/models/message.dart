@@ -22,6 +22,7 @@ class Message {
   List<String> generatedImages; // Generated images from ComfyUI
   List<Map<String, String>> codeExecutions; // Code execution history
   bool isGeneratingImage;
+  bool isCreatingCanvas; // Active canvas tool call loading state
   String? generationError;
   
   Message({
@@ -33,6 +34,7 @@ class Message {
     required this.timestamp,
     this.isStreaming = false,
     this.isGeneratingImage = false,
+    this.isCreatingCanvas = false,
     this.generationError,
     this.feedback,
     this.thinking,
@@ -193,6 +195,7 @@ class Message {
     String? content,
     bool? isStreaming,
     bool? isGeneratingImage,
+    bool? isCreatingCanvas,
     String? generationError,
     String? feedback,
     String? thinking,
@@ -219,6 +222,7 @@ class Message {
       timestamp: timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
+      isCreatingCanvas: isCreatingCanvas ?? this.isCreatingCanvas,
       generationError: generationError ?? this.generationError,
       feedback: feedback ?? this.feedback,
       thinking: thinking ?? this.thinking,

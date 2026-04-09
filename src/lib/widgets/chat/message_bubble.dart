@@ -12,6 +12,7 @@ import '../../providers/chat_provider.dart';
 import '../../config/api_config.dart';
 import 'search_indicator.dart';
 import 'deep_search_indicator.dart';
+import 'canvas_indicator.dart';
 import '../common/custom_snackbar.dart';
 import 'plan_indicator.dart';
 import 'code_block_builder.dart';
@@ -517,6 +518,13 @@ class _MessageBubbleState extends State<MessageBubble> {
                         child: _buildDeepSearchIndicator(widget.message),
                       ),
 
+                    // 2.1 Canvas Indicator (Preparing/Loading)
+                    if (widget.message.isCreatingCanvas)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: CanvasIndicator(),
+                      ),
+
 
 
                     // 4. Post-Search Thinking (if any)
@@ -715,6 +723,17 @@ class _MessageBubbleState extends State<MessageBubble> {
       // Handle image rendering (used for custom indicators)
       imageBuilder: (uri, title, alt) {
         final uriStr = uri.toString();
+
+        // Handle custom CANVAS indicator (embedded in content)
+        if (uriStr.startsWith('canvas:')) {
+           return const Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: CanvasIndicator(),
+            ),
+          );
+        }
 
         // Handle custom SEARCH indicator
         if (uriStr.startsWith('search:')) {

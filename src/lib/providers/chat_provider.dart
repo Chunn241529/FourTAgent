@@ -697,9 +697,9 @@ class ChatProvider extends ChangeNotifier {
         final line = chunk.trim();
         if (line.isEmpty) return;
         
-        // Process image_generation_started IMMEDIATELY (outside batch)
+        // Process started events IMMEDIATELY (outside batch)
         // to prevent race condition where both started + generated land in same batch
-        if (line.contains('image_generation_started')) {
+        if (line.contains('image_generation_started') || line.contains('canvas_generation_started')) {
           String? jsonStr;
           if (line.startsWith('data: ')) {
             jsonStr = line.substring(6).trim();
@@ -709,13 +709,25 @@ class ChatProvider extends ChangeNotifier {
           if (jsonStr != null) {
             try {
               final data = _parseJson(jsonStr);
-              if (data != null && data.containsKey('image_generation_started')) {
+              if (data != null) {
                 final lastIndex = _messages.length - 1;
                 if (lastIndex >= 0) {
-                  _messages[lastIndex] = _messages[lastIndex].copyWith(isGeneratingImage: true, generationError: null);
-                  notifyListeners(); // Notify immediately so Flutter renders loading state
+                  if (data.containsKey('image_generation_started')) {
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      isGeneratingImage: true, 
+                      generationError: null
+                    );
+                    notifyListeners();
+                    return;
+                  }
+                  if (data.containsKey('canvas_generation_started')) {
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      isCreatingCanvas: true
+                    );
+                    notifyListeners();
+                    return;
+                  }
                 }
-                return; // Don't add to batch — already processed
               }
             } catch (_) {}
           }
@@ -1033,6 +1045,13 @@ class ChatProvider extends ChangeNotifier {
               final canvasData = data['canvas_update'];
               print('>>> ChatProvider received canvas_update: $canvasData');
               final canvasId = canvasData['id'] as int?;
+              
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(isCreatingCanvas: false);
+                shouldNotify = true;
+              }
+
               if (canvasId != null) {
                  _onCanvasUpdate?.call(canvasId);
               }

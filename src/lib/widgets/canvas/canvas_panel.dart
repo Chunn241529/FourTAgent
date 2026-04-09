@@ -29,21 +29,7 @@ class CanvasPanel extends StatelessWidget {
             builder: (context, provider, child) {
               // Show loading state when LLM is creating canvas
               if (provider.isPendingCanvas) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Đang tạo Canvas...',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
+                return _buildPremiumLoading(context, theme);
               }
               if (provider.currentCanvas != null) {
                 return CanvasView(
@@ -55,6 +41,93 @@ class CanvasPanel extends StatelessWidget {
               return _CanvasPanelContent(provider: provider);
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumLoading(BuildContext context, ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment.center,
+          radius: 1.2,
+          colors: [
+            theme.colorScheme.primary.withOpacity(isDark ? 0.08 : 0.04),
+            theme.colorScheme.surface,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                // Inner Glow
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        blurRadius: 40,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                ),
+                // Secondary thin spinner
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: theme.colorScheme.primary.withOpacity(0.2),
+                  ),
+                ),
+                // Primary thick spinner
+                SizedBox(
+                  width: 54,
+                  height: 54,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: theme.colorScheme.primary,
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Pulsing Icon
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 24,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Đang tạo Canvas...',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Đang cấu trúc hóa nội dung và định dạng...',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ],
         ),
       ),
     );
