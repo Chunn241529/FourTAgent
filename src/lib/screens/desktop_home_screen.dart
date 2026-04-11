@@ -14,6 +14,7 @@ import 'image_studio/image_studio_screen.dart';
 import '../widgets/music/floating_music_player.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
+import 'settings/profile_screen.dart';
 
 class DesktopHomeScreen extends StatefulWidget {
   const DesktopHomeScreen({super.key});
@@ -461,16 +462,69 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 Consumer<AuthProvider>(
                   builder: (context, auth, _) {
                     final user = auth.user;
-                    return _buildMenuItem(
-                      icon: Icons.person_outline,
-                      label: user?.fullName?.isNotEmpty == true
-                          ? user!.fullName!
-                          : (user?.username ?? 'Người dùng'),
-                      hoverColor: hoverColor,
-                      textColor: textColor,
-                      onTap: () => showDialog(
-                        context: context,
-                        builder: (context) => const SettingsDialog(),
+                    final hasAvatar = user?.avatar != null && user!.avatar!.isNotEmpty;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                            );
+                          },
+                          hoverColor: hoverColor,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isDark ? Colors.white24 : Colors.black12,
+                                    ),
+                                  ),
+                                  child: ClipOval(
+                                    child: hasAvatar
+                                        ? Image.network(
+                                            user!.avatar!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Icon(Icons.person, size: 16, color: textColor.withOpacity(0.7)),
+                                          )
+                                        : Icon(Icons.person, size: 16, color: textColor.withOpacity(0.7)),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    user?.fullName?.isNotEmpty == true
+                                        ? user!.fullName!
+                                        : (user?.username ?? 'Người dùng'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     );
                   },

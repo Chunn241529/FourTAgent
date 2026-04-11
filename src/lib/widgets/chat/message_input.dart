@@ -69,6 +69,20 @@ class _MessageInputState extends State<MessageInput> {
   }
 
   @override
+  void didUpdateWidget(MessageInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Request focus back to input when streaming finishes
+    if (oldWidget.isLoading && !widget.isLoading) {
+      // Use Future.delayed to wait for TextField to be fully re-enabled in the tree
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !_focusNode.hasFocus) {
+          FocusScope.of(context).requestFocus(_focusNode);
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();

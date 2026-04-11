@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -474,297 +475,95 @@ class _ProfileScreenState extends State<ProfileScreen>
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0D0D0D)
-          : const Color(0xFFF8F9FC),
+      backgroundColor: isDark ? const Color(0xFF0A0A0B) : const Color(0xFFF9FAFB),
       body: FadeTransition(
         opacity: _fadeAnimation,
-        child: CustomScrollView(
-          slivers: [
-            _buildSliverAppBar(theme, isDark),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      _buildInfoCard(theme, isDark),
-                      const SizedBox(height: 12),
-                      _buildContactCard(theme, isDark),
-                      const SizedBox(height: 12),
-                      _buildStatsCard(theme, isDark),
-                      if (_isEditing) ...[
-                        const SizedBox(height: 28),
-                        _buildSaveButton(theme),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSliverAppBar(ThemeData theme, bool isDark) {
-    final avatarUrl = _avatarController.text.trim();
-    final hasAvatar = avatarUrl.isNotEmpty && !_avatarError;
-
-    return SliverAppBar(
-      expandedHeight: 260,
-      pinned: true,
-      stretch: true,
-      backgroundColor: theme.colorScheme.primary,
-      leading: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.2),
-          shape: BoxShape.circle,
-        ),
-        child: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      actions: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.2),
-            shape: BoxShape.circle,
-          ),
-          child: !_isEditing
-              ? IconButton(
-                  icon: const Icon(
-                    Icons.edit_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _isEditing = true),
-                )
-              : _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                )
-              : IconButton(
-                  icon: const Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  onPressed: _saveProfile,
-                ),
-        ),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Stack(
-          fit: StackFit.expand,
+        child: Stack(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.primary.withValues(alpha: 0.8),
-                    const Color(0xFF6366F1),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              top: -80,
-              right: -80,
-              child: Container(
-                width: 280,
-                height: 280,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.white.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -60,
-              left: -60,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.1),
-                      Colors.white.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 50,
-              left: 0,
-              right: 0,
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  GestureDetector(
-                    onTap: _isEditing ? _showAvatarPicker : null,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.3),
-                                Colors.white.withValues(alpha: 0.1),
+            // ── Background Mesh Gradient ──
+            _buildMeshBackground(theme, isDark),
+            
+            // ── Main Content ──
+            CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                _buildModernAppBar(theme, isDark),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 20),
+                          _buildGlassHeroCard(theme, isDark),
+                          const SizedBox(height: 24),
+                          _buildModernSection(
+                            title: 'Thông tin cá nhân',
+                            icon: Icons.person_outline_rounded,
+                            theme: theme,
+                            isDark: isDark,
+                            child: Column(
+                              children: [
+                                _buildPremiumTextField(
+                                  controller: _fullNameController,
+                                  label: 'Họ và tên',
+                                  prefix: Icons.badge_outlined,
+                                  enabled: _isEditing,
+                                  theme: theme,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildPremiumTextField(
+                                  controller: _usernameController,
+                                  label: 'Tên người dùng',
+                                  prefix: Icons.alternate_email_rounded,
+                                  enabled: _isEditing,
+                                  theme: theme,
+                                ),
+                                const SizedBox(height: 20),
+                                _buildGenderSelector(theme, isDark),
                               ],
                             ),
                           ),
-                        ),
-                        Container(
-                          width: 90,
-                          height: 90,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: _isUploadingAvatar
-                                ? Container(
-                                    color: isDark
-                                        ? Colors.grey[800]
-                                        : Colors.white,
-                                    child: const Center(
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                  )
-                                : hasAvatar
-                                ? Image.network(
-                                    avatarUrl,
-                                    fit: BoxFit.cover,
-                                    width: 90,
-                                    height: 90,
-                                    errorBuilder: (_, __, ___) {
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                            if (mounted)
-                                              setState(
-                                                () => _avatarError = true,
-                                              );
-                                          });
-                                      return _buildAvatarFallback(
-                                        theme,
-                                        size: 32,
-                                      );
-                                    },
-                                  )
-                                : _buildAvatarFallback(theme, size: 32),
-                          ),
-                        ),
-                        if (_isEditing)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.camera_alt_rounded,
-                                size: 14,
-                                color: theme.colorScheme.primary,
-                              ),
+                          const SizedBox(height: 20),
+                          _buildModernSection(
+                            title: 'Liên lạc',
+                            icon: Icons.contact_mail_outlined,
+                            theme: theme,
+                            isDark: isDark,
+                            child: Column(
+                              children: [
+                                _buildPremiumTextField(
+                                  controller: _emailController,
+                                  label: 'Địa chỉ Email',
+                                  prefix: Icons.email_outlined,
+                                  enabled: false,
+                                  theme: theme,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildPremiumTextField(
+                                  controller: _phoneController,
+                                  label: 'Số điện thoại',
+                                  prefix: Icons.phone_android_outlined,
+                                  enabled: _isEditing,
+                                  theme: theme,
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ],
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _fullNameController.text.isNotEmpty
-                        ? _fullNameController.text
-                        : (_usernameController.text.isNotEmpty
-                            ? _usernameController.text
-                            : 'Người dùng'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      _emailController.text,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.9),
+                          const SizedBox(height: 20),
+                          _buildPremiumStatsCard(theme, isDark),
+                          if (_isEditing) ...[
+                            const SizedBox(height: 32),
+                            _buildPremiumSaveButton(theme),
+                          ],
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -772,216 +571,342 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildInfoCard(ThemeData theme, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildMeshBackground(ThemeData theme, bool isDark) {
+    return Positioned.fill(
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      theme.colorScheme.primary.withValues(alpha: 0.15),
-                      theme.colorScheme.primary.withValues(alpha: 0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.person_rounded,
-                  size: 22,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                'Thông tin cá nhân',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          Positioned(
+            top: -100,
+            right: -50,
+            child: _AnimatedBlob(
+              color: theme.colorScheme.primary.withOpacity(isDark ? 0.2 : 0.1),
+              size: 400,
+            ),
           ),
-          const SizedBox(height: 24),
-          _buildModernTextField(
-            controller: _fullNameController,
-            label: 'Họ và tên',
-            hint: 'Nhập tên hiển thị',
-            enabled: _isEditing,
-            theme: theme,
-            prefix: Icons.badge_rounded,
+          Positioned(
+            bottom: -50,
+            left: -100,
+            child: _AnimatedBlob(
+              color: Colors.purple.withOpacity(isDark ? 0.15 : 0.08),
+              size: 350,
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildModernTextField(
-            controller: _usernameController,
-            label: 'Tên đăng nhập',
-            hint: 'Nhập tên đăng nhập',
-            enabled: _isEditing,
-            theme: theme,
-            prefix: Icons.alternate_email_rounded,
-          ),
-          const SizedBox(height: 20),
-          _buildGenderSelector(theme, isDark),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactCard(ThemeData theme, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.blue.withValues(alpha: 0.15),
-                      Colors.blue.withValues(alpha: 0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.contact_mail_rounded,
-                  size: 22,
-                  color: Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                'Liên hệ',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildModernTextField(
-            controller: _emailController,
-            label: 'Email',
-            hint: 'example@email.com',
-            enabled: false,
-            theme: theme,
-            prefix: Icons.email_rounded,
-          ),
-          const SizedBox(height: 20),
-          _buildModernTextField(
-            controller: _phoneController,
-            label: 'Số điện thoại',
-            hint: 'Thêm số điện thoại',
-            enabled: _isEditing,
-            theme: theme,
-            keyboardType: TextInputType.phone,
-            prefix: Icons.phone_android_rounded,
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+              child: Container(color: Colors.transparent),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatsCard(ThemeData theme, bool isDark) {
-    final authProvider = context.watch<AuthProvider>();
-    final user = authProvider.user;
+  Widget _buildModernAppBar(ThemeData theme, bool isDark) {
+    return SliverAppBar(
+      expandedHeight: 0,
+      pinned: true,
+      elevation: 0,
+      centerTitle: true,
+      backgroundColor: Colors.transparent,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back_ios_new_rounded, 
+          color: theme.colorScheme.onSurface, size: 20),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Text('Hồ sơ cá nhân', 
+        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8.0),
+          child: IconButton(
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Icon(
+                _isEditing ? Icons.close_rounded : Icons.edit_note_rounded,
+                key: ValueKey(_isEditing),
+                color: _isEditing ? Colors.redAccent : theme.colorScheme.primary,
+              ),
+            ),
+            onPressed: () => setState(() => _isEditing = !_isEditing),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlassHeroCard(ThemeData theme, bool isDark) {
+    final avatarUrl = _avatarController.text.trim();
+    final hasAvatar = avatarUrl.isNotEmpty && !_avatarError;
 
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: _isEditing ? _showAvatarPicker : null,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Glowing border
+                Container(
+                  width: 116,
+                  height: 116,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        Colors.purpleAccent,
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? Colors.black : Colors.white,
+                      width: 4,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: _isUploadingAvatar
+                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                      : hasAvatar
+                        ? Image.network(
+                            avatarUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, _, __) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) setState(() => _avatarError = true);
+                              });
+                              return _buildAvatarFallback(theme, size: 40);
+                            },
+                          )
+                        : _buildAvatarFallback(theme, size: 40),
+                  ),
+                ),
+                if (_isEditing)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _fullNameController.text.isNotEmpty ? _fullNameController.text : 'Lumina User',
+            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _emailController.text,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernSection({
+    required String title,
+    required IconData icon,
+    required Widget child,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 12),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.primary.withOpacity(0.8)),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: theme.colorScheme.onSurface.withOpacity(0.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withOpacity(0.03) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+            ),
+          ),
+          child: child,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPremiumTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData prefix,
+    required bool enabled,
+    required ThemeData theme,
+    TextInputType? keyboardType,
+  }) {
+    final isDark = theme.brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.5),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          enabled: enabled,
+          keyboardType: keyboardType,
+          style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            prefixIcon: Icon(prefix, size: 20, 
+              color: enabled ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.3)),
+            filled: true,
+            fillColor: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.05),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Colors.transparent),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5), width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPremiumStatsCard(ThemeData theme, bool isDark) {
+    final user = context.watch<AuthProvider>().user;
+    return Container(
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF2D2D2D), const Color(0xFF1A1A1A)]
-              : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+          colors: isDark 
+            ? [const Color(0xFF1E1E26), const Color(0xFF111115)]
+            : [theme.colorScheme.primary, Colors.purpleAccent.shade400],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? const Color(0xFF6366F1) : const Color(0xFF6366F1))
-                .withValues(alpha: 0.3),
+            color: theme.colorScheme.primary.withOpacity(0.2),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome_rounded,
-                size: 22,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Thành viên',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
+          _buildStatItem(
+            icon: Icons.calendar_month_rounded,
+            label: 'Tham gia',
+            value: user?.createdAt != null
+                ? '${user!.createdAt!.day}/${user.createdAt!.month}/${user.createdAt!.year}'
+                : '-',
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  icon: Icons.calendar_today_rounded,
-                  label: 'Ngày tham gia',
-                  value: user?.createdAt != null
-                      ? '${user!.createdAt!.day}/${user.createdAt!.month}/${user.createdAt!.year}'
-                      : '-',
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 40,
-                color: Colors.white.withValues(alpha: 0.2),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  icon: Icons.verified_rounded,
-                  label: 'Trạng thái',
-                  value: 'Pro',
-                ),
-              ),
-            ],
+          Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
+          _buildStatItem(
+            icon: Icons.workspace_premium_rounded,
+            label: 'Trạng thái',
+            value: 'Premium',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumSaveButton(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _saveProfile,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+        ),
+        child: _isLoading
+          ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+          : const Text('LƯU THAY ĐỔI', 
+              style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
       ),
     );
   }
@@ -993,7 +918,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white.withValues(alpha: 0.8), size: 20),
+        Icon(icon, color: Colors.white.withOpacity(0.8), size: 20),
         const SizedBox(height: 8),
         Text(
           value,
@@ -1007,94 +932,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: Colors.white.withOpacity(0.7),
             fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModernTextField({
-    required TextEditingController controller,
-    required String label,
-    String? hint,
-    required bool enabled,
-    required ThemeData theme,
-    TextInputType? keyboardType,
-    IconData? prefix,
-  }) {
-    final isDark = theme.brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.grey.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: enabled
-                  ? (isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.2))
-                  : Colors.transparent,
-            ),
-          ),
-          child: TextFormField(
-            controller: controller,
-            enabled: enabled,
-            keyboardType: keyboardType,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 15,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: isDark ? Colors.grey[600] : Colors.grey[400],
-                fontWeight: FontWeight.w400,
-              ),
-              prefixIcon: prefix != null
-                  ? Icon(
-                      prefix,
-                      size: 20,
-                      color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: theme.colorScheme.primary,
-                  width: 2,
-                ),
-              ),
-            ),
           ),
         ),
       ],
@@ -1107,10 +946,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       children: [
         Text(
           'Giới tính',
-          style: TextStyle(
-            fontSize: 13,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.5),
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
           ),
         ),
         const SizedBox(height: 12),
@@ -1147,22 +985,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ? LinearGradient(
                     colors: [
                       theme.colorScheme.primary,
-                      theme.colorScheme.primary.withValues(alpha: 0.8),
+                      theme.colorScheme.primary.withOpacity(0.8),
                     ],
                   )
                 : null,
             color: isSelected
                 ? null
                 : (isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.grey.withValues(alpha: 0.08)),
-            borderRadius: BorderRadius.circular(14),
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey.withOpacity(0.08)),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected
                   ? Colors.transparent
                   : (isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.2)),
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.2)),
             ),
           ),
           child: Center(
@@ -1181,42 +1019,55 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
+}
 
-  Widget _buildSaveButton(ThemeData theme) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _saveProfile,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+class _AnimatedBlob extends StatefulWidget {
+  final Color color;
+  final double size;
+
+  const _AnimatedBlob({required this.color, required this.size});
+
+  @override
+  State<_AnimatedBlob> createState() => _AnimatedBlobState();
+}
+
+class _AnimatedBlobState extends State<_AnimatedBlob> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat(reverse: true);
+    _animation = Tween<Offset>(
+      begin: const Offset(-0.1, -0.1),
+      end: const Offset(0.1, 0.1),
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: _animation.value * widget.size,
+          child: Container(
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: widget.color),
           ),
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.save_rounded),
-                  SizedBox(width: 8),
-                  Text(
-                    'Lưu thay đổi',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-      ),
+        );
+      },
     );
   }
 }

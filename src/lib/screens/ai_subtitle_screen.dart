@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/ai_studio_provider.dart';
+import '../widgets/common/animated_blob.dart';
 
 class AiSubtitleScreen extends StatelessWidget {
   const AiSubtitleScreen({super.key});
@@ -54,16 +57,24 @@ class _TranslatorScreenContentState extends State<_TranslatorScreenContent>
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Column(
+      backgroundColor: isDark ? const Color(0xFF0A0A0B) : const Color(0xFFF9FAFB),
+      body: Stack(
         children: [
-          const SizedBox(height: 16),
-          _buildHeader(theme, isDark),
-          const SizedBox(height: 20),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: const [TranslatorTab(), ReviewScriptTab()],
+          // ── Background Mesh ──
+          _buildMeshBackground(theme, isDark),
+
+          // ── Content ──
+          SafeArea(
+            child: Column(
+              children: [
+                _buildFloatingHeader(theme, isDark),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [TranslatorTab(), ReviewScriptTab()],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -71,143 +82,151 @@ class _TranslatorScreenContentState extends State<_TranslatorScreenContent>
     );
   }
 
-  Widget _buildHeader(ThemeData theme, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-              : [const Color(0xFF667EEA), const Color(0xFF764BA2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildMeshBackground(ThemeData theme, bool isDark) {
+    return Positioned.fill(
+      child: ExcludeSemantics(
+        child: Stack(
+          children: [
+            Positioned(
+              top: -50,
+              left: -100,
+              child: AnimatedBlob(
+                color: theme.colorScheme.primary.withOpacity(isDark ? 0.15 : 0.08),
+                size: 450,
+              ),
+            ),
+            Positioned(
+              bottom: -100,
+              right: -50,
+              child: AnimatedBlob(
+                color: Colors.blueAccent.withOpacity(isDark ? 0.12 : 0.06),
+                size: 400,
+              ),
+            ),
+            Positioned.fill(
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+
+  Widget _buildFloatingHeader(ThemeData theme, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.4),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? const Color(0xFF667EEA) : const Color(0xFF667EEA))
-                .withOpacity(0.3),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
             blurRadius: 20,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.translate,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Translator",
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      "Dịch phụ đề & Tạo kịch bản đánh giá",
-                      style: TextStyle(fontSize: 13, color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildTabBar(theme),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar(ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(4),
       child: Row(
         children: [
-          _buildTabButton(0, Icons.subtitles, "Subtitle Translator"),
-          const SizedBox(width: 4),
-          _buildTabButton(1, Icons.description, "Review Script"),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [theme.colorScheme.primary, Colors.blueAccent],
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.translate_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Translate Studio",
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  "Workspace chuyên nghiệp",
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _buildCompactTabs(theme, isDark),
         ],
       ),
     );
   }
 
-  Widget _buildTabButton(int index, IconData icon, String label) {
-    final isSelected = _selectedIndex == index;
-    final theme = Theme.of(context);
+  Widget _buildCompactTabs(ThemeData theme, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.black26 : Colors.black.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildCompactTab(0, Icons.subtitles_rounded, "Translator", theme, isDark),
+          _buildCompactTab(1, Icons.description_rounded, "Script", theme, isDark),
+        ],
+      ),
+    );
+  }
 
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _tabController.animateTo(index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected
-                    ? (theme.brightness == Brightness.dark
-                          ? const Color(0xFF667EEA)
-                          : const Color(0xFF764BA2))
-                    : Colors.white70,
+  Widget _buildCompactTab(int index, IconData icon, String label, ThemeData theme, bool isDark) {
+    final isSelected = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => _tabController.animateTo(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutQuart,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? (isDark ? Colors.white10 : Colors.white) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected && !isDark ? [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))
+          ] : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.4),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withOpacity(0.4),
               ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected
-                      ? (theme.brightness == Brightness.dark
-                            ? const Color(0xFF667EEA)
-                            : const Color(0xFF764BA2))
-                      : Colors.white70,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -236,170 +255,124 @@ class _TranslatorTabState extends State<TranslatorTab>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (_outputController.text != provider.translatedText &&
-        provider.isTranslating) {
+    if (_outputController.text != provider.translatedText && provider.isTranslating) {
       _outputController.text = provider.translatedText;
-    } else if (_outputController.text != provider.translatedText &&
-        !provider.isTranslating &&
-        provider.translatedText.isNotEmpty) {
+    } else if (_outputController.text != provider.translatedText && !provider.isTranslating && provider.translatedText.isNotEmpty) {
       _outputController.text = provider.translatedText;
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
         children: [
-          _buildActionBar(provider, theme),
-          const SizedBox(height: 8),
-          _buildContextBar(provider, theme),
-          const SizedBox(height: 16),
+          _buildWorkspaceToolbar(provider, theme, isDark),
+          const SizedBox(height: 20),
           Expanded(
             child: Row(
               children: [
-                Expanded(child: _buildInputPanel(theme, isDark)),
-                const SizedBox(width: 12),
-                _buildArrowIndicator(theme),
-                const SizedBox(width: 12),
-                Expanded(child: _buildOutputPanel(theme, isDark)),
+                Expanded(child: _buildPanel(
+                  title: "Input",
+                  icon: Icons.input_rounded,
+                  controller: _inputController,
+                  hint: "Dán hoặc kéo srt/txt vào đây...",
+                  theme: theme,
+                  isDark: isDark,
+                  onChanged: (val) => context.read<AiStudioProvider>().setInputText(val),
+                )),
+                const SizedBox(width: 16),
+                Expanded(child: _buildPanel(
+                  title: "Output",
+                  icon: Icons.auto_awesome_rounded,
+                  controller: _outputController,
+                  hint: "Bản dịch sẽ xuất hiện tại đây...",
+                  theme: theme,
+                  isDark: isDark,
+                  readOnly: true,
+                  showCharCount: true,
+                  charCount: provider.translatedText.length,
+                )),
               ],
             ),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildActionBar(AiStudioProvider provider, ThemeData theme) {
+  Widget _buildWorkspaceToolbar(AiStudioProvider provider, ThemeData theme, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+        ),
       ),
       child: Row(
         children: [
-          _buildActionButton(
-            icon: Icons.upload_file,
-            label: "Import",
+          _buildToolbarButton(
             onTap: () async {
-              final result = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['srt', 'txt'],
-              );
+              final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['srt', 'txt']);
               if (result != null && result.files.single.path != null) {
-                final content = await File(
-                  result.files.single.path!,
-                ).readAsString();
+                final content = await File(result.files.single.path!).readAsString();
                 _inputController.text = content;
-                if (mounted)
-                  context.read<AiStudioProvider>().setInputText(content);
+                if (mounted) context.read<AiStudioProvider>().setInputText(content);
               }
             },
+            icon: Icons.file_upload_outlined,
+            label: "Import",
             theme: theme,
           ),
           const SizedBox(width: 12),
-          _buildActionButton(
-            icon: provider.isTranslating
-                ? Icons.hourglass_empty
-                : Icons.translate,
-            label: provider.isTranslating ? "Translating..." : "Translate",
-            isPrimary: true,
-            isLoading: provider.isTranslating,
-            onTap: provider.isTranslating
-                ? null
-                : () {
-                    context.read<AiStudioProvider>().setInputText(
-                      _inputController.text,
-                    );
-                    context.read<AiStudioProvider>().translate();
-                  },
-            theme: theme,
-          ),
-          const Spacer(),
-          _buildActionButton(
-            icon: Icons.download,
-            label: "Download",
-            onTap: provider.translatedText.isEmpty
-                ? null
-                : () async {
-                    String? outputFile = await FilePicker.platform.saveFile(
-                      fileName: 'translated.srt',
-                    );
-                    if (outputFile != null)
-                      await File(
-                        outputFile,
-                      ).writeAsString(provider.translatedText);
-                  },
-            theme: theme,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContextBar(AiStudioProvider provider, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.lightbulb_outline,
-            size: 18,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            "Bối cảnh:",
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 8),
           Expanded(
-            child: TextField(
-              onChanged: (val) => provider.setContextPrompt(val),
-              decoration: const InputDecoration(
-                hintText: "VD: phim cổ trang, 2 người yêu nhau, giọng trang...",
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black26 : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(16),
               ),
-              style: const TextStyle(fontSize: 13),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_rounded, size: 18, color: theme.colorScheme.primary.withOpacity(0.7)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (val) => provider.setContextPrompt(val),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: "Nhập bối cảnh (Ví dụ: phim cổ trang, hài hước...)",
+                        hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.3)),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          _buildActionButton(
-            icon: provider.isTranslating
-                ? Icons.hourglass_empty
-                : Icons.auto_fix_high,
-            label: "Dịch theo bối cảnh",
+          const SizedBox(width: 12),
+          _buildToolbarButton(
+            onTap: provider.isTranslating ? null : () {
+              context.read<AiStudioProvider>().setInputText(_inputController.text);
+              context.read<AiStudioProvider>().translate(withContext: provider.contextPrompt.isNotEmpty);
+            },
+            icon: Icons.translate_rounded,
+            label: provider.isTranslating ? "Dịch..." : "Dịch ngay",
             isPrimary: true,
             isLoading: provider.isTranslating,
-            onTap: provider.isTranslating
-                ? null
-                : () {
-                    if (provider.contextPrompt.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Hãy nhập bối cảnh trước khi dịch!"),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-                    context.read<AiStudioProvider>().setInputText(
-                      _inputController.text,
-                    );
-                    context.read<AiStudioProvider>().translate(withContext: true);
-                  },
+            theme: theme,
+          ),
+          const SizedBox(width: 12),
+          _buildToolbarButton(
+            onTap: provider.translatedText.isEmpty ? null : () async {
+              String? outputFile = await FilePicker.platform.saveFile(fileName: 'translated.srt');
+              if (outputFile != null) await File(outputFile).writeAsString(provider.translatedText);
+            },
+            icon: Icons.download_rounded,
+            label: "Lưu",
             theme: theme,
           ),
         ],
@@ -407,179 +380,109 @@ class _TranslatorTabState extends State<TranslatorTab>
     );
   }
 
-  Widget _buildActionButton({
+  Widget _buildToolbarButton({
+    required VoidCallback? onTap,
     required IconData icon,
     required String label,
-    required VoidCallback? onTap,
     required ThemeData theme,
     bool isPrimary = false,
     bool isLoading = false,
   }) {
-    if (isPrimary) {
-      return FilledButton.icon(
-        onPressed: onTap,
-        icon: isLoading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(icon, size: 18),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        decoration: BoxDecoration(
+          color: isPrimary ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: isPrimary ? null : Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1)),
         ),
-      );
-    }
-
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            if (isLoading)
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            else
+              Icon(icon, size: 18, color: isPrimary ? Colors.white : theme.colorScheme.onSurface),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isPrimary ? Colors.white : theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildInputPanel(ThemeData theme, bool isDark) {
+  Widget _buildPanel({
+    required String title,
+    required IconData icon,
+    required TextEditingController controller,
+    required String hint,
+    required ThemeData theme,
+    required bool isDark,
+    bool readOnly = false,
+    bool showCharCount = false,
+    int charCount = 0,
+    Function(String)? onChanged,
+  }) {
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+        color: isDark ? Colors.white.withOpacity(0.02) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+        ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer.withOpacity(0.3),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(Icons.input, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  "Input",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-                hintText: "Paste or import subtitle content...",
-              ),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-              onChanged: (val) =>
-                  context.read<AiStudioProvider>().setInputText(val),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildArrowIndicator(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.1),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        Icons.arrow_forward,
-        color: theme.colorScheme.primary,
-        size: 20,
-      ),
-    );
-  }
-
-  Widget _buildOutputPanel(ThemeData theme, bool isDark) {
-    final provider = context.watch<AiStudioProvider>();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer.withOpacity(0.3),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.output,
-                  size: 18,
-                  color: theme.colorScheme.secondary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "Output",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.secondary,
-                  ),
-                ),
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 10),
+                Text(title, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const Spacer(),
-                if (provider.translatedText.isNotEmpty)
+                if (showCharCount)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(
-                      "${provider.translatedText.length} chars",
-                      style: const TextStyle(fontSize: 11, color: Colors.green),
-                    ),
+                    child: Text("$charCount chars", style: TextStyle(fontSize: 10, color: theme.colorScheme.primary)),
                   ),
               ],
             ),
           ),
           Expanded(
-            child: TextField(
-              controller: _outputController,
-              maxLines: null,
-              expands: true,
-              readOnly: true,
-              textAlignVertical: TextAlignVertical.top,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-                hintText: "Translation will appear here...",
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(20),
               ),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              child: TextField(
+                controller: controller,
+                maxLines: null,
+                expands: true,
+                readOnly: readOnly,
+                onChanged: onChanged,
+                style: GoogleFonts.beVietnamPro(fontSize: 14, height: 1.6),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(24),
+                ),
+              ),
             ),
           ),
         ],
@@ -607,194 +510,132 @@ class _ReviewScriptTabState extends State<ReviewScriptTab>
     super.build(context);
     final provider = context.watch<AiStudioProvider>();
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     if (_scriptController.text != provider.scriptText) {
       _scriptController.text = provider.scriptText;
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
         children: [
-          _buildInfoCard(provider, theme),
-          const SizedBox(height: 16),
-          Expanded(child: _buildScriptOutput(theme)),
-          const SizedBox(height: 8),
-          _buildSaveButton(provider, theme),
-          const SizedBox(height: 16),
+          _buildScriptHeader(provider, theme, isDark),
+          const SizedBox(height: 20),
+          Expanded(child: _buildScriptWorkspace(provider, theme, isDark)),
         ],
       ),
     );
   }
 
-  Widget _buildInfoCard(AiStudioProvider provider, ThemeData theme) {
-    final hasContent =
-        provider.translatedText.isNotEmpty || provider.inputText.isNotEmpty;
+  Widget _buildScriptHeader(AiStudioProvider provider, ThemeData theme, bool isDark) {
+    final hasContent = provider.translatedText.isNotEmpty || provider.inputText.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: theme.brightness == Brightness.dark
-              ? [const Color(0xFF1E3A5F), const Color(0xFF0D253F)]
-              : [const Color(0xFFE8F4FD), const Color(0xFFD1E8FA)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: isDark ? Colors.white.withOpacity(0.03) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.auto_awesome,
-                  color: theme.colorScheme.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Review Script Generator",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Tạo kịch bản đánh giá/tóm tắt từ nội dung đã dịch",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(10),
+              color: theme.colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: Icon(Icons.auto_awesome_rounded, color: theme.colorScheme.primary, size: 28),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  hasContent ? Icons.check_circle : Icons.warning,
-                  size: 16,
-                  color: hasContent ? Colors.green : Colors.orange,
+                Text(
+                  "Review Script Generator",
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    hasContent
-                        ? "Sẵn sàng tạo script từ ${provider.translatedText.isNotEmpty ? provider.translatedText.length : provider.inputText.length} ký tự"
-                        : "Chưa có nội dung để tạo script",
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: hasContent ? Colors.green : Colors.orange,
-                    ),
-                  ),
+                const SizedBox(height: 4),
+                Text(
+                  hasContent 
+                    ? "Sẵn sàng tạo kịch bản từ ${provider.translatedText.isNotEmpty ? provider.translatedText.length : provider.inputText.length} ký tự nội dung."
+                    : "Vui lòng nhập nội dung ở tab Translator trước.",
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.4)),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: !hasContent || provider.isGeneratingScript
-                  ? null
-                  : () =>
-                        context.read<AiStudioProvider>().generateReviewScript(),
-              icon: provider.isGeneratingScript
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.auto_fix_high),
-              label: Text(
-                provider.isGeneratingScript
-                    ? "Đang tạo..."
-                    : "Tạo Review Script",
-              ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
+          const SizedBox(width: 16),
+          _buildScriptToolbarAction(
+            onTap: !hasContent || provider.isGeneratingScript
+              ? null
+              : () => context.read<AiStudioProvider>().generateReviewScript(),
+            isLoading: provider.isGeneratingScript,
+            label: "Tạo Script",
+            icon: Icons.auto_awesome_rounded,
+            isPrimary: true,
+            theme: theme,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildScriptOutput(ThemeData theme) {
+  Widget _buildScriptWorkspace(AiStudioProvider provider, ThemeData theme, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+        color: isDark ? Colors.white.withOpacity(0.02) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+        ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.tertiaryContainer.withOpacity(0.3),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(
-                  Icons.article,
-                  size: 18,
-                  color: theme.colorScheme.tertiary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "Generated Script",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.tertiary,
+                Icon(Icons.article_rounded, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 10),
+                Text("Kịch bản Review", style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (provider.scriptText.isNotEmpty)
+                  _buildScriptToolbarAction(
+                    onTap: () async {
+                      String? outputFile = await FilePicker.platform.saveFile(fileName: 'script.txt');
+                      if (outputFile != null) await File(outputFile).writeAsString(provider.scriptText);
+                    },
+                    label: "Lưu file",
+                    icon: Icons.download_rounded,
+                    theme: theme,
                   ),
-                ),
               ],
             ),
           ),
           Expanded(
-            child: TextField(
-              controller: _scriptController,
-              maxLines: null,
-              expands: true,
-              readOnly: true,
-              textAlignVertical: TextAlignVertical.top,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-                hintText: "Script will appear here after generation...",
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: TextField(
+                controller: _scriptController,
+                maxLines: null,
+                expands: true,
+                readOnly: true,
+                style: GoogleFonts.beVietnamPro(fontSize: 14, height: 1.6),
+                decoration: InputDecoration(
+                  hintText: "Script sẽ xuất hiện tại đây sau khi bạn nhấn 'Tạo Script'...",
+                  hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(24),
+                ),
               ),
             ),
           ),
@@ -803,24 +644,26 @@ class _ReviewScriptTabState extends State<ReviewScriptTab>
     );
   }
 
-  Widget _buildSaveButton(AiStudioProvider provider, ThemeData theme) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: OutlinedButton.icon(
-        onPressed: provider.scriptText.isEmpty
-            ? null
-            : () async {
-                String? outputFile = await FilePicker.platform.saveFile(
-                  fileName: 'review_script.txt',
-                );
-                if (outputFile != null)
-                  await File(outputFile).writeAsString(provider.scriptText);
-              },
-        icon: const Icon(Icons.save),
-        label: const Text("Save Script"),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        ),
+  Widget _buildScriptToolbarAction({
+    required VoidCallback? onTap,
+    required String label,
+    required IconData icon,
+    required ThemeData theme,
+    bool isPrimary = false,
+    bool isLoading = false,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: isLoading 
+        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+        : Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isPrimary ? theme.colorScheme.primary : theme.colorScheme.surface,
+        foregroundColor: isPrimary ? Colors.white : theme.colorScheme.onSurface,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: isPrimary ? 4 : 0,
       ),
     );
   }

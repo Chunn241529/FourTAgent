@@ -7,6 +7,7 @@ import '../../models/conversation.dart';
 import '../../screens/auth/login_screen.dart';
 import '../settings/settings_dialog.dart';
 import '../../screens/desktop_home_screen.dart';
+import '../../screens/settings/profile_screen.dart';
 
 /// App drawer for navigation
 class AppDrawer extends StatelessWidget {
@@ -28,42 +29,76 @@ class AppDrawer extends StatelessWidget {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: theme.dividerColor)),
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: theme.colorScheme.surface,
-                      border: Border.all(
-                        color: theme.dividerColor.withOpacity(0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/icon/icon.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Lumina AI', style: theme.textTheme.titleLarge),
-                        Text(
-                          authProvider.user?.email ?? '',
-                          style: theme.textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: theme.colorScheme.primaryContainer,
+                                border: Border.all(
+                                  color: theme.dividerColor.withOpacity(0.5),
+                                  width: 1,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: authProvider.user?.avatar != null && authProvider.user!.avatar!.isNotEmpty
+                                    ? Image.network(
+                                        authProvider.user!.avatar!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) =>
+                                            Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer),
+                                      )
+                                    : Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    authProvider.user?.fullName ?? authProvider.user?.username ?? 'Người dùng', 
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    authProvider.user?.email ?? '',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   // Theme toggle
