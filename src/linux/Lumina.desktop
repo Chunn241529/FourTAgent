@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Name=Lumina AI
+GenericName=Lumina AI
+Comment=Lumina AI - Mobile Chat App
+Exec=Lumina
+Icon=Lumina
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=com.fourt.fourt_chat
