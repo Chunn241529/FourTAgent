@@ -13,6 +13,8 @@ class Message {
   String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
   List<String> completedSearches; // Completed searches to keep visible
+  List<String> activeFetches; // Active URL fetches being executed
+  List<String> completedFetches; // Completed URL fetches to keep visible
   List<String> completedFileActions; // Completed file actions (READ:path, CREATE:path)
   List<String> deepSearchUpdates; // Deep Search status logs
   String? plan; // Research plan for Deep Search
@@ -41,6 +43,8 @@ class Message {
     this.imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? activeFetches,
+    List<String>? completedFetches,
     List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     this.plan,
@@ -53,6 +57,8 @@ class Message {
     Map<String, dynamic>? deepSearchData,
   }) : activeSearches = activeSearches ?? [],
        completedSearches = completedSearches ?? [],
+       activeFetches = activeFetches ?? [],
+       completedFetches = completedFetches ?? [],
        completedFileActions = completedFileActions ?? [],
        deepSearchUpdates = deepSearchUpdates ?? [],
        generatedImages = generatedImages ?? [],
@@ -62,24 +68,30 @@ class Message {
   final Map<String, dynamic> deepSearchData; // e.g. {'planning': {'queries': [...]}, 'searching': {'results': [...]}}
 
   factory Message.fromJson(Map<String, dynamic> json) {
-    // Reconstruct completed searches from tool calls
+    // Reconstruct completed searches and fetches from tool calls
     List<String> reconstructedSearches = [];
+    List<String> reconstructedFetches = [];
     if (json['tool_calls'] != null) {
       final calls = json['tool_calls'];
       if (calls is List) {
         for (var call in calls) {
-          if (call is Map && 
-              call['function'] != null && 
-              call['function']['name'] == 'web_search') {
-             try {
+          if (call is Map && call['function'] != null) {
+            final name = call['function']['name'];
+            if (name == 'web_search') {
+              try {
                 final args = call['function']['arguments'];
                 if (args is Map && args['query'] is String) {
-                   reconstructedSearches.add(args['query']);
-                } else if (args is String) {
-                   // Try to extract query from string if possible, or ignore complexity for now
-                   // In backend we ensure args is usually parsed or we can try limited parsing
+                  reconstructedSearches.add(args['query']);
                 }
-             } catch (_) {}
+              } catch (_) {}
+            } else if (name == 'fetch') {
+              try {
+                final args = call['function']['arguments'];
+                if (args is Map && args['url'] is String) {
+                  reconstructedFetches.add(args['url']);
+                }
+              } catch (_) {}
+            }
           }
         }
       }
@@ -101,6 +113,7 @@ class Message {
           ? List<String>.from(json['generated_images']) 
           : null,
       completedSearches: reconstructedSearches,
+      completedFetches: reconstructedFetches,
       deepSearchUpdates: json['deep_search_updates'] != null
           ? List<String>.from(json['deep_search_updates'])
           : null,
@@ -202,6 +215,8 @@ class Message {
     String? imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
+    List<String>? activeFetches,
+    List<String>? completedFetches,
     List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     String? plan,
@@ -229,6 +244,8 @@ class Message {
       imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
       completedSearches: completedSearches ?? this.completedSearches,
+      activeFetches: activeFetches ?? this.activeFetches,
+      completedFetches: completedFetches ?? this.completedFetches,
       completedFileActions: completedFileActions ?? this.completedFileActions,
       deepSearchUpdates: deepSearchUpdates ?? this.deepSearchUpdates,
       plan: plan ?? this.plan,

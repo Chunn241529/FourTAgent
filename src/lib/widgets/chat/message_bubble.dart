@@ -11,6 +11,7 @@ import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
 import '../../config/api_config.dart';
 import 'search_indicator.dart';
+import 'web_fetch_indicator.dart';
 import 'deep_search_indicator.dart';
 import 'canvas_indicator.dart';
 import '../common/custom_snackbar.dart';
@@ -751,6 +752,22 @@ class _MessageBubbleState extends State<MessageBubble> {
           );
         }
 
+        // Handle custom FETCH indicator
+        if (uriStr.startsWith('fetch:')) {
+          final url = Uri.decodeComponent(uriStr.substring(6));
+          final isCompleted = widget.message.completedFetches.contains(url);
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: WebFetchIndicator(
+                activeFetches: isCompleted ? [] : [url],
+                completedFetches: isCompleted ? [url] : [],
+              ),
+            ),
+          );
+        }
+
         // Handle custom FILE_ACTION indicator
         if (uriStr.startsWith('file:')) {
           final parts = Uri.decodeComponent(uriStr.substring(5)).split(':');
@@ -967,21 +984,45 @@ class _MessageBubbleState extends State<MessageBubble> {
       bool isCompleted = false;
       if (action == 'SEARCH') {
         if (message.completedSearches.contains(target)) isCompleted = true;
+      } else if (action == 'FETCH') {
+        if (message.completedFetches.contains(target)) isCompleted = true;
       } else if (['READ', 'CREATE', 'SEARCH_FILE'].contains(action)) {
         final tag = '$action:$target';
         if (message.completedFileActions.contains(tag)) isCompleted = true;
       }
 
-      children.add(
-        Padding(
-          padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
-          child: SimpleToolIndicator(
-            action: action,
-            target: target,
-            isCompleted: isCompleted,
+      if (action == 'FETCH') {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+            child: WebFetchIndicator(
+              activeFetches: isCompleted ? [] : [target],
+              completedFetches: isCompleted ? [target] : [],
+            ),
           ),
-        ),
-      );
+        );
+      } else if (action == 'SEARCH') {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+            child: SearchIndicator(
+              activeSearches: isCompleted ? [] : [target],
+              completedSearches: isCompleted ? [target] : [],
+            ),
+          ),
+        );
+      } else {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+            child: SimpleToolIndicator(
+              action: action,
+              target: target,
+              isCompleted: isCompleted,
+            ),
+          ),
+        );
+      }
 
       lastIndex = match.end;
     }
@@ -1163,9 +1204,11 @@ class _ThinkingSegment extends StatefulWidget {
 }
 
 class _ThinkingSegmentState extends State<_ThinkingSegment>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _isExpanded = false;
   late AnimationController _shimmerController;
+  late AnimationController _expandController;
+  late Animation<double> _expandAnimation;
 
   @override
   void initState() {
@@ -1177,6 +1220,15 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
     if (widget.isStreaming) {
       _shimmerController.repeat();
     }
+
+    _expandController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _expandController,
+      curve: Curves.fastOutSlowIn,
+    );
   }
 
   @override
@@ -1192,7 +1244,19 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
   @override
   void dispose() {
     _shimmerController.dispose();
+    _expandController.dispose();
     super.dispose();
+  }
+
+  void _toggleExpanded() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+      if (_isExpanded) {
+        _expandController.forward();
+      } else {
+        _expandController.reverse();
+      }
+    });
   }
 
   @override
@@ -1206,7 +1270,7 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          onTap: _toggleExpanded,
           borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
@@ -1268,11 +1332,13 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
             ),
           ),
         ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox.shrink(),
-          secondChild: Container(
+        SizeTransition(
+          sizeFactor: _expandAnimation,
+          axisAlignment: -1.0,
+          child: Container(
             margin: const EdgeInsets.only(left: 4, top: 8, bottom: 4),
             padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            width: double.infinity,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               color: isDark
@@ -1296,10 +1362,6 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
               ),
             ),
           ),
-          crossFadeState: _isExpanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 250),
         ),
       ],
     );

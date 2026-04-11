@@ -830,6 +830,24 @@ class ChatProvider extends ChangeNotifier {
                         }
                       }
                   } 
+                  // Handle Web Fetch
+                  else if (name == 'fetch') {
+                      final url = parsedArgs?['url'] as String?;
+                      if (url != null) {
+                        final lastIndex = _messages.length - 1;
+                        if (lastIndex >= 0) {
+                          final currentFetches = List<String>.from(_messages[lastIndex].activeFetches);
+                          if (!currentFetches.contains(url) && !_messages[lastIndex].completedFetches.contains(url)) {
+                            currentFetches.add(url);
+                            // Inject marker into THINKING
+                            fullThinking += '\n\n<<<TOOL:FETCH:${url.replaceAll('>', '')}>>>\n\n';
+                            
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentFetches, thinking: fullThinking);
+                            shouldNotify = true;
+                          }
+                        }
+                      }
+                  }
                   // Handle File Tools (Server Side)
                   else if (name == 'read_file' || name == 'create_file' || name == 'search_file') {
                       final path = parsedArgs?['path'] as String?;
@@ -894,6 +912,44 @@ class ChatProvider extends ChangeNotifier {
                   if (!currentCompleted.contains(query)) {
                     currentCompleted.add(query);
                     _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive, completedSearches: currentCompleted);
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
+
+            // Handle fetch_started
+            if (data['fetch_started'] != null) {
+              final url = data['fetch_started']['url'] as String?;
+              if (url != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentActive = List<String>.from(_messages[lastIndex].activeFetches);
+                  if (!currentActive.contains(url)) {
+                    currentActive.add(url);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentActive);
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
+
+            // Handle fetch_complete
+            if (data['fetch_complete'] != null) {
+              final url = data['fetch_complete']['url'] as String?;
+              if (url != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentActive = List<String>.from(_messages[lastIndex].activeFetches);
+                  final currentCompleted = List<String>.from(_messages[lastIndex].completedFetches);
+                  
+                  if (currentActive.contains(url)) {
+                    currentActive.remove(url);
+                  }
+                  
+                  if (!currentCompleted.contains(url)) {
+                    currentCompleted.add(url);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentActive, completedFetches: currentCompleted);
                     shouldNotify = true;
                   }
                 }
