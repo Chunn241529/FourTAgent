@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../../screens/affiliate/theme/affiliate_theme.dart';
+import '../../screens/affiliate/widgets/affiliate_animations.dart';
 import '../../services/affiliate_service.dart';
 
 /// Script tool panel - independent script generation without Scrape dependency.
@@ -498,26 +500,34 @@ class _ScriptToolState extends State<ScriptTool> {
                 ],
                 const SizedBox(height: 16),
 
-                // --- Generate Button ---
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: (_hasProductInfo && !_generating && !_uploadingImages)
-                        ? _generateScript
-                        : null,
-                    icon: _generating || _uploadingImages
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome),
-                    label: Text(
-                      _uploadingImages
-                          ? 'Đang upload ảnh...'
-                          : _generating
-                              ? 'Đang sinh...'
-                              : 'Generate Script',
+                FadeInTranslate(
+                  delay: const Duration(milliseconds: 200),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (_hasProductInfo && !_generating && !_uploadingImages)
+                          ? _generateScript
+                          : null,
+                      icon: _generating || _uploadingImages
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.auto_awesome, color: Colors.white),
+                      label: Text(
+                        _uploadingImages
+                            ? 'Uploading images...'
+                            : _generating
+                                ? 'Generating...'
+                                : 'Generate Script',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.all(20),
+                        backgroundColor: AffiliateTheme.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
                     ),
                   ),
                 ),
@@ -525,37 +535,27 @@ class _ScriptToolState extends State<ScriptTool> {
                 // --- Generated Script Result ---
                 if (_generatedScript != null) ...[
                   const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
+                  FadeInTranslate(
+                    delay: const Duration(milliseconds: 300),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: AffiliateTheme.cardDecoration(context),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.smart_toy, size: 16),
-                              const SizedBox(width: 4),
+                              const Icon(Icons.smart_toy, size: 18, color: AffiliateTheme.primary),
+                              const SizedBox(width: 8),
                               Text(
                                 '${_generatedScript!['provider']} (${_generatedScript!['model']})',
-                                style: theme.textTheme.labelSmall,
+                                style: AffiliateTheme.subtitleStyle(context).copyWith(fontWeight: FontWeight.bold),
                               ),
                               const Spacer(),
                               // Download buttons
-                              IconButton(
-                                icon: const Icon(Icons.download, size: 18),
-                                tooltip: 'Tải Script',
-                                onPressed: () => _downloadScript('full_script'),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.download, size: 18),
-                                tooltip: 'Tải Caption',
-                                onPressed: () => _downloadScript('caption'),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.download, size: 18),
-                                tooltip: 'Tải AI Video Prompt',
-                                onPressed: () => _downloadScript('ai_video_prompt'),
-                              ),
+                              _buildIconButton(Icons.description, 'Script', () => _downloadScript('full_script')),
+                              _buildIconButton(Icons.subtitles, 'Caption', () => _downloadScript('caption')),
+                              _buildIconButton(Icons.movie_filter, 'AI Prompt', () => _downloadScript('ai_video_prompt')),
                             ],
                           ),
                           const Divider(),
@@ -626,10 +626,20 @@ class _ScriptToolState extends State<ScriptTool> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(title, style: AffiliateTheme.titleStyle(context).copyWith(fontSize: 14)),
           const SizedBox(height: 4),
-          SelectableText(content),
+          SelectableText(content, style: AffiliateTheme.subtitleStyle(context)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildIconButton(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: AffiliateTheme.primary),
+        onPressed: onTap,
       ),
     );
   }

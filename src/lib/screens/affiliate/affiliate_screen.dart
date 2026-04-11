@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'theme/affiliate_theme.dart';
+import 'widgets/tool_card.dart';
+import 'widgets/affiliate_animations.dart';
 import '../../services/affiliate_service.dart';
 import '../../widgets/affiliate/scrape_tool.dart';
 import '../../widgets/affiliate/script_tool.dart';
@@ -93,12 +96,6 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
           ],
         ),
         actions: [
-          // LLM Status indicator
-          if (_status['llm_providers'] != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: _buildProviderChips(),
-            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadStatus,
@@ -127,17 +124,52 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
 
   Widget _buildProviderChips() {
     final providers = _status['llm_providers'] as List? ?? [];
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    if (providers.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
       children: providers.map<Widget>((p) {
         final enabled = p['enabled'] == true && p['has_key'] == true;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Tooltip(
-            message: '${p['name']}: ${p['model']}\n${enabled ? "Active" : "Disabled"}',
-            child: CircleAvatar(
-              radius: 6,
-              backgroundColor: enabled ? Colors.green : Colors.grey,
+        final name = p['name'].toString().toUpperCase();
+        
+        return Tooltip(
+          message: '${p['name']}: ${p['model']}\n${enabled ? "Running" : "Offline / Missing Key"}',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: enabled ? Colors.green.withOpacity(0.08) : Colors.red.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: enabled ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: enabled ? Colors.green : Colors.red,
+                    shape: BoxShape.circle,
+                    boxShadow: enabled ? [
+                      BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 3)
+                    ] : null,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: enabled ? Colors.green.shade700 : Colors.red.shade300,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -146,67 +178,75 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
   }
 
   Widget _buildBody(ThemeData theme) {
-    if (_activeTool == null) {
-      return _buildToolDashboard(theme);
-    }
-    return _buildExpandedTool(theme);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 900;
+        
+        if (isWide) {
+          return Row(
+            children: [
+              _buildSidebar(theme),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: _activeTool == null 
+                  ? _buildToolDashboard(theme, isWide: true) 
+                  : _buildExpandedTool(theme),
+              ),
+            ],
+          );
+        }
+        
+        return Column(
+          children: [
+             Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: _activeTool == null 
+                    ? _buildToolDashboard(theme, isWide: false) 
+                    : _buildExpandedTool(theme),
+                ),
+             ),
+          ],
+        );
+      },
+    );
   }
 
-  Widget _buildToolDashboard(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+  Widget _buildSidebar(ThemeData theme) {
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      color: theme.scaffoldBackgroundColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Chọn công cụ', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 16),
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 3,
-              childAspectRatio: 1.2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 24),
+            child: Text('STUDIO TOOLS', style: AffiliateTheme.subtitleStyle(context).copyWith(letterSpacing: 1.5, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          // _buildSidebarItem('scrape', Icons.search, 'Scrape Products', theme),
+          _buildSidebarItem('script', Icons.edit_note, 'Viral Scripts', theme),
+          // _buildSidebarItem('render', Icons.movie_creation, 'Video Render', theme),
+          _buildSidebarItem('smart_reup_douyin', Icons.smart_display, 'Smart Reup', theme),
+          const Spacer(),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: AffiliateTheme.glassDecoration(context, borderRadius: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // _buildToolCard(
-                //   'scrape',
-                //   Icons.search,
-                //   'Scrape',
-                //   'Cào sản phẩm',
-                //   theme.colorScheme.primaryContainer,
-                //   theme.colorScheme.onPrimaryContainer,
-                // ),
-                _buildToolCard(
-                  'script',
-                  Icons.edit_note,
-                  'Script',
-                  'Tạo kịch bản',
-                  theme.colorScheme.secondaryContainer,
-                  theme.colorScheme.onSecondaryContainer,
+                Text(
+                  'SYSTEM ENGINE', 
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900, 
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                    color: theme.colorScheme.primary.withOpacity(0.5),
+                  )
                 ),
-                _buildToolCard(
-                  'render',
-                  Icons.movie_creation,
-                  'Render',
-                  'Render video',
-                  theme.colorScheme.tertiaryContainer,
-                  theme.colorScheme.onTertiaryContainer,
-                ),
-                // _buildToolCard(
-                //   'reup',
-                //   Icons.transform,
-                //   'Smart Reup',
-                //   'Transform video',
-                //   theme.colorScheme.primaryContainer.withValues(alpha: 0.8),
-                //   theme.colorScheme.onPrimaryContainer,
-                // ),
-                _buildToolCard(
-                  'smart_reup_douyin',
-                  Icons.smart_display,
-                  'Smart Reup Douyin',
-                  'Reup video tu Douyin',
-                  theme.colorScheme.secondaryContainer,
-                  theme.colorScheme.onSecondaryContainer,
-                ),
+                const SizedBox(height: 16),
+                _buildProviderChips(),
               ],
             ),
           ),
@@ -215,41 +255,29 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
     );
   }
 
-  Widget _buildToolCard(
-    String toolId,
-    IconData icon,
-    String title,
-    String subtitle,
-    Color backgroundColor,
-    Color foregroundColor,
-  ) {
-    return Card(
-      color: backgroundColor,
-      elevation: 2,
+  Widget _buildSidebarItem(String id, IconData icon, String label, ThemeData theme) {
+    final active = _activeTool == id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
-        onTap: () => setState(() => _activeTool = toolId),
+        onTap: () => setState(() => _activeTool = id),
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: active ? AffiliateTheme.primary.withOpacity(0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
             children: [
-              Icon(icon, size: 36, color: foregroundColor),
-              const SizedBox(height: 8),
+              Icon(icon, color: active ? AffiliateTheme.primary : theme.iconTheme.color?.withOpacity(0.5)),
+              const SizedBox(width: 16),
               Text(
-                title,
+                label,
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: foregroundColor,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: foregroundColor.withValues(alpha: 0.8),
+                  fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                  color: active ? AffiliateTheme.primary : theme.textTheme.bodyMedium?.color,
                 ),
               ),
             ],
@@ -259,9 +287,86 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
     );
   }
 
+  Widget _buildToolDashboard(ThemeData theme, {required bool isWide}) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.scaffoldBackgroundColor,
+            AffiliateTheme.primary.withOpacity(0.05),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const FadeInTranslate(
+              child: Text('Welcome to\nAffiliate Studio', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, height: 1.1, letterSpacing: -1)),
+            ),
+            const SizedBox(height: 12),
+            FadeInTranslate(
+              delay: const Duration(milliseconds: 100),
+              child: Text('Automate your workflow with powerful AI tools.', style: AffiliateTheme.subtitleStyle(context).copyWith(fontSize: 16)),
+            ),
+            const SizedBox(height: 48),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isWide ? 3 : 1,
+                crossAxisSpacing: 24,
+                mainAxisSpacing: 24,
+                mainAxisExtent: 200,
+              ),
+              itemCount: 4,
+              itemBuilder: (context, index) {
+                switch(index) {
+                  // case 0: return ModernToolCard(
+                  //   index: index, icon: Icons.search, title: 'Scrape', subtitle: 'Find viral products', 
+                  //   isActive: _activeTool == 'scrape', onTap: () => setState(() => _activeTool = 'scrape')
+                  // );
+                  case 0: return ModernToolCard(
+                    index: index, icon: Icons.edit_note, title: 'Script', subtitle: 'AI Viral copywriting', 
+                    isActive: _activeTool == 'script', onTap: () => setState(() => _activeTool = 'script'), color: AffiliateTheme.secondary
+                  );
+                  // case 2: return ModernToolCard(
+                  //   index: index, icon: Icons.movie_creation, title: 'Render', subtitle: 'Bulk video generation', 
+                  //   isActive: _activeTool == 'render', onTap: () => setState(() => _activeTool = 'render'), color: AffiliateTheme.accent
+                  // );
+                  case 1: return ModernToolCard(
+                    index: index, icon: Icons.smart_display, title: 'Smart Reup', subtitle: 'Douyin transformation', 
+                    isActive: _activeTool == 'smart_reup_douyin', onTap: () => setState(() => _activeTool = 'smart_reup_douyin'), color: AffiliateTheme.warning
+                  );
+                  default: return const SizedBox.shrink();
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildExpandedTool(ThemeData theme) {
     return Column(
       children: [
+        if (MediaQuery.of(context).size.width <= 900)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _activeTool = null),
+                ),
+                Text('Tool Studio', style: AffiliateTheme.titleStyle(context).copyWith(fontSize: 16)),
+              ],
+            ),
+          ),
         Expanded(
           child: _getToolWidget()!,
         ),

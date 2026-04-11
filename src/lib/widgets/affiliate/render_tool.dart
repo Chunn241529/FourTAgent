@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
+import '../../screens/affiliate/theme/affiliate_theme.dart';
+import '../../screens/affiliate/widgets/affiliate_animations.dart';
 import '../../services/affiliate_service.dart';
 import '../../services/cloud_file_service.dart';
 
@@ -372,109 +374,105 @@ class _RenderToolState extends State<RenderTool> {
         const Divider(),
         const SizedBox(height: 8),
 
-        // Render buttons
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: widget.selectedProductId == null || widget.generatedScript == null
-                    ? null
-                    : _startRender,
-                icon: const Icon(Icons.play_arrow),
-                label: Text(hasVideo && !_useTts ? 'Chuyển Video Gốc' : 'Bắt đầu Render'),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.tertiary,
-                  foregroundColor: theme.colorScheme.onTertiary,
-                  padding: const EdgeInsets.all(16),
+        FadeInTranslate(
+          delay: const Duration(milliseconds: 100),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: widget.selectedProductId == null || widget.generatedScript == null
+                      ? null
+                      : _startRender,
+                  icon: const Icon(Icons.rocket_launch, color: Colors.white),
+                  label: Text(hasVideo && !_useTts ? 'Chuyển Video Gốc' : 'Bắt đầu Render', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(20),
+                    backgroundColor: AffiliateTheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                  ),
                 ),
-                onPressed: () => _showAiVideoDialog(settings.aiVideoApiKey),
-                icon: const Icon(Icons.movie_creation),
-                label: const Text('AI Video'),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AffiliateTheme.secondary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.all(20),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                  ),
+                  onPressed: () => _showAiVideoDialog(settings.aiVideoApiKey),
+                  icon: const Icon(Icons.movie_creation),
+                  label: const Text('AI Video', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
 
         if (widget.selectedProductId == null || widget.generatedScript == null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'Cần chọn sản phẩm và tạo script trước',
-              style: TextStyle(color: theme.hintColor, fontSize: 12),
+              'Please select a product and generate a script first.',
+              style: AffiliateTheme.subtitleStyle(context).copyWith(fontSize: 12),
             ),
           ),
         const SizedBox(height: 16),
 
-        // Job status
         if (_jobStatus != null)
           Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+            child: FadeInTranslate(
+              delay: const Duration(milliseconds: 200),
+              child: Container(
+                margin: const EdgeInsets.only(top: 24),
+                padding: const EdgeInsets.all(24),
+                decoration: AffiliateTheme.cardDecoration(context),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         _buildStatusIcon(_jobStatus!['status']),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         Text(
                           'Job: $_activeJobId',
-                          style: theme.textTheme.titleSmall,
+                          style: AffiliateTheme.titleStyle(context).copyWith(fontSize: 16),
                         ),
                         const Spacer(),
-                        // Download button when done
                         if (_jobStatus!['status'] == 'done' && _activeJobId != null)
                           IconButton(
-                            icon: const Icon(Icons.download),
+                            icon: const Icon(Icons.download_for_offline, color: AffiliateTheme.primary, size: 28),
                             tooltip: 'Tải Video',
                             onPressed: () => _downloadVideo(),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: (_jobStatus!['progress'] ?? 0) / 100,
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: (_jobStatus!['progress'] ?? 0) / 100,
+                        minHeight: 8,
+                        backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                        color: AffiliateTheme.primary,
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text('${_jobStatus!['progress'] ?? 0}% • ${_jobStatus!['status']}'),
+                    const SizedBox(height: 12),
+                    Text(
+                      '${_jobStatus!['progress'] ?? 0}% • ${(_jobStatus!['status'] as String).toUpperCase()}',
+                      style: AffiliateTheme.subtitleStyle(context).copyWith(fontWeight: FontWeight.bold),
+                    ),
                     if (_jobStatus!['error'] != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.only(top: 12),
                         child: Text(
                           _jobStatus!['error'],
                           style: TextStyle(color: theme.colorScheme.error),
                         ),
                       ),
-                    // Show video preview URL when done
-                    if (_jobStatus!['status'] == 'done') ...[
-                      if (_jobStatus!['output_path'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Video: ${_jobStatus!['output_path']}',
-                            style: TextStyle(fontSize: 11, color: theme.hintColor),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      if (_jobStatus!['result_url'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'AI Video: ${_jobStatus!['result_url']}',
-                            style: TextStyle(fontSize: 11, color: theme.hintColor),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
                   ],
                 ),
               ),
