@@ -308,10 +308,17 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     final cloudPath = _jobStatus!['output_path'] as String;
     final filename = cloudPath.split('/').last;
 
+    final outputFile = await FilePicker.platform.saveFile(
+      dialogTitle: 'Chọn nơi lưu tệp',
+      fileName: filename,
+    );
+
+    if (outputFile == null) return;
+
     await DownloadProgressDialog.show(
       context: context,
       filename: filename,
-      downloadTask: CloudFileService.downloadBinaryFile(cloudPath, filename),
+      downloadTask: CloudFileService.downloadToLocal(cloudPath, outputFile),
     );
   }
 

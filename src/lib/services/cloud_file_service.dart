@@ -183,8 +183,14 @@ class CloudFileService {
   /// Download file to local storage (returns local file path)
   static Future<String> downloadToLocal(String cloudPath, String localPath) async {
     try {
-      final streamUrl = getStreamUrl(cloudPath);
-      final response = await http.get(Uri.parse(streamUrl));
+      final token = await StorageService.getToken();
+      final downloadUrl = getDownloadUrl(cloudPath);
+      final response = await http.get(
+        Uri.parse(downloadUrl),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
       
       if (response.statusCode == 200) {
         final file = File(localPath);

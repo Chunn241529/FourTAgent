@@ -9,6 +9,7 @@ import 'storage_service.dart';
 class ApiService {
   static final _client = http.Client();
   static Function()? _onTokenExpired;
+  static Function()? onConnectionError;
 
   static void setTokenExpiredCallback(Function() callback) {
     _onTokenExpired = callback;
@@ -18,6 +19,9 @@ class ApiService {
     if (response.statusCode == 401) {
       print('>>> 401 received: Triggering token expiration callback');
       _onTokenExpired?.call();
+    } else if (response.statusCode == 502 || response.statusCode == 503) {
+      print('>>> 502/503 received: Server down/restarting');
+      onConnectionError?.call();
     }
   }
 
@@ -46,43 +50,75 @@ class ApiService {
       return response;
     } on SocketException catch (e) {
       print('>>> SocketException in GET $endpoint: ${e.message}, errno: ${e.osError?.errorCode}');
+      onConnectionError?.call();
+      rethrow;
+    } catch (e) {
+      // Handle other potential connection crashes (like connection closed)
+      if (e.toString().contains('Connection closed') || e.toString().contains('Connection refused')) {
+        onConnectionError?.call();
+      }
       rethrow;
     }
   }
 
   /// POST request
   static Future<http.Response> post(String endpoint, {Map<String, dynamic>? body}) async {
-    final headers = await _getHeaders();
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    final response = await _client.post(
-      uri,
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-    _checkStatus(response);
-    return response;
+    try {
+      final headers = await _getHeaders();
+      final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+      final response = await _client.post(
+        uri,
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      );
+      _checkStatus(response);
+      return response;
+    } on SocketException catch (e) {
+      print('>>> SocketException in POST $endpoint');
+      onConnectionError?.call();
+      rethrow;
+    } catch (e) {
+      if (e.toString().contains('Connection closed') || e.toString().contains('Connection refused')) {
+        onConnectionError?.call();
+      }
+      rethrow;
+    }
   }
 
   /// PUT request
   static Future<http.Response> put(String endpoint, {Map<String, dynamic>? body}) async {
-    final headers = await _getHeaders();
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    final response = await _client.put(
-      uri,
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-    _checkStatus(response);
-    return response;
+    try {
+      final headers = await _getHeaders();
+      final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+      final response = await _client.put(
+        uri,
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      );
+      _checkStatus(response);
+      return response;
+    } catch (e) {
+      if (e is SocketException || e.toString().contains('Connection closed') || e.toString().contains('Connection refused')) {
+        onConnectionError?.call();
+      }
+      rethrow;
+    }
   }
 
   /// DELETE request
   static Future<http.Response> delete(String endpoint) async {
-    final headers = await _getHeaders();
-    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    final response = await _client.delete(uri, headers: headers);
-    _checkStatus(response);
-    return response;
+    try {
+      final headers = await _getHeaders();
+      final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+      final response = await _client.delete(uri, headers: headers);
+      _checkStatus(response);
+      return response;
+    } catch (e) {
+      if (e is SocketException || e.toString().contains('Connection closed') || e.toString().contains('Connection refused')) {
+        onConnectionError?.call();
+      }
+      rethrow;
+    }
   }
 
   /// Streaming POST request for chat
@@ -104,15 +140,24 @@ class ApiService {
     if (response.statusCode == 401) {
        print('>>> 401 received during stream init');
        _onTokenExpired?.call();
+    } else if (response.statusCode == 502 || response.statusCode == 503) {
+      onConnectionError?.call();
     }
     
-    // Use LineSplitter to properly handle SSE lines that may be split across HTTP chunks
-    await for (final line in response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())) {
-      if (line.isNotEmpty) {
-        yield line;
+    try {
+      // Use LineSplitter to properly handle SSE lines that may be split across HTTP chunks
+      await for (final line in response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        if (line.isNotEmpty) {
+          yield line;
+        }
       }
+    } catch (e) {
+      if (e is SocketException || e.toString().contains('Connection closed') || e.toString().contains('Connection refused')) {
+        onConnectionError?.call();
+      }
+      rethrow;
     }
   }
 
