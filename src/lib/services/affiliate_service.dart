@@ -228,9 +228,9 @@ class AffiliateService {
     if (url != null) {
       request.fields['url'] = url;
     }
-    if (transforms != null && transforms.isNotEmpty) {
-      request.fields['transforms'] = transforms.join(',');
-    }
+    // Always send transforms — even if empty — so backend doesn't use
+    // its own default list (which includes mirror).
+    request.fields['transforms'] = (transforms ?? []).join(',');
     if (cropSettings != null) {
       request.fields['crop_settings_json'] = jsonEncode(cropSettings);
     }

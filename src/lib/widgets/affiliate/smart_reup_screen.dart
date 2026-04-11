@@ -13,6 +13,7 @@ import '../file_viewer_dialog.dart';
 import 'smart_reup/media_input_section.dart';
 import 'smart_reup/transform_config_section.dart';
 import 'smart_reup/processing_timeline.dart';
+import 'smart_reup/logo_crop_editor.dart';
 
 /// Smart Reup Douyin screen - paste Douyin URL or upload local video.
 class SmartReupScreen extends StatefulWidget {
@@ -33,7 +34,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
   // Transforms
   bool _stripMetadata = true;
-  bool _mirror = true;
+  bool _mirror = false;
   bool _flipH = false;
   bool _zoom = true;
   bool _color = true;
@@ -45,14 +46,9 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
   // Audio mode
   String _audioMode = 'strip'; // 'strip' | 'shift'
 
-  // Logo removal
-  String _logoRemoval = 'none'; // 'none' | 'manual' | 'ai'
-
-  // Manual logo crop settings
-  double _logoCropTop = 0.0;
-  double _logoCropRight = 15.0;
-  double _logoCropBottom = 8.0;
-  double _logoCropLeft = 0.0;
+  // Logo removal (visual crop)
+  bool _enableLogoCrop = false;
+  Map<String, double>? _cropSettings; // {top, right, bottom, left} in %
 
   // Subtitle options
   bool _blurSubtitles = false;
@@ -254,7 +250,8 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         videoFile: _videoFile,
         transforms: transforms,
         audioMode: _audioMode,
-        logoRemoval: _logoRemoval,
+        logoRemoval: _enableLogoCrop ? 'manual' : 'none',
+        cropSettings: _enableLogoCrop ? _cropSettings : null,
         blurSubtitles: _blurSubtitles,
         blurRegion: blurRegionMap,
         burnSubtitles: _burnSubtitles,
@@ -291,8 +288,8 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         return 'Đang tải video...';
       case 'transform':
         return 'Đang xử lý video...';
-      case 'ai_logo_removal':
-        return 'Đang xóa logo bằng AI...';
+      case 'crop_logo':
+        return 'Đang crop logo...';
       case 'blur_subtitles':
         return 'Đang blur vùng subtitle...';
       case 'burn_subtitles':
@@ -324,16 +321,6 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       filename: filename,
       downloadTask: CloudFileService.downloadToLocal(cloudPath, outputFile),
     );
-  }
-
-  Widget _buildJobStateUI(ThemeData theme) {
-    if (_jobStatus?['status'] == 'done') {
-      return _buildSuccessState(theme);
-    } else if (_jobStatus?['status'] == 'failed') {
-      return _buildFailedState(theme);
-    } else {
-      return _buildProcessingState(theme);
-    }
   }
 
   Widget _buildSuccessState(ThemeData theme) {
@@ -478,276 +465,6 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     );
   }
 
-  Widget _buildProcessingState(ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Timeline stages dynamically built based on selected options
-    final stages = <Map<String, dynamic>>[];
-
-    if (_url != null) {
-      stages.add({
-        'key': 'scrape',
-        'label': 'Cào dữ liệu (Scraping)',
-        'icon': Icons.public,
-      });
-      stages.add({
-        'key': 'download',
-        'label': 'Đang tải (Downloading)',
-        'icon': Icons.downloading,
-      });
-    }
-
-    // We always have some sort of transform/processing
-    stages.add({
-      'key': 'transform',
-      'label': 'Bộ lọc (Transforming)',
-      'icon': Icons.movie_filter,
-    });
-
-    if (_logoRemoval == 'ai') {
-      stages.add({
-        'key': 'ai_logo_removal',
-        'label': 'Xóa logo (AI Inpaint)',
-        'icon': Icons.auto_fix_high,
-      });
-    }
-
-    if (_blurSubtitles) {
-      stages.add({
-        'key': 'blur_subtitles',
-        'label': 'Che phụ đề (Blur)',
-        'icon': Icons.blur_on,
-      });
-    }
-
-    if (_burnSubtitles) {
-      stages.add({
-        'key': 'burn_subtitles',
-        'label': 'Đốt phụ đề (Subtitles)',
-        'icon': Icons.subtitles,
-      });
-    }
-
-    stages.add({
-      'key': 'assemble',
-      'label': 'Ghép nối (Assembling)',
-      'icon': Icons.smart_display,
-    });
-    stages.add({
-      'key': 'save',
-      'label': 'Đang lưu (Saving)',
-      'icon': Icons.cloud_done,
-    });
-
-    final backendStages = _jobStatus?['stages'] as List? ?? [];
-    final currentStage = backendStages.isNotEmpty ? backendStages.last : 'init';
-
-    int activeIndex = -1;
-    for (int i = 0; i < stages.length; i++) {
-      // Match perfectly or try to find fallback
-      if (currentStage == stages[i]['key']) {
-        activeIndex = i;
-        break;
-      }
-    }
-
-    // Fallback if current Stage is somehow not perfectly matched due to timing or skips
-    if (activeIndex == -1 &&
-        currentStage != 'init' &&
-        currentStage != 'starting') {
-      if (currentStage == 'blur_subtitles' ||
-          currentStage == 'burn_subtitles') {
-        activeIndex = stages.indexWhere(
-          (e) => e['key'] == 'blur_subtitles' || e['key'] == 'burn_subtitles',
-        );
-        if (activeIndex == -1)
-          activeIndex = stages.indexWhere((e) => e['key'] == 'transform');
-      }
-    }
-
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withOpacity(0.02)
-              : Colors.black.withOpacity(0.01),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.primary.withOpacity(0.03),
-              blurRadius: 40,
-              spreadRadius: 10,
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Circular Progress
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 140,
-                      height: 140,
-                      child: CircularProgressIndicator(
-                        value: (_jobStatus?['progress'] ?? 0) / 100,
-                        strokeWidth: 10,
-                        backgroundColor: theme.colorScheme.primary.withOpacity(
-                          0.1,
-                        ),
-                        color: theme.colorScheme.primary,
-                        strokeCap: StrokeCap.round,
-                      ),
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          '${_jobStatus?['progress'] ?? 0}%',
-                          style: theme.textTheme.headlineLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Đang xử lý',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.05)
-                        : Colors.black.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Job: $_activeJobId',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontFamily: 'monospace',
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(width: 48),
-            Container(
-              width: 1,
-              height: 250,
-              color: theme.colorScheme.onSurface.withOpacity(0.1),
-            ),
-            const SizedBox(width: 48),
-
-            // Timeline stepper
-            SizedBox(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: List.generate(stages.length, (index) {
-                  final isCompleted =
-                      activeIndex > index || _jobStatus?['progress'] == 100;
-                  final isActive =
-                      activeIndex == index && _jobStatus?['progress'] != 100;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: isCompleted
-                                ? Colors.green
-                                : isActive
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                            boxShadow: isActive
-                                ? [
-                                    BoxShadow(
-                                      color: theme.colorScheme.primary
-                                          .withOpacity(0.3),
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: isCompleted
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: Colors.white,
-                                )
-                              : Icon(
-                                  stages[index]['icon'] as IconData,
-                                  size: 14,
-                                  color: isActive
-                                      ? Colors.white
-                                      : theme.colorScheme.onSurface.withOpacity(
-                                          0.5,
-                                        ),
-                                ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            stages[index]['label'] as String,
-                            style: TextStyle(
-                              fontWeight: isActive
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: isActive
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withOpacity(
-                                      isCompleted ? 0.8 : 0.4,
-                                    ),
-                            ),
-                          ),
-                        ),
-                        if (isActive)
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_jobStatus != null || _isProcessing) {
@@ -809,38 +526,20 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
               },
               audioMode: _audioMode,
               onAudioModeChanged: (v) => setState(() => _audioMode = v!),
-              logoRemoval: _logoRemoval,
-              onLogoRemovalChanged: (v) => setState(() => _logoRemoval = v!),
             ),
           ),
-          if (_logoRemoval == 'manual') 
-            FadeInTranslate(
-              delay: const Duration(milliseconds: 200),
-              child: Container(
-                margin: const EdgeInsets.only(top: 20),
-                padding: const EdgeInsets.all(20),
-                decoration: AffiliateTheme.cardDecoration(context),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                     Text('Manual Logo Crop (%)', style: AffiliateTheme.titleStyle(context).copyWith(fontSize: 16)),
-                     const SizedBox(height: 12),
-                     Row(
-                      children: [
-                        Expanded(child: _cropSlider('Top', _logoCropTop, (v) => setState(() => _logoCropTop = v))),
-                        Expanded(child: _cropSlider('Right', _logoCropRight, (v) => setState(() => _logoCropRight = v))),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(child: _cropSlider('Bottom', _logoCropBottom, (v) => setState(() => _logoCropBottom = v))),
-                        Expanded(child: _cropSlider('Left', _logoCropLeft, (v) => setState(() => _logoCropLeft = v))),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+          const SizedBox(height: 20),
+          FadeInTranslate(
+            delay: const Duration(milliseconds: 200),
+            child: LogoCropEditorSection(
+              enabled: _enableLogoCrop,
+              onToggled: (v) => setState(() => _enableLogoCrop = v),
+              cropSettings: _cropSettings,
+              onCropChanged: (v) => setState(() => _cropSettings = v),
+              url: _url,
+              videoFile: _videoFile,
             ),
+          ),
           const SizedBox(height: 32),
           FadeInTranslate(
             delay: const Duration(milliseconds: 300),
@@ -891,7 +590,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       stages.add({'key': 'download', 'label': 'Downloading', 'icon': Icons.downloading});
     }
     stages.add({'key': 'transform', 'label': 'Transforming', 'icon': Icons.movie_filter});
-    if (_logoRemoval == 'ai') stages.add({'key': 'ai_logo_removal', 'label': 'AI Inpaint', 'icon': Icons.auto_fix_high});
+
     if (_blurSubtitles) stages.add({'key': 'blur_subtitles', 'label': 'Blur Subtitles', 'icon': Icons.blur_on});
     if (_burnSubtitles) stages.add({'key': 'burn_subtitles', 'label': 'Burn Subtitles', 'icon': Icons.subtitles});
     stages.add({'key': 'assemble', 'label': 'Assembling', 'icon': Icons.movie});
@@ -917,28 +616,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
     );
   }
 
-  Widget _cropSlider(
-    String label,
-    double value,
-    ValueChanged<double> onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label: ${value.toStringAsFixed(1)}%',
-          style: const TextStyle(fontSize: 10),
-        ),
-        Slider(
-          value: value,
-          min: 0,
-          max: 20,
-          divisions: 40,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
+
 }
 
 /// Dialog for selecting a blur region on a video frame.

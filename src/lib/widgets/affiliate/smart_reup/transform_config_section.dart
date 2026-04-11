@@ -6,8 +6,6 @@ class TransformConfigSection extends StatelessWidget {
   final Function(String, bool) onChanged;
   final String audioMode;
   final ValueChanged<String?> onAudioModeChanged;
-  final String logoRemoval;
-  final ValueChanged<String?> onLogoRemovalChanged;
 
   const TransformConfigSection({
     super.key,
@@ -15,8 +13,6 @@ class TransformConfigSection extends StatelessWidget {
     required this.onChanged,
     required this.audioMode,
     required this.onAudioModeChanged,
-    required this.logoRemoval,
-    required this.onLogoRemovalChanged,
   });
 
   @override
@@ -47,19 +43,6 @@ class TransformConfigSection extends StatelessWidget {
               'shift': 'Pitch Shift',
             },
             onAudioModeChanged,
-          ),
-          const SizedBox(height: 16),
-          _buildDropdownSection(
-            context,
-            'Logo Removal',
-            Icons.blur_circular,
-            logoRemoval,
-            {
-              'none': 'None',
-              'manual': 'Manual Crop',
-              'ai': 'AI Inpaint (Experimental)',
-            },
-            onLogoRemovalChanged,
           ),
         ],
       ),

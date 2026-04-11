@@ -19,7 +19,8 @@ class ProcessingTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDone = jobStatus?['status'] == 'done';
-    final progress = (jobStatus?['progress'] ?? 0) / 100.0;
+    final rawProgress = jobStatus?['progress'];
+    final progress = (rawProgress is num ? rawProgress.toDouble() : 0.0) / 100.0;
 
     return Container(
       padding: const EdgeInsets.all(32),
@@ -83,10 +84,14 @@ class ProcessingTimeline extends StatelessWidget {
   }
 
   Widget _buildTimeline(BuildContext context) {
+    final rawProgress = jobStatus?['progress'];
+    final progressVal = rawProgress is num ? rawProgress.toInt() : 0;
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: List.generate(stages.length, (index) {
-        final isCompleted = activeIndex > index || jobStatus?['progress'] == 100;
-        final isActive = activeIndex == index && jobStatus?['progress'] != 100;
+        final isCompleted = activeIndex > index || progressVal == 100;
+        final isActive = activeIndex == index && progressVal != 100;
 
         return _TimelineItem(
           label: stages[index]['label'] as String,
@@ -118,64 +123,104 @@ class _TimelineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isCompleted ? Colors.green : (isActive ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.1));
+    final color = isCompleted
+        ? Colors.green
+        : (isActive
+            ? theme.colorScheme.primary
+            : theme.colorScheme.onSurface.withOpacity(0.15));
 
-    return IntrinsicHeight(
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: color.withOpacity(0.3),
-                            blurRadius: 10,
-                            spreadRadius: 2,
+          // Left column: dot + connector
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                // Circle with icon
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: color.withOpacity(0.3),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: isCompleted
+                        ? const Icon(Icons.check, size: 16, color: Colors.white)
+                        : Icon(
+                            icon,
+                            size: 14,
+                            color: isActive
+                                ? Colors.white
+                                : theme.iconTheme.color?.withOpacity(0.3),
                           ),
-                        ]
-                      : null,
-                ),
-                child: isCompleted
-                    ? const Icon(Icons.check, size: 14, color: Colors.white)
-                    : Icon(icon, size: 12, color: isActive ? Colors.white : theme.iconTheme.color?.withOpacity(0.3)),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: color.withOpacity(0.2),
-                    margin: const EdgeInsets.symmetric(vertical: 4),
                   ),
                 ),
-            ],
+                // Connector line
+                if (!isLast)
+                  Container(
+                    width: 2,
+                    height: 20,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isCompleted
+                          ? Colors.green.withOpacity(0.3)
+                          : theme.colorScheme.onSurface.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(width: 16),
-          Padding(
-            padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                color: isActive ? color : theme.textTheme.bodyMedium?.color?.withOpacity(isCompleted ? 0.8 : 0.4),
+          // Label + spinner
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                        color: isActive
+                            ? theme.colorScheme.primary
+                            : theme.textTheme.bodyMedium?.color?.withOpacity(
+                                isCompleted ? 0.8 : 0.4,
+                              ),
+                      ),
+                    ),
+                  ),
+                  if (isActive) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
-          if (isActive) ...[
-            const SizedBox(width: 12),
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ],
         ],
       ),
     );
