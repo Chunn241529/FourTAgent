@@ -333,7 +333,7 @@ class _MessageInputState extends State<MessageInput> {
                     textAlignVertical: TextAlignVertical.top,
                     style: theme.textTheme.bodyLarge,
                     decoration: InputDecoration(
-                      hintText: 'Nhắn tin cho Lumina AI...',
+                      hintText: 'Nhắn tin cho Stella AI...',
                       hintStyle: TextStyle(
                         color: theme.colorScheme.onSurface.withOpacity(0.6),
                       ),

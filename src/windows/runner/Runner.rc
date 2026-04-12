@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.fourt" "\0"
-            VALUE "FileDescription", "Lumina" "\0"
+            VALUE "FileDescription", "Stella" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "Lumina" "\0"
+            VALUE "InternalName", "Stella" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.fourt. All rights reserved." "\0"
-            VALUE "OriginalFilename", "Lumina.exe" "\0"
-            VALUE "ProductName", "Lumina" "\0"
+            VALUE "OriginalFilename", "Stella.exe" "\0"
+            VALUE "ProductName", "Stella" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -147,7 +147,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
       // Generate filename with timestamp
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filePath = '${downloadsDir.path}/lumina_image_$timestamp.png';
+      final filePath = '${downloadsDir.path}/Stella_image_$timestamp.png';
 
       // Write file
       final file = File(filePath);

@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
-Name=Lumina AI
-GenericName=Lumina AI
-Comment=Lumina AI - Mobile Chat App
-Exec=Lumina
-Icon=Lumina
+Name=Stella AI
+GenericName=Stella AI
+Comment=Stella AI - Mobile Chat App
+Exec=Stella
+Icon=Stella
 Terminal=false
 Type=Application
 Categories=Utility;

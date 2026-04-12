@@ -64,7 +64,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     _desktopPlayer = Player(
       configuration: const PlayerConfiguration(
         vo: 'null', // Disable video output on Linux/mpv
-        title: 'Lumina AI Music',
+        title: 'Stella AI Music',
         // Add better network handling
         protocolWhitelist: ['http', 'https', 'tls', 'tcp', 'file'],
         logLevel: MPVLogLevel.warn, // Reduce noise from FFmpeg

@@ -326,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           end: Alignment.bottomRight,
         ).createShader(bounds),
         child: Text(
-          'Lumina AI',
+          'Stella AI',
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 56, // Adjusted size

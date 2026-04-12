@@ -259,7 +259,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     Flexible(
                       child: Text(
-                        title ?? 'Lumina AI',
+                        title ?? 'Stella AI',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w500,
                         ),

@@ -103,7 +103,7 @@ class _FourTChatAppState extends State<FourTChatApp> with WidgetsBindingObserver
         builder: (context, themeProvider, _) {
           return MaterialApp(
             scaffoldMessengerKey: rootScaffoldMessengerKey,
-            title: 'Lumina AI',
+            title: 'Stella AI',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

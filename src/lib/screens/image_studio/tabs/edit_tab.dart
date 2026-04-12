@@ -622,7 +622,7 @@ class _EditTabState extends State<EditTab> {
       final segments = uri.pathSegments;
       final defaultName = segments.isNotEmpty
           ? segments.last
-          : 'lumina_edit.png';
+          : 'Stella_edit.png';
 
       final savePath = await FilePicker.platform.saveFile(
         dialogTitle: 'Lưu ảnh',

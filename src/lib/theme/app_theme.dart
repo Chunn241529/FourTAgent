@@ -7,7 +7,7 @@ class AppTheme {
   static const Color _darkBgPrimary = Color(0xFF212121);     // Main background - dark gray
   static const Color _darkBgSecondary = Color(0xFF2F2F2F);   // Cards/surfaces - slightly lighter
   static const Color _darkBgTertiary = Color(0xFF171717);    // Even darker for contrast
-  static const Color _darkAccent = Color(0xFF1E3A8A);        // Lumina Dark Blue (Xanh Đen)
+  static const Color _darkAccent = Color(0xFF1E3A8A);        // Stella Dark Blue (Xanh Đen)
   static const Color _darkAccentSecondary = Color(0xFF1565C0);
   static const Color _darkTextPrimary = Color(0xFFEFEFEF);   // Bright white text
   static const Color _darkTextSecondary = Color(0xFF8E8E8E); // Muted gray text
@@ -20,7 +20,7 @@ class AppTheme {
   static const Color _lightBgPrimary = Color(0xFFF7F7F8);    // Main background - light gray
   static const Color _lightBgSecondary = Color(0xFFFFFFFF);  // Cards/surfaces - white
   static const Color _lightBgTertiary = Color(0xFFECECEC);   // Slightly darker for contrast
-  static const Color _lightAccent = Color(0xFF1E3A8A);       // Lumina Dark Blue (Xanh Đen)
+  static const Color _lightAccent = Color(0xFF1E3A8A);       // Stella Dark Blue (Xanh Đen)
   static const Color _lightAccentSecondary = Color(0xFF1565C0);
   static const Color _lightTextPrimary = Color(0xFF1A1A1A);  // Dark text
   static const Color _lightTextSecondary = Color(0xFF6E6E80);// Muted text

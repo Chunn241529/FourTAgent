@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumina_ai/main.dart';
+import 'package:Stella_ai/main.dart';
 
 void main() {
   testWidgets('App launches successfully', (WidgetTester tester) async {

@@ -130,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             const SizedBox(height: 32),
             // Title
             Text(
-              'Lumina AI',
+              'Stella AI',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.primary,

@@ -1711,7 +1711,7 @@ Filler warmup complete. Cached 18 items.
 LLMRouter initialized with 4 active providers                                   
 LLMRouter initialized with 4 active providers                                   
 DEBUG GET /conversations: id=1, title=Khởi đầu "không buông                     
-Found assets: ['Lumina-v0.0.8-windows.zip']                                     
+Found assets: ['Stella-v0.0.8-windows.zip']                                     
 ERROR POST /affiliate/generate-script - ProductData.__init__() got an           
 unexpected keyword argument 'url' - 0.97ms                                      
 Traceback (most recent call last):                                              

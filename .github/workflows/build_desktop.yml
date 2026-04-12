@@ -38,15 +38,15 @@ jobs:
       - name: Create Windows Archive
         run: |
           cd src/build/windows/x64/runner/Release
-          7z a -tzip Lumina-${{ github.ref_name }}-windows.zip *
-          move Lumina-${{ github.ref_name }}-windows.zip ../../../../../..
+          7z a -tzip Stella-${{ github.ref_name }}-windows.zip *
+          move Stella-${{ github.ref_name }}-windows.zip ../../../../../..
           cd ../../../../../..
-          dir Lumina-*.zip
+          dir Stella-*.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: Lumina-${{ github.ref_name }}-windows.zip
+          files: Stella-${{ github.ref_name }}-windows.zip
           draft: false
           prerelease: false
           generate_release_notes: true

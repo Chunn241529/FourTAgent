@@ -73,7 +73,7 @@ class _HtmlPreviewWidgetState extends State<HtmlPreviewWidget> {
       // Fallback to documents or temp if downloads fails
       dir ??= await getApplicationDocumentsDirectory();
       
-      final file = File('${dir.path}/lumina_preview_${DateTime.now().millisecondsSinceEpoch}.html');
+      final file = File('${dir.path}/Stella_preview_${DateTime.now().millisecondsSinceEpoch}.html');
       await file.writeAsString(_preparedHtml!);
       
       debugPrint('Saved preview to: ${file.path}');

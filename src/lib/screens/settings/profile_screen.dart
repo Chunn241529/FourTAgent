@@ -732,7 +732,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           const SizedBox(height: 20),
           Text(
-            _fullNameController.text.isNotEmpty ? _fullNameController.text : 'Lumina User',
+            _fullNameController.text.isNotEmpty ? _fullNameController.text : 'Stella User',
             style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),

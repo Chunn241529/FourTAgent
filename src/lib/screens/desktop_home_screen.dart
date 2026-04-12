@@ -173,7 +173,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Lumina',
+                  'Stella',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

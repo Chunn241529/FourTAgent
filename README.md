@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌟 Lumina AI
+# 🌟 Stella AI
 
 **Your Personal AI Assistant with Voice, Chat & Creative Tools**
 
@@ -54,7 +54,7 @@
 
 ```mermaid
 graph LR
-    A[User] -->|Chat| B[Lumina AI]
+    A[User] -->|Chat| B[Stella AI]
     B -->|Generate| C[Images]
     B -->|Play| D[Music]
     B -->|Search| E[Web]
@@ -233,12 +233,12 @@ graph TB
 
 ### 🤖 Intelligent Chat with RAG
 
-Upload documents and chat with them! Lumina uses FAISS vector store to find relevant context from your files.
+Upload documents and chat with them! Stella uses FAISS vector store to find relevant context from your files.
 
 ```python
 # Example: Chat with a PDF
 User: "Summarize the key points from my document"
-Lumina: *retrieves relevant chunks* → *generates summary*
+Stella: *retrieves relevant chunks* → *generates summary*
 ```
 
 ### 🎨 AI Image Generation
@@ -247,7 +247,7 @@ Powered by ComfyUI with Flux models. Just describe what you want:
 
 ```
 User: "Create an image of a futuristic city with flying cars"
-Lumina: *generates stunning image* 🖼️
+Stella: *generates stunning image* 🖼️
 ```
 
 ### 🎵 Music Intelligence
@@ -256,7 +256,7 @@ Search and play music from YouTube with smart recommendations:
 
 ```
 User: "Play some chill lo-fi music"
-Lumina: *searches* → *plays playlist* 🎶
+Stella: *searches* → *plays playlist* 🎶
 ```
 
 ### 🗣️ Voice Conversations

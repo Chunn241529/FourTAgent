@@ -174,7 +174,7 @@ class _GenerateTabState extends State<GenerateTab> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Lumina - Professional AI Generation',
+              'Stella - Professional AI Generation',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withOpacity(0.4),
               ),
@@ -363,7 +363,7 @@ class _GenerateTabState extends State<GenerateTab> {
       final segments = uri.pathSegments;
       final defaultName = segments.isNotEmpty
           ? segments.last
-          : 'lumina_image.png';
+          : 'Stella_image.png';
 
       final savePath = await FilePicker.platform.saveFile(
         dialogTitle: 'Lưu ảnh',
