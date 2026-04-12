@@ -620,9 +620,17 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
-    // Always use MarkdownBody for consistency
+    return _buildSegmentedContent(
+      context,
+      theme,
+      widget.message.content,
+      isThinking: false,
+    );
+  }
+
+  Widget _buildMarkdownBody(ThemeData theme, bool isDark, String content) {
     return MarkdownBody(
-      data: widget.message.content,
+      data: content,
       selectable: true,
       softLineBreak: true,
       builders: {'code': CodeBlockBuilder(isDark: isDark)},
@@ -754,16 +762,12 @@ class _MessageBubbleState extends State<MessageBubble> {
 
         // Handle custom FETCH indicator
         if (uriStr.startsWith('fetch:')) {
-          final url = Uri.decodeComponent(uriStr.substring(6));
-          final isCompleted = widget.message.completedFetches.contains(url);
+          final url = Uri.decodeComponent(uriStr.substring(6)).trim();
           return Align(
             alignment: Alignment.centerLeft,
             child: Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: WebFetchIndicator(
-                activeFetches: isCompleted ? [] : [url],
-                completedFetches: isCompleted ? [url] : [],
-              ),
+              child: WebFetchIndicator(urls: [url]),
             ),
           );
         }
@@ -951,30 +955,49 @@ class _MessageBubbleState extends State<MessageBubble> {
     return sources;
   }
 
+
   Widget _buildReasoningChain(
     BuildContext context,
     ThemeData theme,
     Message message, {
     String? contentOverride,
   }) {
-    if (message.thinking == null && contentOverride == null)
-      return const SizedBox.shrink();
+    final text = contentOverride ?? message.thinking;
+    if (text == null || text.isEmpty) return const SizedBox.shrink();
 
+    return _buildSegmentedContent(
+      context,
+      theme,
+      text,
+      isThinking: true,
+    );
+  }
+
+  Widget _buildSegmentedContent(
+    BuildContext context,
+    ThemeData theme,
+    String text, {
+    required bool isThinking,
+  }) {
+    final message = widget.message;
+    final isDark = theme.brightness == Brightness.dark;
     final List<Widget> children = [];
-    final splitPattern = RegExp(r'\n\n<<<TOOL:(.*?):(.*?)>>>\n\n');
+    final splitPattern = RegExp(r'<<<TOOL:(.*?):(.*?)>>>');
 
-    final thinkingContent = contentOverride ?? message.thinking!;
-    final matches = splitPattern.allMatches(thinkingContent);
+    final matches = splitPattern.allMatches(text);
 
     int lastIndex = 0;
 
     for (final match in matches) {
       if (match.start > lastIndex) {
-        final segmentText = thinkingContent
-            .substring(lastIndex, match.start)
-            .trim();
+        final segmentText = text.substring(lastIndex, match.start).trim();
         if (segmentText.isNotEmpty) {
-          children.add(_ThinkingSegment(content: segmentText, isStreaming: widget.message.isStreaming));
+          if (isThinking) {
+            children.add(_ThinkingSegment(
+                content: segmentText, isStreaming: message.isStreaming));
+          } else {
+            children.add(_buildMarkdownBody(theme, isDark, segmentText));
+          }
         }
       }
 
@@ -982,10 +1005,25 @@ class _MessageBubbleState extends State<MessageBubble> {
       final target = match.group(2) ?? '';
 
       bool isCompleted = false;
+      bool isFailed = false;
+
+      final normalizedTarget = target.trim().replaceFirst(RegExp(r'/+$'), '');
+
       if (action == 'SEARCH') {
-        if (message.completedSearches.contains(target)) isCompleted = true;
+        if (message.completedSearches.any((s) => s.trim() == target.trim())) {
+          isCompleted = true;
+        } else if (message.failedSearches
+            .any((s) => s.trim() == target.trim())) {
+          isFailed = true;
+        }
       } else if (action == 'FETCH') {
-        if (message.completedFetches.contains(target)) isCompleted = true;
+        if (message.completedFetches.any((u) =>
+            u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedTarget)) {
+          isCompleted = true;
+        } else if (message.failedFetches.any((u) =>
+            u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedTarget)) {
+          isFailed = true;
+        }
       } else if (['READ', 'CREATE', 'SEARCH_FILE'].contains(action)) {
         final tag = '$action:$target';
         if (message.completedFileActions.contains(tag)) isCompleted = true;
@@ -994,27 +1032,33 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (action == 'FETCH') {
         children.add(
           Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
-            child: WebFetchIndicator(
-              activeFetches: isCompleted ? [] : [target],
-              completedFetches: isCompleted ? [target] : [],
-            ),
+            padding: EdgeInsets.only(
+                left: isThinking ? 12 : 0, bottom: 8, top: 4),
+            child: WebFetchIndicator(urls: [target]),
           ),
         );
       } else if (action == 'SEARCH') {
         children.add(
           Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+            padding: EdgeInsets.only(
+                left: isThinking ? 12 : 0, bottom: 8, top: 4),
             child: SearchIndicator(
-              activeSearches: isCompleted ? [] : [target],
+              activeSearches:
+                  (isCompleted || isFailed || !message.isStreaming)
+                      ? []
+                      : [target],
               completedSearches: isCompleted ? [target] : [],
+              failedSearches: (isFailed || (!isCompleted && !message.isStreaming))
+                  ? [target]
+                  : [],
             ),
           ),
         );
       } else {
         children.add(
           Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 8, top: 4),
+            padding: EdgeInsets.only(
+                left: isThinking ? 12 : 0, bottom: 8, top: 4),
             child: SimpleToolIndicator(
               action: action,
               target: target,
@@ -1027,10 +1071,15 @@ class _MessageBubbleState extends State<MessageBubble> {
       lastIndex = match.end;
     }
 
-    if (lastIndex < thinkingContent.length) {
-      final segmentText = thinkingContent.substring(lastIndex).trim();
+    if (lastIndex < text.length) {
+      final segmentText = text.substring(lastIndex).trim();
       if (segmentText.isNotEmpty) {
-        children.add(_ThinkingSegment(content: segmentText, isStreaming: widget.message.isStreaming));
+        if (isThinking) {
+          children.add(_ThinkingSegment(
+              content: segmentText, isStreaming: message.isStreaming));
+        } else {
+          children.add(_buildMarkdownBody(theme, isDark, segmentText));
+        }
       }
     }
 
@@ -1040,6 +1089,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 }
+
 
 class _ActionButton extends StatelessWidget {
   final IconData icon;

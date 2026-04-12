@@ -400,6 +400,7 @@ class ChatProvider extends ChangeNotifier {
              toolCalls: newToolCalls,
              activeSearches: [...last.activeSearches, ...msg.activeSearches].toSet().toList(),
              completedSearches: [...last.completedSearches, ...msg.completedSearches].toSet().toList(),
+             completedFetches: [...last.completedFetches, ...msg.completedFetches].toSet().toList(),
              completedFileActions: [...last.completedFileActions, ...msg.completedFileActions].toSet().toList(),
              generatedImages: [...last.generatedImages, ...msg.generatedImages].toSet().toList(),
              codeExecutions: [...last.codeExecutions, ...msg.codeExecutions],
@@ -411,7 +412,7 @@ class ChatProvider extends ChangeNotifier {
       
       _messages = mergedMessages;
       
-      // Enrich messages with tool call markers for UI
+      // Backward compatibility: Enrich messages that don't have markers in their text yet
       _enrichMessagesWithToolMarkers();
 
       // Derive title from first user message if not set
@@ -432,83 +433,6 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Enrich messages with tool markers from toolCalls data (for history loading)
-  void _enrichMessagesWithToolMarkers() {
-    for (int i = 0; i < _messages.length; i++) {
-        final msg = _messages[i];
-        if (msg.role == 'assistant' && msg.toolCalls != null) {
-           String thinking = msg.thinking ?? '';
-           List<String> activeSearches = [];
-           List<String> completedSearches = [];
-           List<String> completedFileActions = [];
-           
-           // We need to append markers to 'thinking' if they are missing
-           // But how do we know if they are missing?
-           // The persisted 'thinking' might be raw text.
-           // We'll append them at the end if not present?
-           // Or better, we can reconstruct valid UI state.
-           
-           try {
-             List<dynamic> calls = [];
-             if (msg.toolCalls is String) {
-                calls = jsonDecode(msg.toolCalls);
-             } else if (msg.toolCalls is List) {
-                calls = msg.toolCalls;
-             }
-             
-             for (final call in calls) {
-                if (call['function'] != null) {
-                   final name = call['function']['name'];
-                   final argsStr = call['function']['arguments'];
-                   Map<String, dynamic> args = {};
-                   if (argsStr is String) {
-                      try { args = jsonDecode(argsStr); } catch (_) {}
-                   } else if (argsStr is Map) {
-                      args = argsStr as Map<String, dynamic>;
-                   }
-                   
-                   String marker = '';
-                   
-                   if (name == 'web_search') {
-                      final query = args['query'] as String?;
-                      if (query != null) {
-                         marker = '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
-                         completedSearches.add(query);
-                      }
-                   } else if (['read_file', 'create_file', 'search_file'].contains(name)) {
-                      String action = '';
-                      if (name == 'read_file') action = 'READ';
-                      if (name == 'create_file') action = 'CREATE';
-                      if (name == 'search_file') action = 'SEARCH_FILE';
-                      
-                      final path = args['path'] as String?;
-                      final query = args['query'] as String?;
-                      final target = path ?? query;
-                      
-                      if (target != null) {
-                         marker = '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
-                         completedFileActions.add('$action:$target');
-                      }
-                   }
-                   
-                   // Only append if not already in text (simple heuristic)
-                   if (marker.isNotEmpty && !thinking.contains(marker.trim())) {
-                      thinking += marker;
-                   }
-                }
-             }
-             
-             _messages[i] = msg.copyWith(
-                thinking: thinking,
-                completedSearches: completedSearches,
-                completedFileActions: completedFileActions,
-             );
-           } catch (e) {
-             print('Error enriching message tool markers: $e');
-           }
-        }
-    }
-  }
 
   /// Delete conversation
   Future<void> deleteConversation(int conversationId) async {
@@ -821,10 +745,14 @@ class ChatProvider extends ChangeNotifier {
                           final currentSearches = List<String>.from(_messages[lastIndex].activeSearches);
                           if (!currentSearches.contains(query) && !_messages[lastIndex].completedSearches.contains(query)) {
                             currentSearches.add(query);
-                            // Inject marker into THINKING, not content
-                            fullThinking += '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
-                            
-                            _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentSearches, thinking: fullThinking);
+                            // Smart Placement: If content is empty, put in thinking block
+                            if (fullResponse.trim().isEmpty) {
+                              fullThinking += '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentSearches, thinking: fullThinking);
+                            } else {
+                              fullResponse += '\n\n<<<TOOL:SEARCH:${query.replaceAll('>', '')}>>>\n\n';
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentSearches, content: fullResponse);
+                            }
                             shouldNotify = true;
                           }
                         }
@@ -832,17 +760,27 @@ class ChatProvider extends ChangeNotifier {
                   } 
                   // Handle Web Fetch
                   else if (name == 'fetch') {
-                      final url = parsedArgs?['url'] as String?;
+                      var url = parsedArgs?['url'] as String?;
                       if (url != null) {
+                        url = url.trim();
                         final lastIndex = _messages.length - 1;
                         if (lastIndex >= 0) {
                           final currentFetches = List<String>.from(_messages[lastIndex].activeFetches);
-                          if (!currentFetches.contains(url) && !_messages[lastIndex].completedFetches.contains(url)) {
+                          // Use normalized check
+                          final normalizedUrl = url.replaceFirst(RegExp(r'/+$'), '');
+                          bool isAlreadyPresent = currentFetches.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl) || 
+                                                 _messages[lastIndex].completedFetches.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
+                          
+                          if (!isAlreadyPresent) {
                             currentFetches.add(url);
-                            // Inject marker into THINKING
-                            fullThinking += '\n\n<<<TOOL:FETCH:${url.replaceAll('>', '')}>>>\n\n';
-                            
-                            _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentFetches, thinking: fullThinking);
+                            // Smart Placement: If content is empty, put in thinking block
+                            if (fullResponse.trim().isEmpty) {
+                              fullThinking += '\n\n<<<TOOL:FETCH:${url.replaceAll('>', '')}>>>\n\n';
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentFetches, thinking: fullThinking);
+                            } else {
+                              fullResponse += '\n\n<<<TOOL:FETCH:${url.replaceAll('>', '')}>>>\n\n';
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentFetches, content: fullResponse);
+                            }
                             shouldNotify = true;
                           }
                         }
@@ -859,15 +797,23 @@ class ChatProvider extends ChangeNotifier {
                          if (name == 'read_file') action = 'READ';
                          if (name == 'create_file') action = 'CREATE';
                          if (name == 'search_file') action = 'SEARCH_FILE';
-                         
-                         // Inject marker into THINKING
-                         fullThinking += '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
-                         
-                         final lastIndex = _messages.length - 1;
-                         if (lastIndex >= 0) {
-                            _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
-                            shouldNotify = true;
-                         }
+                          // Smart Placement: If content is empty, put in thinking block
+                          if (fullResponse.trim().isEmpty) {
+                            fullThinking += '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
+                            final lastIndex = _messages.length - 1;
+                            if (lastIndex >= 0) {
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                              shouldNotify = true;
+                            }
+                          } else {
+                            fullResponse += '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
+                            final lastIndex = _messages.length - 1;
+                            if (lastIndex >= 0) {
+                              _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse);
+                              shouldNotify = true;
+                            }
+                          }
+
                       }
                   }
                   // Handle Canvas Tools - open panel early
@@ -882,7 +828,7 @@ class ChatProvider extends ChangeNotifier {
 
             // Handle search_started (NEW)
             if (data['search_started'] != null) {
-              final query = data['search_started']['query'] as String?;
+              final query = (data['search_started']['query'] as String?)?.trim();
               if (query != null) {
                 final lastIndex = _messages.length - 1;
                 if (lastIndex >= 0) {
@@ -898,20 +844,29 @@ class ChatProvider extends ChangeNotifier {
 
             // Handle search_complete
             if (data['search_complete'] != null) {
-              final query = data['search_complete']['query'] as String?;
+              final query = (data['search_complete']['query'] as String?)?.trim();
+              final success = data['search_complete']['success'] as bool? ?? true;
               if (query != null) {
                 final lastIndex = _messages.length - 1;
                 if (lastIndex >= 0) {
                   final currentActive = List<String>.from(_messages[lastIndex].activeSearches);
                   final currentCompleted = List<String>.from(_messages[lastIndex].completedSearches);
+                  final currentFailed = List<String>.from(_messages[lastIndex].failedSearches);
                   
-                  if (currentActive.contains(query)) {
-                    currentActive.remove(query);
-                  }
+                  // Use robust matching (trim)
+                  currentActive.removeWhere((q) => q.trim() == query);
                   
-                  if (!currentCompleted.contains(query)) {
-                    currentCompleted.add(query);
-                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeSearches: currentActive, completedSearches: currentCompleted);
+                  if (!currentCompleted.contains(query) && !currentFailed.contains(query)) {
+                    if (success) {
+                      currentCompleted.add(query);
+                    } else {
+                      currentFailed.add(query);
+                    }
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      activeSearches: currentActive, 
+                      completedSearches: currentCompleted,
+                      failedSearches: currentFailed,
+                    );
                     shouldNotify = true;
                   }
                 }
@@ -920,12 +875,16 @@ class ChatProvider extends ChangeNotifier {
 
             // Handle fetch_started
             if (data['fetch_started'] != null) {
-              final url = data['fetch_started']['url'] as String?;
+              final url = (data['fetch_started']['url'] as String?)?.trim();
               if (url != null) {
                 final lastIndex = _messages.length - 1;
                 if (lastIndex >= 0) {
                   final currentActive = List<String>.from(_messages[lastIndex].activeFetches);
-                  if (!currentActive.contains(url)) {
+                  // Normalized check for started event too
+                  final normalizedUrl = url.replaceFirst(RegExp(r'/+$'), '');
+                  bool isAlreadyInActive = currentActive.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
+                  
+                  if (!isAlreadyInActive) {
                     currentActive.add(url);
                     _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentActive);
                     shouldNotify = true;
@@ -936,20 +895,34 @@ class ChatProvider extends ChangeNotifier {
 
             // Handle fetch_complete
             if (data['fetch_complete'] != null) {
-              final url = data['fetch_complete']['url'] as String?;
+              final url = (data['fetch_complete']['url'] as String?)?.trim();
+              final success = data['fetch_complete']['success'] as bool? ?? true;
               if (url != null) {
                 final lastIndex = _messages.length - 1;
                 if (lastIndex >= 0) {
                   final currentActive = List<String>.from(_messages[lastIndex].activeFetches);
                   final currentCompleted = List<String>.from(_messages[lastIndex].completedFetches);
+                  final currentFailed = List<String>.from(_messages[lastIndex].failedFetches);
                   
-                  if (currentActive.contains(url)) {
-                    currentActive.remove(url);
-                  }
+                  final normalizedUrl = url.replaceFirst(RegExp(r'/+$'), '');
                   
-                  if (!currentCompleted.contains(url)) {
-                    currentCompleted.add(url);
-                    _messages[lastIndex] = _messages[lastIndex].copyWith(activeFetches: currentActive, completedFetches: currentCompleted);
+                  // Use robust matching (strip trailing slash and trim)
+                  currentActive.removeWhere((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
+                  
+                  bool isAlreadyDone = currentCompleted.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl) || 
+                                     currentFailed.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
+
+                  if (!isAlreadyDone) {
+                    if (success) {
+                      currentCompleted.add(url);
+                    } else {
+                      currentFailed.add(url);
+                    }
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      activeFetches: currentActive, 
+                      completedFetches: currentCompleted,
+                      failedFetches: currentFailed,
+                    );
                     shouldNotify = true;
                   }
                 }
@@ -1468,6 +1441,108 @@ class ChatProvider extends ChangeNotifier {
       _error = 'Error submitting tool result: $e';
       _isStreaming = false;
       notifyListeners();
+    }
+  }
+  
+  /// Enrich messages with tool markers from toolCalls data (for history loading)
+  void _enrichMessagesWithToolMarkers() {
+    for (int i = 0; i < _messages.length; i++) {
+        final msg = _messages[i];
+        if (msg.role == 'assistant' && msg.toolCalls != null) {
+           String thinking = msg.thinking ?? '';
+           String content = msg.content;
+           List<String> completedSearches = List.from(msg.completedSearches);
+           List<String> completedFetches = List.from(msg.completedFetches);
+           List<String> completedFileActions = List.from(msg.completedFileActions);
+           
+           try {
+             List<dynamic> calls = [];
+             if (msg.toolCalls is String) {
+                calls = jsonDecode(msg.toolCalls);
+             } else if (msg.toolCalls is List) {
+                calls = msg.toolCalls;
+             }
+             
+             bool changed = false;
+             for (final call in calls) {
+                if (call['function'] != null) {
+                   final name = call['function']['name'];
+                   final argsStr = call['function']['arguments'];
+                   Map<String, dynamic> args = {};
+                   if (argsStr is String) {
+                      try { args = jsonDecode(argsStr); } catch (_) {}
+                   } else if (argsStr is Map) {
+                      args = argsStr as Map<String, dynamic>;
+                   }
+                   
+                   String marker = '';
+                   String action = '';
+                   String? target;
+                   
+                   if (name == 'web_search') {
+                      target = args['query'] as String?;
+                      if (target != null) {
+                         action = 'SEARCH';
+                         marker = '\n\n<<<TOOL:SEARCH:${target.replaceAll('>', '')}>>>\n\n';
+                         if (!completedSearches.contains(target)) {
+                            completedSearches.add(target);
+                            changed = true;
+                         }
+                      }
+                   } else if (name == 'fetch') {
+                      target = args['url'] as String?;
+                      if (target != null) {
+                         action = 'FETCH';
+                         marker = '\n\n<<<TOOL:FETCH:${target.replaceAll('>', '')}>>>\n\n';
+                         if (!completedFetches.contains(target)) {
+                            completedFetches.add(target);
+                            changed = true;
+                         }
+                      }
+                   } else if (['read_file', 'create_file', 'search_file'].contains(name)) {
+                      if (name == 'read_file') action = 'READ';
+                      if (name == 'create_file') action = 'CREATE';
+                      if (name == 'search_file') action = 'SEARCH_FILE';
+                      target = (args['path'] as String?) ?? (args['query'] as String?);
+                      
+                      if (target != null) {
+                         marker = '\n\n<<<TOOL:$action:${target.replaceAll('>', '')}>>>\n\n';
+                         String tag = '$action:$target';
+                         if (!completedFileActions.contains(tag)) {
+                            completedFileActions.add(tag);
+                            changed = true;
+                         }
+                      }
+                   }
+                   
+                   // Fallback logic: Only add if marker is missing from BOTH content and thinking
+                   if (marker.isNotEmpty && 
+                       !content.contains(marker.trim()) && 
+                       !thinking.contains(marker.trim())) {
+                      changed = true;
+                      // Heuristic: If content is empty, put in thinking. Otherwise put in content.
+                      if (content.trim().isEmpty) {
+                         thinking += marker;
+                      } else {
+                         content += marker;
+                      }
+                   }
+                }
+             }
+             
+             if (changed) {
+                _messages[i] = msg.copyWith(
+                   thinking: thinking.isEmpty ? null : thinking,
+                   content: content,
+                   completedSearches: completedSearches,
+                   completedFetches: completedFetches,
+                   completedFileActions: completedFileActions,
+                );
+             }
+           } catch (e) {
+             print('Error enriching message tool markers: $e');
+           }
+        }
     }
   }
 }

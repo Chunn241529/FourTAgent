@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class SearchIndicator extends StatefulWidget {
   final List<String> activeSearches;
   final List<String> completedSearches;
+  final List<String> failedSearches;
 
   const SearchIndicator({
     super.key,
     required this.activeSearches,
     required this.completedSearches,
+    this.failedSearches = const [],
   });
 
   @override
@@ -40,7 +42,7 @@ class _SearchIndicatorState extends State<SearchIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final hasSearches = widget.activeSearches.isNotEmpty || widget.completedSearches.isNotEmpty;
+    final hasSearches = widget.activeSearches.isNotEmpty || widget.completedSearches.isNotEmpty || widget.failedSearches.isNotEmpty;
     if (!hasSearches) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
@@ -54,7 +56,14 @@ class _SearchIndicatorState extends State<SearchIndicator>
           theme: theme,
           isDark: isDark,
           query: query,
-          isActive: false,
+          status: _ToolStatus.completed,
+        )),
+        // Failed searches (static, with error icon)
+        ...widget.failedSearches.map((query) => _buildSearchItem(
+          theme: theme,
+          isDark: isDark,
+          query: query,
+          status: _ToolStatus.failed,
         )),
         // Active searches (with animation)
         ...widget.activeSearches.map((query) => AnimatedBuilder(
@@ -63,7 +72,7 @@ class _SearchIndicatorState extends State<SearchIndicator>
             theme: theme,
             isDark: isDark,
             query: query,
-            isActive: true,
+            status: _ToolStatus.active,
             shimmerValue: _shimmerAnimation.value,
           ),
         )),
@@ -75,9 +84,12 @@ class _SearchIndicatorState extends State<SearchIndicator>
     required ThemeData theme,
     required bool isDark,
     required String query,
-    required bool isActive,
+    required _ToolStatus status,
     double shimmerValue = 0,
   }) {
+    final isActive = status == _ToolStatus.active;
+    final isFailed = status == _ToolStatus.failed;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -99,7 +111,9 @@ class _SearchIndicatorState extends State<SearchIndicator>
         border: Border.all(
           color: isActive
               ? theme.colorScheme.primary.withOpacity(0.4)
-              : theme.colorScheme.onSurface.withOpacity(0.15),
+              : (isFailed 
+                  ? Colors.red.withOpacity(0.4) 
+                  : theme.colorScheme.onSurface.withOpacity(0.15)),
           width: 1,
         ),
       ),
@@ -115,6 +129,12 @@ class _SearchIndicatorState extends State<SearchIndicator>
                 valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
               ),
             ),
+          ] else if (isFailed) ...[
+            Icon(
+              Icons.error_outline,
+              size: 14,
+              color: Colors.red.shade600,
+            ),
           ] else ...[
             Icon(
               Icons.check_circle,
@@ -126,14 +146,18 @@ class _SearchIndicatorState extends State<SearchIndicator>
           Icon(
             Icons.search,
             size: 13,
-            color: theme.colorScheme.primary.withOpacity(0.8),
+            color: isFailed 
+                ? Colors.red.withOpacity(0.8) 
+                : theme.colorScheme.primary.withOpacity(0.8),
           ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               _truncateQuery(query),
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.75),
+                color: isFailed 
+                    ? Colors.red.shade400 
+                    : theme.colorScheme.onSurface.withOpacity(0.75),
                 fontSize: 12,
               ),
               maxLines: 1,
@@ -144,7 +168,6 @@ class _SearchIndicatorState extends State<SearchIndicator>
       ),
     );
   }
-
   String _truncateQuery(String query) {
     if (query.length > 50) {
       return '${query.substring(0, 50)}...';
@@ -152,3 +175,5 @@ class _SearchIndicatorState extends State<SearchIndicator>
     return query;
   }
 }
+
+enum _ToolStatus { active, completed, failed }

@@ -15,6 +15,8 @@ class Message {
   List<String> completedSearches; // Completed searches to keep visible
   List<String> activeFetches; // Active URL fetches being executed
   List<String> completedFetches; // Completed URL fetches to keep visible
+  List<String> failedSearches; // Search queries that failed
+  List<String> failedFetches; // URL fetches that failed
   List<String> completedFileActions; // Completed file actions (READ:path, CREATE:path)
   List<String> deepSearchUpdates; // Deep Search status logs
   String? plan; // Research plan for Deep Search
@@ -45,6 +47,8 @@ class Message {
     List<String>? completedSearches,
     List<String>? activeFetches,
     List<String>? completedFetches,
+    List<String>? failedSearches,
+    List<String>? failedFetches,
     List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     this.plan,
@@ -59,6 +63,8 @@ class Message {
        completedSearches = completedSearches ?? [],
        activeFetches = activeFetches ?? [],
        completedFetches = completedFetches ?? [],
+       failedSearches = failedSearches ?? [],
+       failedFetches = failedFetches ?? [],
        completedFileActions = completedFileActions ?? [],
        deepSearchUpdates = deepSearchUpdates ?? [],
        generatedImages = generatedImages ?? [],
@@ -217,6 +223,8 @@ class Message {
     List<String>? completedSearches,
     List<String>? activeFetches,
     List<String>? completedFetches,
+    List<String>? failedSearches,
+    List<String>? failedFetches,
     List<String>? completedFileActions,
     List<String>? deepSearchUpdates,
     String? plan,
@@ -246,6 +254,8 @@ class Message {
       completedSearches: completedSearches ?? this.completedSearches,
       activeFetches: activeFetches ?? this.activeFetches,
       completedFetches: completedFetches ?? this.completedFetches,
+      failedSearches: failedSearches ?? this.failedSearches,
+      failedFetches: failedFetches ?? this.failedFetches,
       completedFileActions: completedFileActions ?? this.completedFileActions,
       deepSearchUpdates: deepSearchUpdates ?? this.deepSearchUpdates,
       plan: plan ?? this.plan,
