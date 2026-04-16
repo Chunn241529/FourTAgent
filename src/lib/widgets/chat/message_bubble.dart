@@ -986,6 +986,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     final matches = splitPattern.allMatches(text);
 
+    final isFinished = !message.isStreaming || message.content.isNotEmpty;
     int lastIndex = 0;
 
     for (final match in matches) {
@@ -994,7 +995,10 @@ class _MessageBubbleState extends State<MessageBubble> {
         if (segmentText.isNotEmpty) {
           if (isThinking) {
             children.add(_ThinkingSegment(
-                content: segmentText, isStreaming: message.isStreaming));
+                content: segmentText, 
+                isStreaming: message.isStreaming,
+                isFinished: isFinished,
+            ));
           } else {
             children.add(_buildMarkdownBody(theme, isDark, segmentText));
           }
@@ -1076,7 +1080,10 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (segmentText.isNotEmpty) {
         if (isThinking) {
           children.add(_ThinkingSegment(
-              content: segmentText, isStreaming: message.isStreaming));
+            content: segmentText, 
+            isStreaming: message.isStreaming,
+            isFinished: isFinished,
+          ));
         } else {
           children.add(_buildMarkdownBody(theme, isDark, segmentText));
         }
@@ -1243,10 +1250,12 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 class _ThinkingSegment extends StatefulWidget {
   final String content;
   final bool isStreaming;
+  final bool isFinished;
 
   const _ThinkingSegment({
     required this.content,
     this.isStreaming = false,
+    this.isFinished = false,
   });
 
   @override
@@ -1263,6 +1272,7 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
   @override
   void initState() {
     super.initState();
+    _isExpanded = !widget.isFinished;
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -1275,6 +1285,7 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _expandController.value = _isExpanded ? 1.0 : 0.0;
     _expandAnimation = CurvedAnimation(
       parent: _expandController,
       curve: Curves.fastOutSlowIn,
@@ -1288,6 +1299,14 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
       _shimmerController.repeat();
     } else if (!widget.isStreaming && _shimmerController.isAnimating) {
       _shimmerController.stop();
+    }
+
+    // Auto-collapse when transition from reasoning to finished
+    if (!oldWidget.isFinished && widget.isFinished && _isExpanded) {
+      setState(() {
+        _isExpanded = false;
+        _expandController.reverse();
+      });
     }
   }
 

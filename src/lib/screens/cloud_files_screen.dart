@@ -17,6 +17,8 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
   String _currentPath = '/';
   List<CloudFile> _files = [];
   bool _isLoading = false;
+  double _uploadProgress = 0.0;
+  bool _isUploading = false;
   
   // Breadcrumbs navigation logic
   List<String> get _breadcrumbs {
@@ -139,17 +141,40 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
     try {
       final result = await FilePicker.platform.pickFiles();
       if (result != null && result.files.single.path != null) {
-          final file = File(result.files.single.path!);
-          await CloudFileService.uploadFile(file, _currentPath);
-          _loadFiles();
-          if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uploaded successfully')));
-          }
+        final file = File(result.files.single.path!);
+        
+        setState(() {
+          _isUploading = true;
+          _uploadProgress = 0.0;
+        });
+        
+        await CloudFileService.uploadFile(
+          file, 
+          _currentPath,
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() => _uploadProgress = progress);
+            }
+          },
+        );
+        
+        _loadFiles();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Uploaded successfully'))
+          );
+        }
       }
     } catch (e) {
-        if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'))
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 
@@ -375,8 +400,24 @@ class _CloudFilesScreenState extends State<CloudFilesScreen> {
            const SizedBox(height: 10),
            FloatingActionButton(
              heroTag: 'upload_file',
-             onPressed: _uploadFile,
-             child: const Icon(Icons.upload_file),
+             onPressed: _isUploading ? null : _uploadFile,
+             child: _isUploading
+                ? Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: _uploadProgress,
+                        backgroundColor: Colors.grey[300],
+                        strokeWidth: 3,
+                        color: Colors.white,
+                      ),
+                      Text(
+                        '${(_uploadProgress * 100).toInt()}%',
+                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                      ),
+                    ],
+                  )
+                : const Icon(Icons.upload_file),
            ),
         ],
       ),

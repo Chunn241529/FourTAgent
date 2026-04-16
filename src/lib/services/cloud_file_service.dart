@@ -124,23 +124,57 @@ class CloudFileService {
     }
   }
 
-  // Upload file (Multipart)
-  static Future<void> uploadFile(File file, String targetDirectory) async {
+  // Upload file with progress callback
+  static Future<void> uploadFile(
+    File file, 
+    String targetDirectory, {
+    void Function(double progress)? onProgress,
+  }) async {
     try {
       final token = await StorageService.getToken();
       final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.cloudFilesUpload}');
-      final request = http.MultipartRequest('POST', uri);
       
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
-      }
+      // Get file size for progress calculation
+      final fileSize = await file.length();
+      int uploadedBytes = 0;
+      
+      // Create custom request with streaming file content
+      final request = http.StreamedRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Content-Type'] = 'multipart/form-data';
+      
+      // Build multipart manually with streaming
+      final boundary = '----FlutterFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+      request.headers['Content-Type'] = 'multipart/form-data; boundary=$boundary';
       
       // Add path field
-      request.fields['path'] = targetDirectory;
+      final pathField = '--$boundary\r\n'
+          'Content-Disposition: form-data; name="path"\r\n\r\n'
+          '$targetDirectory\r\n';
+      request.sink.add(utf8.encode(pathField));
       
-      // Add file
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      // Add file header
+      final fileName = file.path.split('/').last;
+      final fileHeader = '--$boundary\r\n'
+          'Content-Disposition: form-data; name="file"; filename="$fileName"\r\n'
+          'Content-Type: application/octet-stream\r\n\r\n';
+      request.sink.add(utf8.encode(fileHeader));
       
+      // Stream file chunks with progress
+      final fileStream = file.openRead();
+      final sink = request.sink;
+      
+      await for (final chunk in fileStream) {
+        sink.add(chunk);
+        uploadedBytes += chunk.length;
+        onProgress?.call(uploadedBytes / fileSize);
+      }
+      
+      // Close multipart
+      sink.add(utf8.encode('\r\n--$boundary--\r\n'));
+      await sink.close();
+      
+      // Send request
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       

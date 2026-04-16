@@ -162,32 +162,83 @@ class AffiliateService {
     return Map<String, String>.from(data['transforms'] ?? {});
   }
 
-  /// Upload video or use existing path/id for smart reup processing.
+  /// Upload video or use existing path/id for smart reup processing with progress.
   static Future<Map<String, dynamic>> smartReupVideo({
     File? videoFile,
     String? sourcePath,
     String? productId,
     required List<String> transforms,
+    void Function(double)? onProgress,
   }) async {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.affiliateSmartReup}');
 
-    final request = http.MultipartRequest('POST', uri);
-    if (token != null) {
-      request.headers['Authorization'] = 'Bearer $token';
+    // If no file, just send request normally
+    if (videoFile == null) {
+      final request = http.MultipartRequest('POST', uri);
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      if (sourcePath != null) request.fields['source_path'] = sourcePath;
+      if (productId != null) request.fields['product_id'] = productId;
+      request.fields['transforms'] = transforms.join(',');
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Smart reup failed: ${response.statusCode} ${response.body}');
     }
-
-    if (videoFile != null) {
-      request.files.add(await http.MultipartFile.fromPath('file', videoFile.path));
-    }
+    
+    // Stream upload with progress
+    final fileSize = await videoFile.length();
+    int uploadedBytes = 0;
+    
+    final request = http.StreamedRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    
+    final boundary = '----AffiliateFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+    request.headers['Content-Type'] = 'multipart/form-data; boundary=$boundary';
+    
+    // Add fields
     if (sourcePath != null) {
-      request.fields['source_path'] = sourcePath;
+      request.sink.add(utf8.encode(
+        '--$boundary\r\n'
+        'Content-Disposition: form-data; name="source_path"\r\n\r\n'
+        '$sourcePath\r\n'
+      ));
     }
     if (productId != null) {
-      request.fields['product_id'] = productId;
+      request.sink.add(utf8.encode(
+        '--$boundary\r\n'
+        'Content-Disposition: form-data; name="product_id"\r\n\r\n'
+        '$productId\r\n'
+      ));
     }
-    request.fields['transforms'] = transforms.join(',');
-
+    request.sink.add(utf8.encode(
+      '--$boundary\r\n'
+      'Content-Disposition: form-data; name="transforms"\r\n\r\n'
+      '${transforms.join(',')}\r\n'
+    ));
+    
+    // Add file header
+    final fileName = videoFile.path.split('/').last;
+    final fileHeader = '--$boundary\r\n'
+        'Content-Disposition: form-data; name="file"; filename="$fileName"\r\n'
+        'Content-Type: video/mp4\r\n\r\n';
+    request.sink.add(utf8.encode(fileHeader));
+    
+    // Stream file chunks
+    final fileStream = videoFile.openRead();
+    final sink = request.sink;
+    
+    await for (final chunk in fileStream) {
+      sink.add(chunk);
+      uploadedBytes += chunk.length;
+      onProgress?.call(uploadedBytes / fileSize);
+    }
+    
+    sink.add(utf8.encode('\r\n--$boundary--\r\n'));
+    await sink.close();
+    
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 

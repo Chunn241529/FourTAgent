@@ -705,6 +705,7 @@ class _VoiceLabViewState extends State<VoiceLabView>
   final TextEditingController _nameController = TextEditingController();
   File? _selectedFile;
   bool _isUploading = false;
+  double _uploadProgress = 0.0;
 
   @override
   bool get wantKeepAlive => true;
@@ -729,6 +730,9 @@ class _VoiceLabViewState extends State<VoiceLabView>
       final newVoice = await TtsService.createVoice(
         _nameController.text,
         _selectedFile!,
+        onProgress: (progress) {
+          if (mounted) setState(() => _uploadProgress = progress);
+        },
       );
       if (mounted) {
         CustomSnackBar.showSuccess(
@@ -738,6 +742,7 @@ class _VoiceLabViewState extends State<VoiceLabView>
         setState(() {
           _nameController.clear();
           _selectedFile = null;
+          _uploadProgress = 0.0;
         });
       }
     } catch (e) {
@@ -930,11 +935,25 @@ class _VoiceLabViewState extends State<VoiceLabView>
                       elevation: 4,
                     ),
                     child: _isUploading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  value: _uploadProgress,
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${(_uploadProgress * 100).toInt()}%',
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           )
                         : const Text(
                             "Tiến hành Clone Giọng nói",

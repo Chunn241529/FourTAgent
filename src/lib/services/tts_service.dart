@@ -46,18 +46,46 @@ class TtsService {
     }
   }
 
-  static Future<Voice> createVoice(String name, File audioFile) async {
+  static Future<Voice> createVoice(String name, File audioFile, {void Function(double)? onProgress}) async {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.ttsHqVoices}');
     
-    var request = http.MultipartRequest('POST', uri);
-    if (token != null) {
-      request.headers['Authorization'] = 'Bearer $token';
+    // Stream upload with progress
+    final fileSize = await audioFile.length();
+    int uploadedBytes = 0;
+    
+    final request = http.StreamedRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    
+    final boundary = '----TTSFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+    request.headers['Content-Type'] = 'multipart/form-data; boundary=$boundary';
+    
+    // Add name field
+    final nameField = '--$boundary\r\n'
+        'Content-Disposition: form-data; name="name"\r\n\r\n'
+        '$name\r\n';
+    request.sink.add(utf8.encode(nameField));
+    
+    // Add file header
+    final fileName = audioFile.path.split('/').last;
+    final fileHeader = '--$boundary\r\n'
+        'Content-Disposition: form-data; name="files"; filename="$fileName"\r\n'
+        'Content-Type: audio/mpeg\r\n\r\n';
+    request.sink.add(utf8.encode(fileHeader));
+    
+    // Stream file chunks
+    final fileStream = audioFile.openRead();
+    final sink = request.sink;
+    
+    await for (final chunk in fileStream) {
+      sink.add(chunk);
+      uploadedBytes += chunk.length;
+      onProgress?.call(uploadedBytes / fileSize);
     }
     
-    request.fields['name'] = name;
-    request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
-
+    sink.add(utf8.encode('\r\n--$boundary--\r\n'));
+    await sink.close();
+    
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
