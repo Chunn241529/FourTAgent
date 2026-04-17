@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -1268,28 +1269,50 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
   late AnimationController _shimmerController;
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
+  Timer? _timer;
+  int _elapsedSeconds = 0;
 
   @override
   void initState() {
     super.initState();
-    _isExpanded = !widget.isFinished;
+    // Start collapsed as requested
+    _isExpanded = false;
+    
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
+    // Keep shimmer logic if needed for other parts, but we'll stop using it for the dot
     if (widget.isStreaming) {
       _shimmerController.repeat();
+      _startTimer();
     }
 
     _expandController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _expandController.value = _isExpanded ? 1.0 : 0.0;
+    _expandController.value = 0.0;
     _expandAnimation = CurvedAnimation(
       parent: _expandController,
       curve: Curves.fastOutSlowIn,
     );
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedSeconds++;
+        });
+      }
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
   }
 
   @override
@@ -1297,21 +1320,18 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
     super.didUpdateWidget(oldWidget);
     if (widget.isStreaming && !_shimmerController.isAnimating) {
       _shimmerController.repeat();
+      _startTimer();
     } else if (!widget.isStreaming && _shimmerController.isAnimating) {
       _shimmerController.stop();
+      _stopTimer();
     }
 
-    // Auto-collapse when transition from reasoning to finished
-    if (!oldWidget.isFinished && widget.isFinished && _isExpanded) {
-      setState(() {
-        _isExpanded = false;
-        _expandController.reverse();
-      });
-    }
+    // Auto-collapse logic REMOVED - expansion is now strictly manual
   }
 
   @override
   void dispose() {
+    _stopTimer();
     _shimmerController.dispose();
     _expandController.dispose();
     super.dispose();
@@ -1360,7 +1380,9 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    'Quá trình suy nghĩ',
+                    widget.isStreaming || _elapsedSeconds > 0
+                        ? 'Quá trình suy nghĩ $_elapsedSeconds'
+                        : 'Quá trình suy nghĩ',
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withOpacity(0.55),
@@ -1369,24 +1391,7 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
                     ),
                   ),
                 ),
-                if (widget.isStreaming) ...[
-                  const SizedBox(width: 6),
-                  AnimatedBuilder(
-                    animation: _shimmerController,
-                    builder: (context, child) {
-                      return Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: theme.colorScheme.primary.withOpacity(
-                            0.3 + 0.7 * math.sin(_shimmerController.value * math.pi),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                // Pulsing dot removed as requested
                 const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _isExpanded ? 0.25 : 0,
