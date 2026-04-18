@@ -1283,7 +1283,7 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
       duration: const Duration(milliseconds: 1500),
     );
     // Keep shimmer logic if needed for other parts, but we'll stop using it for the dot
-    if (widget.isStreaming) {
+    if (widget.isStreaming && !widget.isFinished) {
       _shimmerController.repeat();
       _startTimer();
     }
@@ -1318,10 +1318,13 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
   @override
   void didUpdateWidget(covariant _ThinkingSegment oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isStreaming && !_shimmerController.isAnimating) {
+    
+    final shouldBeRunning = widget.isStreaming && !widget.isFinished;
+    
+    if (shouldBeRunning && !_shimmerController.isAnimating) {
       _shimmerController.repeat();
       _startTimer();
-    } else if (!widget.isStreaming && _shimmerController.isAnimating) {
+    } else if (!shouldBeRunning && _shimmerController.isAnimating) {
       _shimmerController.stop();
       _stopTimer();
     }
@@ -1380,9 +1383,9 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    widget.isStreaming || _elapsedSeconds > 0
-                        ? 'Quá trình suy nghĩ $_elapsedSeconds'
-                        : 'Quá trình suy nghĩ',
+                    !widget.isFinished
+                        ? 'Đang suy nghĩ trong ${_elapsedSeconds}s'
+                        : 'Đã suy nghĩ xong',
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withOpacity(0.55),
