@@ -388,7 +388,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 height: 1.5,
                                 color: theme.colorScheme.onSurface,
                               ),
-                              textAlign: TextAlign.right,
+                              textAlign: TextAlign.left,
                             ),
                             // Edit Icon (placed below message, right aligned)
                             Padding(
@@ -621,6 +621,21 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
+    // Optimization: During streaming, show plain text to avoid expensive markdown parsing
+    // This significantly reduces CPU usage while streaming
+    if (widget.message.isStreaming && widget.message.content.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: SelectableText(
+          widget.message.content,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            height: 1.7,
+            color: isDark ? Colors.grey[300] : Colors.grey[850],
+            letterSpacing: 0.1,
+          ),
+        ),
+      );
+    }
     return _buildSegmentedContent(
       context,
       theme,

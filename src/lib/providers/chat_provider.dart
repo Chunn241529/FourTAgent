@@ -662,10 +662,10 @@ class ChatProvider extends ChangeNotifier {
         
         // Cancel previous batch timer
         batchTimer?.cancel();
-        
-        // Process batch after 50ms delay - balances smooth streaming with performance
-        // Reduces the update frequency to ~20 FPS, which fixes UI lag and layout overflow cascades
-        batchTimer = Timer(const Duration(milliseconds: 20), () {
+
+        // Process batch after 100ms delay - reduces CPU usage during streaming
+        // while maintaining smooth ~10 FPS UI updates for text content
+        batchTimer = Timer(const Duration(milliseconds: 100), () {
           if (pendingChunks.isEmpty) return;
           
           bool shouldNotify = false;
