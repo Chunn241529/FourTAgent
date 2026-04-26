@@ -452,19 +452,18 @@ class _ChatScreenState extends State<ChatScreen> {
                         final messageCount = data.$1;
                         final isStreaming = data.$2;
 
-                        return ListView.builder(
+                        return ListView.separated(
                           controller: _scrollController,
-                          reverse: false, // Start from top
-                          // Use fixed generous bottom padding to avoid layout jumps when streaming toggles
+                          reverse: false,
                           padding: const EdgeInsets.only(
-                            top: 16,
-                            bottom: 120,
-                            left: 24,
-                            right: 24,
+                            top: 24,
+                            bottom: 140,
+                            left: 16,
+                            right: 16,
                           ),
                           itemCount: messageCount,
+                          separatorBuilder: (context, index) => const SizedBox(height: 16),
                           itemBuilder: (context, index) {
-                            // Use Selector for individual message to minimize rebuilds
                             return Selector<ChatProvider, _MessageSnapshot>(
                               selector: (_, provider) {
                                 final msg = provider.messages[index];

@@ -241,473 +241,454 @@ class _MessageBubbleState extends State<MessageBubble> {
     return _cachedWidget!;
   }
 
-  /// User message - right aligned, no background, simple style
+  /// User message - right aligned with soft bubble
   Widget _buildUserMessage(BuildContext context, ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800),
+        constraints: const BoxConstraints(maxWidth: 760),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const SizedBox(width: 48), // Spacing from left
-              Flexible(
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (widget.message.imageBase64 != null &&
-                        widget.message.imageBase64!.isNotEmpty)
-                      Builder(
-                        builder: (context) {
-                          String base64Str = widget.message.imageBase64!;
-                          // Check for data URI info
-                          bool isImage = true;
-                          String mimeType = '';
+                // 1. Image/File attachments
+                if (widget.message.imageBase64 != null &&
+                    widget.message.imageBase64!.isNotEmpty)
+                  _buildUserAttachment(context, theme),
 
-                          if (base64Str.startsWith('data:')) {
-                            final markerIndex = base64Str.indexOf(';');
-                            if (markerIndex > 0) {
-                              mimeType = base64Str.substring(5, markerIndex);
-                              if (!mimeType.startsWith('image/')) {
-                                isImage = false;
-                              }
-                            }
-                          }
-
-                          // Extract raw bytes
-                          String base64Data = base64Str;
-                          if (base64Data.contains(',')) {
-                            base64Data = base64Data.split(',').last;
-                          }
-
-                          if (isImage) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                // Optimized: use memory image gracefully without heavy try-catch decoding if possible
-                                child: Image.memory(
-                                  base64Decode(base64Data),
-                                  width: 200,
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 200,
-                                    height: 100,
-                                    color: theme
-                                        .colorScheme
-                                        .surfaceContainerHighest,
-                                    child: const Icon(
-                                      Icons.broken_image,
-                                      size: 40,
-                                    ),
-                                  ),
-                                ),
+                // 2. Text Message Bubble
+                if (widget.message.content.isNotEmpty &&
+                    !widget.message.content.startsWith('[Đã gửi'))
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Edit Button (Visible on hover/cleaner layout)
+                      if (!_isEditing)
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isEditing = true;
+                                _editController.text = widget.message.content;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurface.withOpacity(0.3),
                               ),
-                            );
-                          } else {
-                            // Render File Card for non-image files
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest
-                                    .withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: theme.colorScheme.outline.withOpacity(
-                                    0.2,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _getFileIcon(mimeType),
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Flexible(
-                                    child: Text(
-                                      'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                        },
-                      ),
-
-                    if (widget.message.content.isNotEmpty &&
-                        !widget.message.content.startsWith('[Đã gửi')) ...[
-                      if (_isEditing)
-                        Container(
-                          margin: const EdgeInsets.only(top: 8),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              TextField(
-                                controller: _editController,
-                                autofocus: true,
-                                maxLines: null,
-                                style: theme.textTheme.bodyLarge,
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.all(12),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _isEditing = false;
-                                          _editController.text =
-                                              widget.message.content;
-                                        });
-                                      },
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
-                                        ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: const Text('Hủy'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton(
-                                      onPressed: () {
-                                        final newContent = _editController.text
-                                            .trim();
-                                        if (newContent.isNotEmpty &&
-                                            newContent !=
-                                                widget.message.content) {
-                                          context
-                                              .read<ChatProvider>()
-                                              .editMessage(
-                                                widget.message,
-                                                newContent,
-                                              );
-                                        }
-                                        setState(() {
-                                          _isEditing = false;
-                                        });
-                                      },
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
-                                        ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: const Text('Lưu'),
-                                    ),
-                                  ],
-                                ),
+                        ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _isEditing 
+                              ? theme.colorScheme.primaryContainer 
+                              : theme.colorScheme.primaryContainer.withOpacity(isDark ? 0.4 : 0.7),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              topRight: Radius.circular(20),
+                              bottomLeft: Radius.circular(20),
+                              bottomRight: Radius.circular(4),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(_isEditing ? 0.1 : 0.03),
+                                blurRadius: _isEditing ? 8 : 4,
+                                offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                        )
-                      else
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            SelectableText(
-                              widget.message.content,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                height: 1.5,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
-                            // Edit Icon (placed below message, right aligned)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    _isEditing = true;
-                                    _editController.text =
-                                        widget.message.content;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Icon(
-                                    Icons.edit_outlined,
-                                    size: 14,
-                                    color: theme.colorScheme.onSurface
-                                        .withOpacity(0.4),
+                          child: _isEditing
+                              ? _buildUserEditingField(context, theme)
+                              : SelectableText(
+                                  widget.message.content,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    height: 1.5,
+                                    color: theme.colorScheme.onPrimaryContainer,
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
                         ),
+                      ),
                     ],
-                  ],
-                ),
-              ),
-            ],
+                  ),
+              ],
+            ),
           ),
-        ),
+        ],
+      ),
+    ),
       ),
     );
   }
 
-  /// AI message - left aligned with avatar
-  Widget _buildAIMessage(BuildContext context, ThemeData theme, bool isDark) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, 10 * (1 - value)),
-            child: child,
+  Widget _buildUserAttachment(BuildContext context, ThemeData theme) {
+    String base64Str = widget.message.imageBase64!;
+    bool isImage = true;
+    String mimeType = '';
+
+    if (base64Str.startsWith('data:')) {
+      final markerIndex = base64Str.indexOf(';');
+      if (markerIndex > 0) {
+        mimeType = base64Str.substring(5, markerIndex);
+        if (!mimeType.startsWith('image/')) {
+          isImage = false;
+        }
+      }
+    }
+
+    String base64Data = base64Str;
+    if (base64Data.contains(',')) {
+      base64Data = base64Data.split(',').last;
+    }
+
+    if (isImage) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.memory(
+            base64Decode(base64Data),
+            width: 240,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Container(
+              width: 200,
+              height: 100,
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image, size: 40),
+            ),
           ),
-        );
-      },
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Container(
+        ),
+      );
+    } else {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.outline.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _getFileIcon(mimeType),
+              color: theme.colorScheme.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Tệp đính kèm (${mimeType.split('/').last.toUpperCase()})',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildUserEditingField(BuildContext context, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _editController,
+          autofocus: true,
+          maxLines: null,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onPrimaryContainer,
+            fontWeight: FontWeight.w500,
+          ),
+          cursorColor: theme.colorScheme.onPrimaryContainer,
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 4),
+            border: InputBorder.none,
+            filled: false,
+            fillColor: Colors.transparent,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _isEditing = false;
+                  _editController.text = widget.message.content;
+                });
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Hủy', style: TextStyle(fontSize: 13)),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                final newContent = _editController.text.trim();
+                if (newContent.isNotEmpty &&
+                    newContent != widget.message.content) {
+                  context
+                      .read<ChatProvider>()
+                      .editMessage(widget.message, newContent);
+                }
+                setState(() {
+                  _isEditing = false;
+                });
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.onPrimaryContainer,
+                foregroundColor: theme.colorScheme.primaryContainer,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Lưu', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// AI message - left aligned with premium card style
+  Widget _buildAIMessage(BuildContext context, ThemeData theme, bool isDark) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // AI Avatar with Spinner
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: _AvatarSpinner(
-                  isAnimating:
-                      (widget.message.isStreaming &&
-                          widget.message.content.isEmpty) ||
-                      widget.message.isGeneratingImage,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDark ? Colors.black : Colors.white,
-                      border: Border.all(
-                        color: theme.colorScheme.outline.withOpacity(0.2),
-                        width: 0.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.15),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+          // 1. AI Avatar with Spinner
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0),
+            child: _AvatarSpinner(
+              isAnimating: (widget.message.isStreaming &&
+                      widget.message.content.isEmpty) ||
+                  widget.message.isGeneratingImage,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                    child: ClipOval(
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: Image.asset(
-                          'assets/icon/icon.png',
-                          fit: BoxFit.cover,
-                        ),
-                      ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Image.asset(
+                      'assets/icon/icon.png',
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 14),
-              // Message content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            ),
+          ),
+          const SizedBox(width: 16),
 
-                    // 1. Pre-Search Thinking (if any)
-                    if (widget.message.thinking != null &&
-                        widget.message.thinking!.isNotEmpty) ...[
-                      Builder(
-                        builder: (context) {
-                          final thinking = widget.message.thinking!;
-                          final splitIndex =
-                              widget.message.deepSearchStartIndex;
+          // 2. Message content container
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Reasoning Chain (Thinking)
+                if (widget.message.thinking != null &&
+                    widget.message.thinking!.isNotEmpty) ...[
+                  Builder(
+                    builder: (context) {
+                      final thinking = widget.message.thinking!;
+                      final splitIndex = widget.message.deepSearchStartIndex;
 
-                          String preThinking = thinking;
-                          if (splitIndex != null &&
-                              splitIndex < thinking.length) {
-                            preThinking = thinking.substring(0, splitIndex);
-                          }
+                      String preThinking = thinking;
+                      if (splitIndex != null && splitIndex < thinking.length) {
+                        preThinking = thinking.substring(0, splitIndex);
+                      }
 
-                          if (preThinking.isNotEmpty) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildReasoningChain(
-                                context,
-                                theme,
-                                widget.message,
-                                contentOverride: preThinking,
-                              ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ],
-
-                  // 2. Deep Search Indicator (status updates)
-                    if (widget.message.deepSearchUpdates.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildDeepSearchIndicator(widget.message),
-                      ),
-
-                    // 2.1 Canvas Indicator (Preparing/Loading)
-                    if (widget.message.isCreatingCanvas)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: CanvasIndicator(),
-                      ),
-
-                    // Status Message (While streaming and no content/thinking yet)
-                    if (widget.message.isStreaming && 
-                        widget.message.statusMessage != null && 
-                        widget.message.statusMessage!.isNotEmpty &&
-                        (widget.message.content.isEmpty && (widget.message.thinking == null || widget.message.thinking!.isEmpty)) &&
-                        !widget.message.isCreatingCanvas)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8, left: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  theme.colorScheme.primary.withOpacity(0.7),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.message.statusMessage!,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-
-
-                    // 4. Post-Search Thinking (if any)
-                    if (widget.message.thinking != null &&
-                        widget.message.thinking!.isNotEmpty) ...[
-                      Builder(
-                        builder: (context) {
-                          final thinking = widget.message.thinking!;
-                          final splitIndex =
-                              widget.message.deepSearchStartIndex;
-
-                          if (splitIndex != null &&
-                              splitIndex < thinking.length) {
-                            final postThinking = thinking.substring(splitIndex);
-                            if (postThinking.isNotEmpty) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildReasoningChain(
-                                  context,
-                                  theme,
-                                  widget.message,
-                                  contentOverride: postThinking,
-                                ),
-                              );
-                            }
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ],
-
-                    // Code Executions Results (Above content to avoid jumping)
-                    if (widget.message.codeExecutions.isNotEmpty) ...[
-                      ...widget.message.codeExecutions.map((exec) {
+                      if (preThinking.isNotEmpty) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: CodeExecutionWidget(
-                            code: exec['code'] ?? '',
-                            output: exec['output'] ?? '',
-                            error: exec['error'] ?? '',
-                            isDark: isDark,
+                          child: _buildReasoningChain(
+                            context,
+                            theme,
+                            widget.message,
+                            contentOverride: preThinking,
                           ),
                         );
-                      }),
-                      const SizedBox(height: 8),
-                    ],
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
 
-                    // 2. Content with interleaved indicators (using imageBuilder)
-                    _buildMarkdownContent(theme, isDark),
+                // Deep Search Indicator
+                if (widget.message.deepSearchUpdates.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildDeepSearchIndicator(widget.message),
+                  ),
 
-                    // Generated Images using optimized widget
-                    if (widget.message.generatedImages.isNotEmpty ||
-                        widget.message.isGeneratingImage)
-                      MessageImagesWidget(
-                        images: widget.message.generatedImages,
-                        isGenerating: widget.message.isGeneratingImage,
-                        onDownload: _downloadImage,
+                // Canvas Indicator
+                if (widget.message.isCreatingCanvas)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: CanvasIndicator(),
+                  ),
+
+                // Status Message
+                if (widget.message.isStreaming &&
+                    widget.message.statusMessage != null &&
+                    widget.message.statusMessage!.isNotEmpty &&
+                    (widget.message.content.isEmpty &&
+                        (widget.message.thinking == null ||
+                            widget.message.thinking!.isEmpty)) &&
+                    !widget.message.isCreatingCanvas)
+                  _buildStreamingStatus(theme, isDark),
+
+                // Post-Search Thinking
+                if (widget.message.thinking != null &&
+                    widget.message.thinking!.isNotEmpty) ...[
+                  Builder(
+                    builder: (context) {
+                      final thinking = widget.message.thinking!;
+                      final splitIndex = widget.message.deepSearchStartIndex;
+
+                      if (splitIndex != null && splitIndex < thinking.length) {
+                        final postThinking = thinking.substring(splitIndex);
+                        if (postThinking.isNotEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildReasoningChain(
+                              context,
+                              theme,
+                              widget.message,
+                              contentOverride: postThinking,
+                            ),
+                          );
+                        }
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+
+                // Code Executions
+                if (widget.message.codeExecutions.isNotEmpty)
+                  ...widget.message.codeExecutions.map((exec) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: CodeExecutionWidget(
+                        code: exec['code'] ?? '',
+                        output: exec['output'] ?? '',
+                        error: exec['error'] ?? '',
+                        isDark: isDark,
                       ),
+                    );
+                  }),
 
-                    // Streaming indicator REMOVED (replaced by Avatar Spinner)
-                    // if (widget.message.isStreaming && !widget.message.isGeneratingImage)
-                    //   Padding(
-                    //     padding: const EdgeInsets.only(top: 12),
-                    //     child: _buildStreamingIndicator(theme),
-                    //   ),
-                    // Actions
-                    if (!widget.message.isStreaming &&
-                        widget.message.content.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: _buildActions(context, theme),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 48), // Spacing from right
-            ],
+                // Main Markdown Content
+                _buildMarkdownContent(theme, isDark),
+
+                // Generated Images
+                if (widget.message.generatedImages.isNotEmpty ||
+                    widget.message.isGeneratingImage)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: MessageImagesWidget(
+                      images: widget.message.generatedImages,
+                      isGenerating: widget.message.isGeneratingImage,
+                      onDownload: _downloadImage,
+                    ),
+                  ),
+
+                // Actions (Copy, Feedback)
+                if (!widget.message.isStreaming &&
+                    widget.message.content.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _buildActions(context, theme),
+                  ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 24), // Spacing from right
+        ],
       ),
+    ),
+      ),
+    );
+  }
+
+  Widget _buildStreamingStatus(ThemeData theme, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                theme.colorScheme.primary.withOpacity(0.5),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            widget.message.statusMessage!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+              fontStyle: FontStyle.italic,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -750,89 +731,67 @@ class _MessageBubbleState extends State<MessageBubble> {
       softLineBreak: true,
       builders: {'code': CodeBlockBuilder(isDark: isDark)},
       styleSheet: MarkdownStyleSheet(
-        // Body text - generous line height for readability
         p: theme.textTheme.bodyLarge?.copyWith(
-          height: 1.7,
-          color: isDark ? Colors.grey[300] : Colors.grey[850],
-          letterSpacing: 0.1,
+          height: 1.6,
+          color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF202124),
+          letterSpacing: 0.2,
         ),
-        // Headers with explicit dark mode colors
-        h1: theme.textTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: isDark ? Colors.white : Colors.grey[900],
-          height: 1.3,
+        h1: theme.textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : Colors.black,
+          height: 1.4,
         ),
         h2: theme.textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: isDark ? Colors.grey[100] : Colors.grey[900],
-          height: 1.3,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.grey[100] : Colors.black,
+          height: 1.4,
         ),
         h3: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: isDark ? Colors.grey[200] : Colors.grey[900],
-          height: 1.3,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.grey[200] : Colors.black,
+          height: 1.4,
         ),
-        // Strong/bold text
         strong: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: isDark ? Colors.white : Colors.grey[900],
+          fontWeight: FontWeight.w700,
+          color: isDark ? Colors.white : Colors.black,
         ),
-        // Emphasis/italic
-        em: TextStyle(
-          fontStyle: FontStyle.italic,
-          color: isDark ? Colors.grey[300] : Colors.grey[800],
-        ),
-        // Links - distinct but not clashing
+        em: const TextStyle(fontStyle: FontStyle.italic),
         a: TextStyle(
-          color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF1976D2),
+          color: theme.colorScheme.primary,
           decoration: TextDecoration.underline,
-          decorationColor: isDark
-              ? const Color(0xFF64B5F6).withOpacity(0.4)
-              : const Color(0xFF1976D2).withOpacity(0.4),
         ),
-
-        // Code block
+        code: TextStyle(
+          backgroundColor: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+          fontFamily: 'monospace',
+          fontSize: 13,
+        ),
         codeblockDecoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(10),
+          color: isDark ? const Color(0xFF0F1117) : const Color(0xFFF1F3F4),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? const Color(0xFF2D2D44) : const Color(0xFFE0E0E0),
-            width: 0.5,
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
           ),
         ),
-        codeblockPadding: const EdgeInsets.all(14),
-        listIndent: 24,
-        // List bullets
-        listBullet: theme.textTheme.bodyMedium?.copyWith(
-          color: isDark ? Colors.grey[400] : Colors.grey[700],
-        ),
-        // Blockquote
-        blockquote: theme.textTheme.bodyLarge?.copyWith(
-          color: isDark ? Colors.grey[300] : Colors.grey[700],
-          fontStyle: FontStyle.italic,
-          height: 1.6,
-        ),
+        codeblockPadding: const EdgeInsets.all(16),
         blockquoteDecoration: BoxDecoration(
-          color: isDark
-              ? theme.colorScheme.primary.withOpacity(0.06)
-              : theme.colorScheme.primary.withOpacity(0.04),
+          color: theme.colorScheme.primary.withOpacity(0.05),
           border: Border(
-            left: BorderSide(
-              color: theme.colorScheme.primary.withOpacity(isDark ? 0.5 : 0.6),
-              width: 3,
-            ),
+            left: BorderSide(color: theme.colorScheme.primary, width: 4),
           ),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(4),
         ),
-        blockquotePadding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-        // Horizontal rule
+        blockquotePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         horizontalRuleDecoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              width: 0.5,
+              color: isDark ? Colors.white10 : Colors.black12,
+              width: 1,
             ),
           ),
+        ),
+        listIndent: 24,
+        listBullet: theme.textTheme.bodyMedium?.copyWith(
+          color: isDark ? Colors.grey[400] : Colors.grey[700],
         ),
       ),
       // Handle link taps
@@ -1475,80 +1434,101 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: _toggleExpanded,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: isDark
-                  ? Colors.white.withOpacity(0.04)
-                  : Colors.black.withOpacity(0.03),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.psychology_outlined,
-                  size: 14,
-                  color: theme.colorScheme.primary.withOpacity(0.7),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _toggleExpanded,
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: isDark
+                    ? Colors.white.withOpacity(0.05)
+                    : theme.colorScheme.primary.withOpacity(0.04),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : theme.colorScheme.primary.withOpacity(0.1),
                 ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    !widget.isFinished
-                        ? 'Đang suy nghĩ trong ${_elapsedSeconds}s'
-                        : 'Đã suy nghĩ xong',
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.55),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 11.5,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Spinning psychology icon if streaming
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: widget.isFinished ? 0 : 1),
+                    duration: const Duration(seconds: 2),
+                    curve: Curves.linear,
+                    builder: (context, value, child) {
+                      return Transform.rotate(
+                        angle: value * 2 * math.pi,
+                        child: child,
+                      );
+                    },
+                    onEnd: () {
+                      if (!widget.isFinished) setState(() {});
+                    },
+                    child: Icon(
+                      Icons.psychology_outlined,
+                      size: 16,
+                      color: theme.colorScheme.primary.withOpacity(0.8),
                     ),
                   ),
-                ),
-                // Pulsing dot removed as requested
-                const SizedBox(width: 4),
-                AnimatedRotation(
-                  turns: _isExpanded ? 0.25 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.chevron_right,
-                    size: 14,
-                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      !widget.isFinished
+                          ? 'Đang suy nghĩ trong ${_elapsedSeconds}s...'
+                          : 'Đã suy nghĩ xong',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _isExpanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        SizeTransition(
-          sizeFactor: _expandAnimation,
-          axisAlignment: -1.0,
-          child: Container(
-            margin: const EdgeInsets.only(left: 4, top: 8, bottom: 4),
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: isDark
-                  ? Colors.white.withOpacity(0.03)
-                  : const Color(0xFFF8F9FA),
-              border: Border(
-                left: BorderSide(
-                  color: theme.colorScheme.primary.withOpacity(0.3),
-                  width: 2.5,
+        ClipRect(
+          child: SizeTransition(
+            sizeFactor: _expandAnimation,
+            axisAlignment: -1.0,
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              padding: const EdgeInsets.all(16),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: isDark
+                    ? Colors.white.withOpacity(0.02)
+                    : const Color(0xFFF8F9FA),
+                border: Border.all(
+                  color: isDark ? Colors.white10 : Colors.black.withOpacity(0.03),
                 ),
               ),
-            ),
-            child: MarkdownBody(
-              data: widget.content,
-              styleSheet: MarkdownStyleSheet(
-                p: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  height: 1.5,
-                  fontSize: 12,
+              child: MarkdownBody(
+                data: widget.content,
+                styleSheet: MarkdownStyleSheet(
+                  p: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.65),
+                    height: 1.6,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
