@@ -1,8 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
 import 'api_service.dart';
+import 'storage_service.dart';
+
+/// Result wrapper for sendMessageWithQueueCheck
+class SendMessageResult {
+  final bool isQueued;
+  final int? jobId;
+  final String? message;
+  final Stream<String>? stream;
+
+  SendMessageResult({
+    required this.isQueued,
+    this.jobId,
+    this.message,
+    this.stream,
+  });
+}
 
 /// Chat service for conversations and messages
 class ChatService {
@@ -118,6 +136,80 @@ class ChatService {
     }
     
     yield* ApiService.postStream(url, body);
+  }
+
+  /// Result wrapper for sendMessage that can handle queued responses
+  static Future<SendMessageResult> sendMessageWithQueueCheck(
+    int conversationId, 
+    String message, {
+    String? file,
+    bool voiceEnabled = false,
+    String? voiceId,
+    bool isCanvas = false,
+    bool isGenerateImage = false,
+    bool isDeepSearch = false,
+  }) async {
+    final body = <String, dynamic>{
+      'message': message,
+      'voice_enabled': voiceEnabled,
+    };
+    if (isCanvas) {
+      body['is_canvas'] = true;
+    }
+    if (isGenerateImage) {
+      body['is_generate_image'] = true;
+    }
+    if (isDeepSearch) {
+      body['is_deep_search'] = true;
+    }
+    if (voiceId != null) {
+      body['voice_id'] = voiceId;
+    }
+    if (file != null) {
+      body['file'] = file;
+    }
+    
+    // Build URL with query params
+    var url = '${ApiConfig.chat}?conversation_id=$conversationId';
+    if (voiceEnabled) {
+      url += '&voice_enabled=true';
+      if (voiceId != null) {
+        url += '&voice_id=$voiceId';
+      }
+    }
+    
+    // First, make a non-streaming request to check response type
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}$url');
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',  // First try JSON
+      if (token != null) 'Authorization': 'Bearer $token',
+    });
+    request.body = jsonEncode(body);
+    
+    final streamedResponse = await ApiService.client.send(request);
+    
+    // Check content type
+    final contentType = streamedResponse.headers['content-type'] ?? '';
+    
+    if (contentType.contains('application/json')) {
+      // Queued response - read and parse JSON
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = ApiService.parseResponse(response) as Map<String, dynamic>;
+      return SendMessageResult(
+        isQueued: true,
+        jobId: data['job_id'] as int?,
+        message: data['message'] as String?,
+      );
+    } else {
+      // Normal SSE stream - convert to stream
+      return SendMessageResult(
+        isQueued: false,
+        stream: ApiService.postStream(url, body),
+      );
+    }
   }
 
   /// Submit feedback (like/dislike) for a message

@@ -11,6 +11,9 @@ class ApiService {
   static Function()? _onTokenExpired;
   static Function()? onConnectionError;
 
+  /// Expose client for advanced use cases
+  static http.Client get client => _client;
+
   static void setTokenExpiredCallback(Function() callback) {
     _onTokenExpired = callback;
   }
@@ -119,6 +122,18 @@ class ApiService {
       }
       rethrow;
     }
+  }
+
+  /// Check if response is JSON (queued) or SSE stream (normal)
+  /// Returns: 'json', 'stream', or 'error'
+  static Future<String> checkResponseType(http.Response response) async {
+    final contentType = response.headers['content-type'] ?? '';
+    if (contentType.contains('application/json')) {
+      return 'json';
+    } else if (contentType.contains('text/event-stream')) {
+      return 'stream';
+    }
+    return 'error';
   }
 
   /// Streaming POST request for chat

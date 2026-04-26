@@ -36,6 +36,12 @@ class _MessageBubbleState extends State<MessageBubble> {
   bool _isEditing = false;
   late TextEditingController _editController;
 
+  // Streaming text animation state
+  String _displayedText = '';
+  int _targetLength = 0;
+  Timer? _revealTimer;
+  bool _streamComplete = false;
+
   // Caching variables to prevent expensive rebuilds (markdown parsing)
   Widget? _cachedWidget;
   String? _lastContent;
@@ -63,13 +69,59 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (oldWidget.message.content != widget.message.content && !_isEditing) {
       _editController.text = widget.message.content;
     }
+
+    // Handle streaming animation
+    if (widget.message.isStreaming && widget.message.content.isNotEmpty) {
+      // Reset if this is a new stream (content was empty before)
+      if (_displayedText.isEmpty && _streamComplete) {
+        _streamComplete = false;
+      }
+      final newLength = widget.message.content.length;
+      if (newLength > _targetLength && !_streamComplete) {
+        _targetLength = newLength;
+        _startRevealAnimation();
+      }
+    } else if (!widget.message.isStreaming) {
+      // Stream finished - show all content immediately
+      _streamComplete = true;
+      _displayedText = widget.message.content;
+      _targetLength = widget.message.content.length;
+      _revealTimer?.cancel();
+    }
+
     // Note: Since message object reference might be the same,
     // we handled change detection in build() via _shouldRebuild()
+  }
+
+  void _startRevealAnimation() {
+    _revealTimer?.cancel();
+
+    // Reveal ~20 chars per 50ms for smooth typewriter effect
+    const charsPerTick = 3;
+    const tickDuration = Duration(milliseconds: 30);
+
+    _revealTimer = Timer.periodic(tickDuration, (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        final remaining = _targetLength - _displayedText.length;
+        if (remaining <= 0) {
+          timer.cancel();
+          _displayedText = widget.message.content;
+        } else {
+          final toAdd = remaining < charsPerTick ? remaining : charsPerTick;
+          _displayedText = widget.message.content.substring(0, _displayedText.length + toAdd);
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
     _editController.dispose();
+    _revealTimer?.cancel();
     super.dispose();
   }
 
@@ -621,18 +673,15 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
-    // Optimization: During streaming, show plain text to avoid expensive markdown parsing
-    // This significantly reduces CPU usage while streaming
+    // During streaming, show animated text with typewriter effect (markdown applied)
     if (widget.message.isStreaming && widget.message.content.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: SelectableText(
-          widget.message.content,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            height: 1.7,
-            color: isDark ? Colors.grey[300] : Colors.grey[850],
-            letterSpacing: 0.1,
-          ),
+        child: _buildSegmentedContent(
+          context,
+          theme,
+          _displayedText,
+          isThinking: false,
         ),
       );
     }

@@ -13,6 +13,7 @@ import '../services/chat_service.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
 import '../services/file_tool_service.dart';
+import '../config/api_config.dart';
 
 /// Chat state provider
 class ChatProvider extends ChangeNotifier {
@@ -48,8 +49,18 @@ class ChatProvider extends ChangeNotifier {
   // Canvas callback
   void Function(int canvasId)? _onCanvasUpdate;
 
+  // Job queue state
+  int? _queuedJobId;
+  bool _isQueued = false;
+  String? _queuedMessage;
+
   // New getter for 'Processing' state (Thinking/Transcribing but not yet Speaking)
   bool get isVoiceProcessing => _isTranscribing || (_isStreaming && !_isPlayingVoice);
+
+  // Job queue getters
+  int? get queuedJobId => _queuedJobId;
+  bool get isQueued => _isQueued;
+  String? get queuedMessage => _queuedMessage;
 
   List<Conversation> get conversations => _conversations;
   List<Message> get messages => _messages;
@@ -74,6 +85,19 @@ class ChatProvider extends ChangeNotifier {
   void clearPendingTool() {
     _pendingClientTool = null;
     notifyListeners();
+  }
+
+  /// Clear queued state
+  void clearQueuedState() {
+    _queuedJobId = null;
+    _isQueued = false;
+    _queuedMessage = null;
+  }
+
+  void _clearQueuedState() {
+    _queuedJobId = null;
+    _isQueued = false;
+    _queuedMessage = null;
   }
 
   /// Set the music play callback for voice mode
@@ -531,20 +555,41 @@ class ChatProvider extends ChangeNotifier {
       // Clear voice audio chunks
       _voiceAudioChunks = [];
       
-      // Use listen instead of await for to enable cancellation
-      final stream = ChatService.sendMessage(
+      // Check if request is queued
+      final result = await ChatService.sendMessageWithQueueCheck(
         _currentConversation!.id,
         content,
         file: file,
         voiceEnabled: voiceEnabled ?? _voiceModeEnabled,
-        voiceId: _currentVoiceId,  // Use selected voice
+        voiceId: _currentVoiceId,
         isCanvas: isCanvas,
         isGenerateImage: isGenerateImage,
         isDeepSearch: isDeepSearch,
       );
 
+      if (result.isQueued) {
+        // Request is queued - update state and show notification
+        _queuedJobId = result.jobId;
+        _isQueued = true;
+        _queuedMessage = result.message;
+        
+        // Update the assistant message to show queued status
+        final lastIndex = _messages.length - 1;
+        _messages[lastIndex] = _messages[lastIndex].copyWith(
+          content: '⏳ ${result.message ?? "Đang chờ trong hàng đợi..."}',
+          isStreaming: false,
+        );
+        _isStreaming = false;
+        notifyListeners();
+        
+        // Start polling for job completion
+        await _pollJobStatus(result.jobId!, onMusicPlay: onMusicPlay);
+        return;
+      }
+
+      // Normal streaming response
       final completer = Completer<void>();
-      _processStream(stream, completer, onMusicPlay: onMusicPlay);
+      _processStream(result.stream!, completer, onMusicPlay: onMusicPlay);
       await completer.future;
 
     } catch (e) {
@@ -559,6 +604,61 @@ class ChatProvider extends ChangeNotifier {
       _streamSubscription = null;
       notifyListeners();
     }
+  }
+
+  /// Poll job status until completion
+  Future<void> _pollJobStatus(int jobId, {
+    void Function(String url, String title, String? thumbnail, int? duration)? onMusicPlay,
+  }) async {
+    const pollInterval = Duration(seconds: 2);
+    const maxPolls = 150; // 5 minutes max
+    
+    for (int i = 0; i < maxPolls; i++) {
+      await Future.delayed(pollInterval);
+      
+      try {
+        final response = await ApiService.get('${ApiConfig.jobs}/$jobId');
+        if (response.statusCode == 200) {
+          final data = ApiService.parseResponse(response) as Map<String, dynamic>;
+          final status = data['status'] as String?;
+          
+          print('>>> Job $jobId status: $status');
+          
+          if (status == 'completed') {
+            // Job completed - restart the stream with result data
+            final resultData = data['result_data'] as Map<String, dynamic>?;
+            if (resultData != null) {
+              // Show completion and restart
+              _clearQueuedState();
+              // Could trigger a refresh or show result
+              notifyListeners();
+            }
+            return;
+          } else if (status == 'failed') {
+            // Job failed
+            _error = data['error_message'] as String? ?? 'Job failed';
+            _clearQueuedState();
+            notifyListeners();
+            return;
+          }
+          // Otherwise still pending - continue polling
+        } else if (response.statusCode == 404) {
+          // Job not found
+          _error = 'Job not found';
+          _clearQueuedState();
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        print('>>> Error polling job status: $e');
+        // Continue polling despite errors
+      }
+    }
+    
+    // Max polls reached
+    _error = 'Job timed out';
+    _clearQueuedState();
+    notifyListeners();
   }
 
   /// Edit a message and regenerate response
