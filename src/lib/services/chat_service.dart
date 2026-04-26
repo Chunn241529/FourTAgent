@@ -178,18 +178,24 @@ class ChatService {
       }
     }
     
-    // First, make a non-streaming request to check response type
+    // Make the request once — reuse the response stream
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}$url');
     final request = http.Request('POST', uri);
     request.headers.addAll({
       'Content-Type': 'application/json',
-      'Accept': 'application/json',  // First try JSON
       if (token != null) 'Authorization': 'Bearer $token',
     });
     request.body = jsonEncode(body);
     
     final streamedResponse = await ApiService.client.send(request);
+    
+    // Check for auth/server errors
+    if (streamedResponse.statusCode == 401) {
+      throw ApiException('Phiên đăng nhập hết hạn', 401);
+    } else if (streamedResponse.statusCode == 502 || streamedResponse.statusCode == 503) {
+      throw ApiException('Server đang bận hoặc đang khởi động lại', streamedResponse.statusCode);
+    }
     
     // Check content type
     final contentType = streamedResponse.headers['content-type'] ?? '';
@@ -204,10 +210,13 @@ class ChatService {
         message: data['message'] as String?,
       );
     } else {
-      // Normal SSE stream - convert to stream
+      // Normal SSE stream — reuse the SAME response stream (no second request!)
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
       return SendMessageResult(
         isQueued: false,
-        stream: ApiService.postStream(url, body),
+        stream: stream,
       );
     }
   }

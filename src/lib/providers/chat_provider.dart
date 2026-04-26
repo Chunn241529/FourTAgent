@@ -393,8 +393,15 @@ class ChatProvider extends ChangeNotifier {
     try {
       final allMessages = await ChatService.getMessages(conversation.id);
       
+      print('>>> selectConversation: loaded ${allMessages.length} raw messages from server');
+      for (int i = 0; i < allMessages.length; i++) {
+        print('>>>   raw[$i]: id=${allMessages[i].id} role=${allMessages[i].role} content="${allMessages[i].content.length > 30 ? allMessages[i].content.substring(0, 30) : allMessages[i].content}"');
+      }
+      
       // Filter out tool execution results and system messages from UI
       final displayableMessages = allMessages.where((m) => m.role != 'tool' && m.role != 'system').toList();
+      
+      print('>>> selectConversation: ${displayableMessages.length} displayable messages after filter');
       
       // Merge consecutive assistant messages to prevent double bubbles on reload
       List<Message> mergedMessages = [];
@@ -432,6 +439,11 @@ class ChatProvider extends ChangeNotifier {
         } else {
           mergedMessages.add(msg);
         }
+      }
+      
+      print('>>> selectConversation: ${mergedMessages.length} messages after merge');
+      for (int i = 0; i < mergedMessages.length; i++) {
+        print('>>>   merged[$i]: id=${mergedMessages[i].id} role=${mergedMessages[i].role} content="${mergedMessages[i].content.length > 30 ? mergedMessages[i].content.substring(0, 30) : mergedMessages[i].content}"');
       }
       
       _messages = mergedMessages;
@@ -711,9 +723,8 @@ class ChatProvider extends ChangeNotifier {
     DateTime lastUpdate = DateTime.now();
     DateTime lastNotify = DateTime.now();
     
-    // Batching mechanism: collect chunks and process them together
-    List<String> pendingChunks = [];
-    Timer? batchTimer;
+    // Replace batch timer with a simple throttle
+    final Stopwatch _throttleWatch = Stopwatch()..start();
 
     try {
       _streamSubscription = stream.listen(
@@ -757,38 +768,26 @@ class ChatProvider extends ChangeNotifier {
           }
         }
         
-        // Add chunk to pending buffer
-        pendingChunks.add(line);
+        bool shouldNotify = false;
         
-        // Cancel previous batch timer
-        batchTimer?.cancel();
-
-        // Process batch after 100ms delay - reduces CPU usage during streaming
-        // while maintaining smooth ~10 FPS UI updates for text content
-        batchTimer = Timer(const Duration(milliseconds: 100), () {
-          if (pendingChunks.isEmpty) return;
-          
-          bool shouldNotify = false;
-          
-          // Process all pending chunks in one go
-          for (final bufferedLine in pendingChunks) {
-            String? jsonStr;
-            if (bufferedLine.startsWith('data: ')) {
-               jsonStr = bufferedLine.substring(6).trim();
-            } else if (bufferedLine.startsWith('data:')) {
-               jsonStr = bufferedLine.substring(5).trim();
-            }
+        // Process chunk immediately
+        String? jsonStr;
+        if (line.startsWith('data: ')) {
+           jsonStr = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+           jsonStr = line.substring(5).trim();
+        }
 
             if (jsonStr != null) {
               // print('>>> STREAM CHUNK: $jsonStr'); // DEBUG LOG
               if (jsonStr == '[DONE]') {
                 print('>>> Stream [DONE] received');
-                continue;
+                return;
               }
 
               try {
                 final data = _parseJson(jsonStr);
-                if (data == null) continue;
+                if (data == null) return;
 
                 // Handle message_saved
                 if (data['message_saved'] != null) {
@@ -815,8 +814,6 @@ class ChatProvider extends ChangeNotifier {
                   }
                   notifyListeners();
                   if (!completer.isCompleted) completer.complete();
-                  pendingChunks.clear();
-                  batchTimer?.cancel();
                   return;
                 }
 
@@ -1199,16 +1196,27 @@ class ChatProvider extends ChangeNotifier {
               thinkingDelta = data['thinking'] as String;
             }
 
+            // Handle status updates
+            if (data['status'] != null) {
+              final statusMsg = data['status'] as String;
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                 _messages[lastIndex] = _messages[lastIndex].copyWith(statusMessage: statusMsg);
+                 shouldNotify = true;
+              }
+            }
+
             if (contentDelta != null || thinkingDelta != null) {
               if (contentDelta != null) fullResponse += contentDelta;
               if (thinkingDelta != null) fullThinking += thinkingDelta;
               
-              // Update message content immediately - batching controls update frequency
+              // Update message content immediately
               final lastIndex = _messages.length - 1;
               if (lastIndex >= 0) {
                  _messages[lastIndex] = _messages[lastIndex].copyWith(
                     content: fullResponse, 
-                    thinking: fullThinking.isNotEmpty ? fullThinking : null
+                    thinking: fullThinking.isNotEmpty ? fullThinking : null,
+                    statusMessage: '',  // Clear status when real content arrives
                  );
                  lastUpdate = DateTime.now();
                  shouldNotify = true;
@@ -1275,20 +1283,17 @@ class ChatProvider extends ChangeNotifier {
             print('JSON parse error: $e'); 
             print('Invalid JSON: $jsonStr'); // Log invalid JSON
           }
-            } // Close if (jsonStr != null)
-          } // End of for loop over pendingChunks
-          
-          // Clear buffer
-          pendingChunks.clear();
-          
-          // Notify if there were updates
-          if (shouldNotify) {
+        } // Close if (jsonStr != null)
+        
+        // Notify if there were updates, but throttle to ~30 FPS (33ms) to prevent UI lag
+        if (shouldNotify) {
+          if (_throttleWatch.elapsedMilliseconds > 33) {
             notifyListeners();
+            _throttleWatch.reset();
           }
-        }); // End of Timer callback
+        }
       }, // End of stream.listen chunk handler
       onError: (e) {
-        batchTimer?.cancel();  // Cancel pending batch timer
         _error = e.toString();
         final lastIndex = _messages.length - 1;
         if (lastIndex >= 0) {
@@ -1298,7 +1303,6 @@ class ChatProvider extends ChangeNotifier {
         if (!completer.isCompleted) completer.complete();
       },
       onDone: () async {
-        batchTimer?.cancel();  // Cancel pending batch timer
         final lastIndex = _messages.length - 1;
         if (lastIndex >= 0) {
            // Apply buffered images now that stream is complete
@@ -1309,6 +1313,7 @@ class ChatProvider extends ChangeNotifier {
              content: fullResponse.isEmpty ? '...' : fullResponse, 
              isStreaming: false,
              generatedImages: finalImages,
+             statusMessage: '',  // Clear status on completion
            );
         }
         notifyListeners();
@@ -1616,15 +1621,17 @@ class ChatProvider extends ChangeNotifier {
                    }
                    
                    // Fallback logic: Only add if marker is missing from BOTH content and thinking
-                   if (marker.isNotEmpty && 
-                       !content.contains(marker.trim()) && 
-                       !thinking.contains(marker.trim())) {
-                      changed = true;
-                      // Heuristic: If content is empty, put in thinking. Otherwise put in content.
-                      if (content.trim().isEmpty) {
-                         thinking += marker;
-                      } else {
-                         content += marker;
+                   // Use the core tag (without newlines) for robust matching
+                   if (marker.isNotEmpty) {
+                      final coreTag = marker.trim();  // e.g. "<<<TOOL:SEARCH:query>>>"
+                      if (!content.contains(coreTag) && !thinking.contains(coreTag)) {
+                       changed = true;
+                       // Heuristic: If content is empty, put in thinking. Otherwise put in content.
+                       if (content.trim().isEmpty) {
+                          thinking += marker;
+                       } else {
+                          content += marker;
+                       }
                       }
                    }
                 }

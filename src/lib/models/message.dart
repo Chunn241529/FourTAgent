@@ -10,6 +10,7 @@ class Message {
   String? feedback; // "like", "dislike", or null
   int? deepSearchStartIndex; // Index in 'thinking' string where Deep Search starts
   String? thinking; // AI thinking/reasoning content
+  String? statusMessage; // Status update during pre-computation
   String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
   List<String> completedSearches; // Completed searches to keep visible
@@ -42,6 +43,7 @@ class Message {
     this.generationError,
     this.feedback,
     this.thinking,
+    this.statusMessage,
     this.imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
@@ -115,6 +117,7 @@ class Message {
       toolCallId: json['tool_call_id'],
       toolCalls: json['tool_calls'],
       thinking: json['thinking'],
+      statusMessage: json['status_message'],
       generatedImages: json['generated_images'] != null 
           ? List<String>.from(json['generated_images']) 
           : null,
@@ -202,6 +205,7 @@ class Message {
       'tool_calls': toolCalls,
       'deep_search_start_index': deepSearchStartIndex,
       'thinking': thinking,
+      'status_message': statusMessage,
       'generated_images': generatedImages,
       'code_executions': codeExecutions,
       'deep_search_updates': deepSearchUpdates,
@@ -218,6 +222,7 @@ class Message {
     String? generationError,
     String? feedback,
     String? thinking,
+    String? statusMessage,
     String? imageBase64,
     List<String>? activeSearches,
     List<String>? completedSearches,
@@ -249,6 +254,7 @@ class Message {
       generationError: generationError ?? this.generationError,
       feedback: feedback ?? this.feedback,
       thinking: thinking ?? this.thinking,
+      statusMessage: statusMessage ?? this.statusMessage,
       imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
       completedSearches: completedSearches ?? this.completedSearches,

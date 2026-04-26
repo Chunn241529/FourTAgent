@@ -56,6 +56,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   bool? _lastIsEditing;
   // For feedback
   String? _lastFeedback;
+  String? _lastStatusMessage;
 
   @override
   void initState() {
@@ -96,9 +97,9 @@ class _MessageBubbleState extends State<MessageBubble> {
   void _startRevealAnimation() {
     _revealTimer?.cancel();
 
-    // Reveal ~20 chars per 50ms for smooth typewriter effect
-    const charsPerTick = 3;
-    const tickDuration = Duration(milliseconds: 30);
+    // Reveal ~6 chars per 16ms (60fps) for smooth & fast typewriter effect
+    const charsPerTick = 6;
+    const tickDuration = Duration(milliseconds: 16);
 
     _revealTimer = Timer.periodic(tickDuration, (timer) {
       if (!mounted) {
@@ -149,6 +150,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (m.codeExecutions.length != _lastCodeExecLength) return true;
 
     if (m.feedback != _lastFeedback) return true;
+    if (m.statusMessage != _lastStatusMessage) return true;
 
     return false;
   }
@@ -166,6 +168,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     _lastDeepSearchLength = m.deepSearchUpdates.length;
     _lastCodeExecLength = m.codeExecutions.length;
     _lastFeedback = m.feedback;
+    _lastStatusMessage = m.statusMessage;
   }
 
   /// Download image to Downloads folder
@@ -480,10 +483,23 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   /// AI message - left aligned with avatar
   Widget _buildAIMessage(BuildContext context, ThemeData theme, bool isDark) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800),
-        child: Container(
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 10 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           child: Row(
@@ -579,6 +595,39 @@ class _MessageBubbleState extends State<MessageBubble> {
                         child: CanvasIndicator(),
                       ),
 
+                    // Status Message (While streaming and no content/thinking yet)
+                    if (widget.message.isStreaming && 
+                        widget.message.statusMessage != null && 
+                        widget.message.statusMessage!.isNotEmpty &&
+                        (widget.message.content.isEmpty && (widget.message.thinking == null || widget.message.thinking!.isEmpty)) &&
+                        !widget.message.isCreatingCanvas)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8, left: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  theme.colorScheme.primary.withOpacity(0.7),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.message.statusMessage!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
 
 
                     // 4. Post-Search Thinking (if any)
@@ -658,6 +707,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
