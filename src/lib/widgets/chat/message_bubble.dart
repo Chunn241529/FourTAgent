@@ -42,25 +42,14 @@ class _MessageBubbleState extends State<MessageBubble> {
   Timer? _revealTimer;
   bool _streamComplete = false;
 
-  // Caching variables to prevent expensive rebuilds (markdown parsing)
-  Widget? _cachedWidget;
-  String? _lastContent;
-  bool? _lastIsStreaming;
-  bool? _lastIsGeneratingImage;
-  int? _lastImagesLength;
-  String? _lastThinking;
-  String? _lastPlan;
-  int? _lastDeepSearchLength;
-  int? _lastCodeExecLength;
-  bool? _lastIsDark;
-  bool? _lastIsEditing;
-  // For feedback
   String? _lastFeedback;
   String? _lastStatusMessage;
 
   @override
   void initState() {
     super.initState();
+    _displayedText = widget.message.content;
+    _targetLength = widget.message.content.length;
     _editController = TextEditingController(text: widget.message.content);
   }
 
@@ -126,51 +115,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     super.dispose();
   }
 
-  bool _shouldRebuild(bool isDark) {
-    if (_cachedWidget == null) return true;
-
-    final m = widget.message;
-
-    if (isDark != _lastIsDark) return true;
-    if (_isEditing != _lastIsEditing) return true;
-
-    if (m.content != _lastContent) return true;
-    if (m.isStreaming != _lastIsStreaming) return true;
-    if (m.isGeneratingImage != _lastIsGeneratingImage) return true;
-    if (m.generatedImages.length != _lastImagesLength) return true;
-    if (m.thinking != _lastThinking) return true;
-    if (m.plan != _lastPlan) return true;
-    if (m.deepSearchUpdates.length != _lastDeepSearchLength) return true;
-    // Check deep search content if length same (status update) -> assume length change for now or simply rebuild if specific optimized check needed.
-    // For lists, checking length is often fast heuristic, but let's check hash if needed.
-    // Actually, deep search updates are appended. Length check is okay.
-    // But if status of an item updates?
-    // Let's assume rebuild on any deep search update is rare enough.
-
-    if (m.codeExecutions.length != _lastCodeExecLength) return true;
-
-    if (m.feedback != _lastFeedback) return true;
-    if (m.statusMessage != _lastStatusMessage) return true;
-
-    return false;
-  }
-
-  void _updateCacheState(bool isDark) {
-    final m = widget.message;
-    _lastIsDark = isDark;
-    _lastIsEditing = _isEditing;
-    _lastContent = m.content;
-    _lastIsStreaming = m.isStreaming;
-    _lastIsGeneratingImage = m.isGeneratingImage;
-    _lastImagesLength = m.generatedImages.length;
-    _lastThinking = m.thinking;
-    _lastPlan = m.plan;
-    _lastDeepSearchLength = m.deepSearchUpdates.length;
-    _lastCodeExecLength = m.codeExecutions.length;
-    _lastFeedback = m.feedback;
-    _lastStatusMessage = m.statusMessage;
-  }
-
   /// Download image to Downloads folder
   Future<void> _downloadImage(
     BuildContext context,
@@ -223,22 +167,13 @@ class _MessageBubbleState extends State<MessageBubble> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isUser = widget.message.role == 'user';
+    
+    Widget content = isUser 
+        ? _buildUserMessage(context, theme)
+        : _buildAIMessage(context, theme, isDark);
 
-    if (_shouldRebuild(isDark)) {
-      final isUser = widget.message.role == 'user';
-      Widget content;
-      if (isUser) {
-        content = _buildUserMessage(context, theme);
-      } else {
-        content = _buildAIMessage(context, theme, isDark);
-      }
-
-      // Wrap in RepaintBoundary to isolate painting updates (e.g. streaming text)
-      _cachedWidget = RepaintBoundary(child: content);
-      _updateCacheState(isDark);
-    }
-
-    return _cachedWidget!;
+    return RepaintBoundary(child: content);
   }
 
   /// User message - right aligned with soft bubble
@@ -645,13 +580,37 @@ class _MessageBubbleState extends State<MessageBubble> {
                     ),
                   ),
 
-                // Actions (Copy, Feedback)
-                if (!widget.message.isStreaming &&
-                    widget.message.content.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _buildActions(context, theme),
-                  ),
+                // Bottom area: Transition between Streaming Status and Actions
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
+                  child: widget.message.isStreaming
+                      ? (widget.message.statusMessage != null &&
+                              widget.message.statusMessage!.isNotEmpty &&
+                              (widget.message.content.isEmpty &&
+                                  (widget.message.thinking == null ||
+                                      widget.message.thinking!.isEmpty)) &&
+                              !widget.message.isCreatingCanvas
+                          ? KeyedSubtree(
+                              key: const ValueKey('streaming_status'),
+                              child: _buildStreamingStatus(theme, isDark),
+                            )
+                          : const SizedBox.shrink(key: ValueKey('empty_status')))
+                      : (widget.message.content.isNotEmpty
+                          ? KeyedSubtree(
+                              key: const ValueKey('actions'),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _buildActions(context, theme),
+                              ),
+                            )
+                          : const SizedBox.shrink(key: ValueKey('empty_actions'))),
+                ),
               ],
             ),
           ),
@@ -704,22 +663,14 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildMarkdownContent(ThemeData theme, bool isDark) {
-    // During streaming, show animated text with typewriter effect (markdown applied)
-    if (widget.message.isStreaming && widget.message.content.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: _buildSegmentedContent(
-          context,
-          theme,
-          _displayedText,
-          isThinking: false,
-        ),
-      );
-    }
+    // During streaming, show animated text. When done, show full content.
+    // Use _displayedText as the primary source of truth for the UI
+    final content = _displayedText.isEmpty ? widget.message.content : _displayedText;
+
     return _buildSegmentedContent(
       context,
       theme,
-      widget.message.content,
+      content,
       isThinking: false,
     );
   }
@@ -1458,12 +1409,12 @@ class _ThinkingSegmentState extends State<_ThinkingSegment>
                 children: [
                   // Spinning psychology icon if streaming
                   TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: widget.isFinished ? 0 : 1),
+                    tween: Tween<double>(begin: 0, end: 1),
                     duration: const Duration(seconds: 2),
                     curve: Curves.linear,
                     builder: (context, value, child) {
                       return Transform.rotate(
-                        angle: value * 2 * math.pi,
+                        angle: widget.isFinished ? 0 : (value * 2 * math.pi),
                         child: child,
                       );
                     },
@@ -1646,16 +1597,14 @@ class _AvatarSpinnerState extends State<_AvatarSpinner>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isAnimating) return widget.child;
-
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return AnimatedBuilder(
       animation: Listenable.merge([_rotationController, _pulseController]),
       builder: (context, child) {
         final pulseValue = _pulseController.value;
-        final glowOpacity = 0.15 + 0.25 * pulseValue;
-        final glowSpread = 2.0 + 4.0 * pulseValue;
+        final glowOpacity = widget.isAnimating ? (0.15 + 0.25 * pulseValue) : 0.0;
+        final glowSpread = widget.isAnimating ? (2.0 + 4.0 * pulseValue) : 0.0;
 
         return SizedBox(
           width: 40,
@@ -1664,35 +1613,39 @@ class _AvatarSpinnerState extends State<_AvatarSpinner>
             alignment: Alignment.center,
             children: [
               // Pulsing glow
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(glowOpacity),
-                      blurRadius: 10,
-                      spreadRadius: glowSpread,
-                    ),
-                  ],
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: widget.isAnimating ? 1.0 : 0.0,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(glowOpacity),
+                        blurRadius: 10,
+                        spreadRadius: glowSpread,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               // Spinning arc using CustomPainter
-              CustomPaint(
-                size: const Size(38, 38),
-                painter: _SpinnerArcPainter(
-                  rotation: _rotationController.value,
-                  color: primaryColor,
+              if (widget.isAnimating)
+                CustomPaint(
+                  size: const Size(38, 38),
+                  painter: _SpinnerArcPainter(
+                    rotation: _rotationController.value,
+                    color: primaryColor,
+                  ),
                 ),
-              ),
               // Avatar on top
-              child!,
+              widget.child,
             ],
           ),
         );
       },
-      child: widget.child,
     );
   }
 }
