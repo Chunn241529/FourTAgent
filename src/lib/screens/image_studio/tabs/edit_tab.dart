@@ -25,9 +25,7 @@ class _EditTabState extends State<EditTab> {
   String? _resultPrompt;
 
   bool _enableTryOn = false;
-  bool _enableDetail = false;
-  bool _enablePixel = false;
-  bool _enablePose = false;
+  bool _enableStyle = false;
 
   String? _coerceToString(dynamic value) {
     if (value == null) return null;
@@ -101,10 +99,8 @@ class _EditTabState extends State<EditTab> {
         image1: _image1!,
         image2: _image2,
         prompt: promptToUse,
-        tryon: _enableTryOn,
-        detail: _enableDetail,
-        pixel: _enablePixel,
-        pose: _enablePose,
+        enableTryon: _enableTryOn,
+        enableStyle: _enableStyle,
       );
       if (mounted) {
         setState(() {
@@ -126,7 +122,7 @@ class _EditTabState extends State<EditTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$e'),
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -767,106 +763,45 @@ class _EditTabState extends State<EditTab> {
   // ─────────────────── Lora Options ───────────────────
 
   Widget _buildOptionsRow(ThemeData theme, bool isDark) {
-    const tryOnPrompt = 'Attach the outfit in Image 2 to the person in Image 1';
-    const detailPrompt = 'Transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image.';
-    const pixelPrompt = 'Create a pixel art spritesheet of the character in the image. The spritesheet is a 4 by 4 grid of four rows of frames - first row is 3 walking frames facing down and 1 frame both arms raised, second row is 3 walking frames facing left and 1 frame jumping left, third row is 3 walking frames facing right and 1 frame jumping right, fourth row is 3 walking frames back view facing up and 1 frame lying on floor.';
-    const posePrompt = 'Change the actions and poses in Image 1 to match those in Image 2';
-
-
     return Align(
       alignment: Alignment.centerLeft,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          _buildLoraChip(
-            theme: theme,
-            isDark: isDark,
-            icon: Icons.checkroom,
-            label: 'Try-on Clothes',
-            value: _enableTryOn,
-            onChanged: (val) {
-              setState(() {
-                _enableTryOn = val;
-                if (val) {
-                  _enableDetail = false;
-                  _enablePixel = false;
-                  _enablePose = false;
-                  _promptController.text = tryOnPrompt;
-                } else if (_promptController.text == tryOnPrompt) {
-                  _promptController.text = '';
-                }
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _buildLoraChip(
-            theme: theme,
-            isDark: isDark,
-            icon: Icons.high_quality,
-            label: 'Realistic Detail',
-            value: _enableDetail,
-            onChanged: (val) {
-              setState(() {
-                _enableDetail = val;
-                if (val) {
-                  _enableTryOn = false;
-                  _enablePixel = false;
-                  _enablePose = false;
-                  _promptController.text = detailPrompt;
-                } else if (_promptController.text == detailPrompt) {
-                  _promptController.text = '';
-                }
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _buildLoraChip(
-            theme: theme,
-            isDark: isDark,
-            icon: Icons.grid_3x3,
-            label: 'Pixel Spritesheet',
-            value: _enablePixel,
-            onChanged: (val) {
-              setState(() {
-                _enablePixel = val;
-                if (val) {
-                  _enableTryOn = false;
-                  _enableDetail = false;
-                  _enablePose = false;
-                  _promptController.text = pixelPrompt;
-                } else if (_promptController.text == pixelPrompt) {
-                  _promptController.text = '';
-                }
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _buildLoraChip(
-            theme: theme,
-            isDark: isDark,
-            icon: Icons.person,
-            label: 'Pose Transfer',
-            value: _enablePose,
-            onChanged: (val) {
-              setState(() {
-                _enablePose = val;
-                if (val) {
-                  _enableTryOn = false;
-                  _enableDetail = false;
-                  _enablePixel = false;
-                  _promptController.text = posePrompt;
-                } else if (_promptController.text == posePrompt) {
-                  _promptController.text = '';
-                }
-              });
-            },
-          ),
-        ],
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            _buildLoraChip(
+              theme: theme,
+              isDark: isDark,
+              icon: Icons.checkroom,
+              label: 'Try-on Clothes',
+              value: _enableTryOn,
+              onChanged: (val) {
+                setState(() {
+                  _enableTryOn = val;
+                  if (val) _enableStyle = false;
+                });
+              },
+            ),
+            const SizedBox(width: 8),
+            _buildLoraChip(
+              theme: theme,
+              isDark: isDark,
+              icon: Icons.auto_awesome,
+              label: 'Style',
+              value: _enableStyle,
+              onChanged: (val) {
+                setState(() {
+                  _enableStyle = val;
+                  if (val) _enableTryOn = false;
+                });
+              },
+            ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   Widget _buildLoraChip({

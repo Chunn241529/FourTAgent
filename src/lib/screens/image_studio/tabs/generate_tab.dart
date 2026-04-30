@@ -77,7 +77,7 @@ class _GenerateTabState extends State<GenerateTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$e'),
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -391,7 +391,7 @@ class _GenerateTabState extends State<GenerateTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi tải ảnh: $e'),
+            content: Text('Lỗi tải ảnh: ${e.toString().replaceFirst('Exception: ', '')}'),
             backgroundColor: Colors.red,
           ),
         );

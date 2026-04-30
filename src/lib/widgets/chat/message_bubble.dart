@@ -21,6 +21,7 @@ import 'code_block_builder.dart';
 import 'file_action_indicator.dart';
 import 'simple_tool_indicator.dart';
 import 'code_execution_widget.dart';
+import 'activity_indicator.dart';
 import 'message_images_widget.dart';
 
 class MessageBubble extends StatefulWidget {
@@ -1010,21 +1011,53 @@ class _MessageBubbleState extends State<MessageBubble> {
     final splitPattern = RegExp(r'<<<TOOL:(.*?):(.*?)>>>');
 
     final matches = splitPattern.allMatches(text);
-
     final isFinished = !message.isStreaming || message.content.isNotEmpty;
+    
+    // Grouping activities
+    List<ActivityItem> activityGroup = [];
+
+    void flushActivities() {
+      if (activityGroup.isNotEmpty) {
+        children.add(
+          Padding(
+            padding: EdgeInsets.only(left: isThinking ? 12 : 0, bottom: 8),
+            child: ModernActivityIndicator(
+              activities: List.from(activityGroup),
+              messageTimestamp: message.timestamp,
+            ),
+          ),
+        );
+        activityGroup.clear();
+      }
+    }
+
     int lastIndex = 0;
+    final now = DateTime.now();
+    final elapsedTotal = now.difference(message.timestamp).inSeconds;
 
     for (final match in matches) {
       if (match.start > lastIndex) {
         final segmentText = text.substring(lastIndex, match.start).trim();
         if (segmentText.isNotEmpty) {
           if (isThinking) {
-            children.add(_ThinkingSegment(
-                content: segmentText, 
-                isStreaming: message.isStreaming,
-                isFinished: isFinished,
-            ));
+            // Treat thinking text as an activity item
+            final newItem = ActivityItem(
+              type: ActivityType.thinking,
+              label: 'Suy nghĩ',
+              detail: segmentText.length > 250 
+                  ? '${segmentText.substring(0, 250)}...' 
+                  : segmentText,
+              isActive: !isFinished,
+              isCompleted: isFinished,
+              elapsedSeconds: elapsedTotal,
+            );
+
+            // Deduplicate thinking segments if they are identical (rare but possible)
+            if (activityGroup.isEmpty || activityGroup.last.detail != newItem.detail) {
+              activityGroup.add(newItem);
+            }
           } else {
+            flushActivities();
             children.add(_buildMarkdownBody(theme, isDark, segmentText));
           }
         }
@@ -1041,8 +1074,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (action == 'SEARCH') {
         if (message.completedSearches.any((s) => s.trim() == target.trim())) {
           isCompleted = true;
-        } else if (message.failedSearches
-            .any((s) => s.trim() == target.trim())) {
+        } else if (message.failedSearches.any((s) => s.trim() == target.trim())) {
           isFailed = true;
         }
       } else if (action == 'FETCH') {
@@ -1058,43 +1090,37 @@ class _MessageBubbleState extends State<MessageBubble> {
         if (message.completedFileActions.contains(tag)) isCompleted = true;
       }
 
-      if (action == 'FETCH') {
-        children.add(
-          Padding(
-            padding: EdgeInsets.only(
-                left: isThinking ? 12 : 0, bottom: 8, top: 4),
-            child: WebFetchIndicator(urls: [target]),
-          ),
-        );
-      } else if (action == 'SEARCH') {
-        children.add(
-          Padding(
-            padding: EdgeInsets.only(
-                left: isThinking ? 12 : 0, bottom: 8, top: 4),
-            child: SearchIndicator(
-              activeSearches:
-                  (isCompleted || isFailed || !message.isStreaming)
-                      ? []
-                      : [target],
-              completedSearches: isCompleted ? [target] : [],
-              failedSearches: (isFailed || (!isCompleted && !message.isStreaming))
-                  ? [target]
-                  : [],
-            ),
-          ),
-        );
-      } else {
-        children.add(
-          Padding(
-            padding: EdgeInsets.only(
-                left: isThinking ? 12 : 0, bottom: 8, top: 4),
-            child: SimpleToolIndicator(
-              action: action,
-              target: target,
-              isCompleted: isCompleted,
-            ),
-          ),
-        );
+      // Convert TOOL to ActivityItem
+      ActivityType type;
+      String label;
+      switch (action) {
+        case 'SEARCH': type = ActivityType.search; label = 'Tìm kiếm: $target'; break;
+        case 'FETCH': type = ActivityType.fetch; label = 'Truy cập: $target'; break;
+        case 'READ': type = ActivityType.read; label = 'Đọc file: $target'; break;
+        case 'CREATE': type = ActivityType.write; label = 'Tạo file: $target'; break;
+        case 'SEARCH_FILE': type = ActivityType.search; label = 'Tìm trong file: $target'; break;
+        case 'RUN': type = ActivityType.execute; label = 'Thực thi: $target'; break;
+        default: type = ActivityType.tool; label = '$action: $target';
+      }
+
+      final newItem = ActivityItem(
+        type: isFailed ? ActivityType.error : type,
+        label: label,
+        isActive: !isCompleted && !isFailed && message.isStreaming,
+        isCompleted: isCompleted,
+      );
+
+      // Deduplicate sequential identical activities
+      bool isDuplicate = false;
+      if (activityGroup.isNotEmpty) {
+        final last = activityGroup.last;
+        if (last.label == newItem.label && last.type == newItem.type) {
+          isDuplicate = true;
+        }
+      }
+
+      if (!isDuplicate) {
+        activityGroup.add(newItem);
       }
 
       lastIndex = match.end;
@@ -1104,16 +1130,27 @@ class _MessageBubbleState extends State<MessageBubble> {
       final segmentText = text.substring(lastIndex).trim();
       if (segmentText.isNotEmpty) {
         if (isThinking) {
-          children.add(_ThinkingSegment(
-            content: segmentText, 
-            isStreaming: message.isStreaming,
-            isFinished: isFinished,
-          ));
+          final newItem = ActivityItem(
+            type: ActivityType.thinking,
+            label: 'Suy nghĩ',
+            detail: segmentText.length > 250 
+                ? '${segmentText.substring(0, 250)}...' 
+                : segmentText,
+            isActive: !isFinished,
+            isCompleted: isFinished,
+            elapsedSeconds: elapsedTotal,
+          );
+          if (activityGroup.isEmpty || activityGroup.last.detail != newItem.detail) {
+            activityGroup.add(newItem);
+          }
         } else {
+          flushActivities();
           children.add(_buildMarkdownBody(theme, isDark, segmentText));
         }
       }
     }
+
+    flushActivities();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

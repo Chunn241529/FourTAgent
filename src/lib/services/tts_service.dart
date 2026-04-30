@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'storage_service.dart';
@@ -50,44 +51,38 @@ class TtsService {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.ttsHqVoices}');
     
-    // Stream upload with progress
-    final fileSize = await audioFile.length();
-    int uploadedBytes = 0;
+    debugPrint('[TtsService] createVoice: POST $uri, name=$name, file=${audioFile.path}');
     
-    final request = http.StreamedRequest('POST', uri);
-    request.headers['Authorization'] = 'Bearer $token';
-    
-    final boundary = '----TTSFormBoundary${DateTime.now().millisecondsSinceEpoch}';
-    request.headers['Content-Type'] = 'multipart/form-data; boundary=$boundary';
-    
-    // Add name field
-    final nameField = '--$boundary\r\n'
-        'Content-Disposition: form-data; name="name"\r\n\r\n'
-        '$name\r\n';
-    request.sink.add(utf8.encode(nameField));
-    
-    // Add file header
-    final fileName = audioFile.path.split('/').last;
-    final fileHeader = '--$boundary\r\n'
-        'Content-Disposition: form-data; name="files"; filename="$fileName"\r\n'
-        'Content-Type: audio/mpeg\r\n\r\n';
-    request.sink.add(utf8.encode(fileHeader));
-    
-    // Stream file chunks
-    final fileStream = audioFile.openRead();
-    final sink = request.sink;
-    
-    await for (final chunk in fileStream) {
-      sink.add(chunk);
-      uploadedBytes += chunk.length;
-      onProgress?.call(uploadedBytes / fileSize);
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
     }
     
-    sink.add(utf8.encode('\r\n--$boundary--\r\n'));
-    await sink.close();
+    request.fields['name'] = name;
     
+    final stream = audioFile.openRead();
+    final length = await audioFile.length();
+    debugPrint('[TtsService] File length: $length bytes');
+    
+    int uploaded = 0;
+    final progressStream = stream.map((chunk) {
+      uploaded += chunk.length;
+      onProgress?.call(uploaded / length);
+      return chunk;
+    });
+    
+    request.files.add(http.MultipartFile(
+      'files',
+      progressStream,
+      length,
+      filename: audioFile.path.split('/').last,
+    ));
+    
+    debugPrint('[TtsService] Sending request...');
     final streamedResponse = await request.send();
+    debugPrint('[TtsService] Response status: ${streamedResponse.statusCode}');
     final response = await http.Response.fromStream(streamedResponse);
+    debugPrint('[TtsService] Response body: ${response.body}');
 
     if (response.statusCode == 200) {
       return Voice.fromJson(jsonDecode(response.body));

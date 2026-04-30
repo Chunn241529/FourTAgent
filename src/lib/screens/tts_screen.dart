@@ -726,6 +726,7 @@ class _VoiceLabViewState extends State<VoiceLabView>
   Future<void> _createVoice() async {
     if (_nameController.text.isEmpty || _selectedFile == null) return;
     setState(() => _isUploading = true);
+    debugPrint('[VoiceLab] Starting voice creation: name=${_nameController.text}, file=${_selectedFile!.path}');
     try {
       final newVoice = await TtsService.createVoice(
         _nameController.text,
@@ -733,7 +734,8 @@ class _VoiceLabViewState extends State<VoiceLabView>
         onProgress: (progress) {
           if (mounted) setState(() => _uploadProgress = progress);
         },
-      );
+      ).timeout(const Duration(minutes: 5));
+      debugPrint('[VoiceLab] Voice created successfully: ${newVoice.id} - ${newVoice.name}');
       if (mounted) {
         CustomSnackBar.showSuccess(
           context,
@@ -745,7 +747,9 @@ class _VoiceLabViewState extends State<VoiceLabView>
           _uploadProgress = 0.0;
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[VoiceLab] Error creating voice: $e');
+      debugPrint('[VoiceLab] Stack: $stack');
       if (mounted) {
         CustomSnackBar.showError(context, "Lỗi tạo giọng: $e");
       }
@@ -753,6 +757,7 @@ class _VoiceLabViewState extends State<VoiceLabView>
       if (mounted) setState(() => _isUploading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

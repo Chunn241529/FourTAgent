@@ -49,10 +49,8 @@ class ImageService {
     required File image1,
     File? image2,
     required String prompt,
-    bool tryon = false,
-    bool detail = false,
-    bool pixel = false,
-    bool pose = false,
+    bool enableTryon = false,
+    bool enableStyle = false,
   }) async {
     final token = await StorageService.getToken();
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.editImageStudio}');
@@ -63,10 +61,8 @@ class ImageService {
     }
 
     request.fields['prompt'] = prompt;
-    request.fields['tryon'] = tryon.toString();
-    request.fields['detail'] = detail.toString();
-    request.fields['pixel'] = pixel.toString();
-    request.fields['pose'] = pose.toString();
+    request.fields['tryon'] = enableTryon.toString();
+    request.fields['style'] = enableStyle.toString();
     
     // image1 — required
     request.files
