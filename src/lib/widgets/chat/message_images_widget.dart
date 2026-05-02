@@ -17,18 +17,14 @@ class MessageImagesWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (images.isEmpty && !isGenerating) return const SizedBox.shrink();
+    if (images.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: [
-          ...images.map((imageBase64) => _buildImageThumbnail(context, imageBase64)),
-          if (isGenerating)
-             const ImageGeneratingPlaceholder(width: 256, height: 256),
-        ],
+        children: images.map((imageBase64) => _buildImageThumbnail(context, imageBase64)).toList(),
       ),
     );
   }

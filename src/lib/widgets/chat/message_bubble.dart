@@ -508,23 +508,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                     child: _buildDeepSearchIndicator(widget.message),
                   ),
 
-                // Canvas Indicator
-                if (widget.message.isCreatingCanvas)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: CanvasIndicator(),
-                  ),
-
-                // Status Message
-                if (widget.message.isStreaming &&
-                    widget.message.statusMessage != null &&
-                    widget.message.statusMessage!.isNotEmpty &&
-                    (widget.message.content.isEmpty &&
-                        (widget.message.thinking == null ||
-                            widget.message.thinking!.isEmpty)) &&
-                    !widget.message.isCreatingCanvas)
-                  _buildStreamingStatus(theme, isDark),
-
                 // Post-Search Thinking
                 if (widget.message.thinking != null &&
                     widget.message.thinking!.isNotEmpty) ...[
@@ -570,8 +553,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                 _buildMarkdownContent(theme, isDark),
 
                 // Generated Images
-                if (widget.message.generatedImages.isNotEmpty ||
-                    widget.message.isGeneratingImage)
+                if (widget.message.generatedImages.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: MessageImagesWidget(
@@ -1035,6 +1017,44 @@ class _MessageBubbleState extends State<MessageBubble> {
     final now = DateTime.now();
     final elapsedTotal = now.difference(message.timestamp).inSeconds;
 
+    // Add Global Activities to the primary hub (Thinking if it exists, else Content)
+    final bool isPrimaryHub = isThinking || (message.thinking?.isEmpty ?? true);
+
+    if (isPrimaryHub) {
+      // Add Image Generation
+      if (message.isGeneratingImage) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.image,
+          label: 'Tạo ảnh nghệ thuật',
+          isActive: true,
+        ));
+      } else if (message.generatedImages.isNotEmpty && (message.isStreaming || isThinking)) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.image,
+          label: 'Tạo ảnh nghệ thuật',
+          isCompleted: true,
+        ));
+      }
+
+      // Add Canvas
+      if (message.isCreatingCanvas) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.canvas,
+          label: 'Không gian làm việc',
+          isActive: true,
+        ));
+      }
+
+      // Add Deep Search
+      if (message.deepSearchUpdates.isNotEmpty && message.isStreaming) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.search,
+          label: message.deepSearchUpdates.last,
+          isActive: true,
+        ));
+      }
+    }
+
     for (final match in matches) {
       if (match.start > lastIndex) {
         final segmentText = text.substring(lastIndex, match.start).trim();
@@ -1044,9 +1064,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             final newItem = ActivityItem(
               type: ActivityType.thinking,
               label: 'Suy nghĩ',
-              detail: segmentText.length > 250 
-                  ? '${segmentText.substring(0, 250)}...' 
-                  : segmentText,
+              detail: segmentText,
               isActive: !isFinished,
               isCompleted: isFinished,
               elapsedSeconds: elapsedTotal,
@@ -1094,13 +1112,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       ActivityType type;
       String label;
       switch (action) {
-        case 'SEARCH': type = ActivityType.search; label = 'Tìm kiếm: $target'; break;
-        case 'FETCH': type = ActivityType.fetch; label = 'Truy cập: $target'; break;
-        case 'READ': type = ActivityType.read; label = 'Đọc file: $target'; break;
-        case 'CREATE': type = ActivityType.write; label = 'Tạo file: $target'; break;
-        case 'SEARCH_FILE': type = ActivityType.search; label = 'Tìm trong file: $target'; break;
-        case 'RUN': type = ActivityType.execute; label = 'Thực thi: $target'; break;
-        default: type = ActivityType.tool; label = '$action: $target';
+        case 'SEARCH': type = ActivityType.search; label = 'Tìm kiếm $target'; break;
+        case 'FETCH': type = ActivityType.fetch; label = 'Truy cập $target'; break;
+        case 'READ': type = ActivityType.read; label = 'Đọc file $target'; break;
+        case 'CREATE': type = ActivityType.write; label = 'Tạo file $target'; break;
+        case 'SEARCH_FILE': type = ActivityType.search; label = 'Tìm trong file $target'; break;
+        case 'RUN': type = ActivityType.execute; label = 'Thực thi $target'; break;
+        default: type = ActivityType.tool; label = '$action $target';
       }
 
       final newItem = ActivityItem(
@@ -1133,9 +1151,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           final newItem = ActivityItem(
             type: ActivityType.thinking,
             label: 'Suy nghĩ',
-            detail: segmentText.length > 250 
-                ? '${segmentText.substring(0, 250)}...' 
-                : segmentText,
+            detail: segmentText,
             isActive: !isFinished,
             isCompleted: isFinished,
             elapsedSeconds: elapsedTotal,

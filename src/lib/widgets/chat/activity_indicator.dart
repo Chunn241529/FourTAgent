@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-enum ActivityType { thinking, search, tool, fetch, error, read, write, execute }
+enum ActivityType { thinking, search, tool, fetch, error, read, write, execute, image, canvas }
 
 class ActivityItem {
   final ActivityType type;
@@ -122,15 +122,15 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
   }
 
   Widget _buildMainPill(ThemeData theme, bool isDark) {
-    final activeActivity = widget.activities.lastWhere(
-      (a) => a.isActive,
-      orElse: () => widget.activities.last,
-    );
+    final activeActivities = widget.activities.where((a) => a.isActive).toList();
+    final activeActivity = activeActivities.isNotEmpty 
+        ? activeActivities.last 
+        : widget.activities.last;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -139,36 +139,51 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
               duration: const Duration(milliseconds: 300),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : theme.colorScheme.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          Colors.white.withValues(alpha: 0.1),
+                          Colors.white.withValues(alpha: 0.03),
+                        ]
+                      : [
+                          Colors.white.withValues(alpha: 0.9),
+                          Colors.white.withValues(alpha: 0.7),
+                        ],
+                ),
                 border: Border.all(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.12)
-                      : theme.colorScheme.primary.withValues(alpha: 0.15),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : theme.colorScheme.primary.withValues(alpha: 0.2),
                 ),
                 boxShadow: [
-                  if (!isDark)
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
                 ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildAnimatedIcon(activeActivity, theme),
+                  if (activeActivities.length > 1)
+                     _buildHubBadge(activeActivities.length, theme)
+                  else
+                     _buildAnimatedIcon(activeActivity, theme),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Text(
-                      _getSummaryText(activeActivity),
+                      activeActivities.length > 1 
+                          ? 'Đang thực hiện ${activeActivities.length} tác vụ...'
+                          : _getSummaryText(activeActivity),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
-                        letterSpacing: 0.2,
+                        fontSize: 12,
+                        letterSpacing: 0.1,
                       ),
                     ),
                   ),
@@ -192,6 +207,11 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
           icon: Icons.psychology_outlined,
           color: color,
         );
+      } else if (activity.type == ActivityType.image) {
+        return _PulseIcon(
+          icon: Icons.auto_awesome_rounded,
+          color: color,
+        );
       } else {
         return _PulseIcon(
           icon: _getActivityIcon(activity.type),
@@ -202,8 +222,43 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
 
     return Icon(
       activity.isCompleted ? Icons.check_circle_rounded : _getActivityIcon(activity.type),
-      size: 18,
+      size: 16,
       color: activity.isCompleted ? Colors.green : color,
+    );
+  }
+
+  Widget _buildHubBadge(int count, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
+        ),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withValues(alpha: 0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.bolt, size: 10, color: Colors.white),
+          const SizedBox(width: 2),
+          Text(
+            'HUB',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onPrimary,
+              fontWeight: FontWeight.w900,
+              fontSize: 9,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -317,8 +372,14 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
     if (active.type == ActivityType.fetch && active.isActive) {
       return 'Đang truy cập web...';
     }
+    if (active.type == ActivityType.image && active.isActive) {
+      return 'Đang tạo ảnh nghệ thuật...';
+    }
+    if (active.type == ActivityType.canvas && active.isActive) {
+      return 'Đang khởi tạo không gian làm việc...';
+    }
     if (active.isCompleted) {
-      return 'Đã hoàn thành nghiên cứu';
+      return 'Đã hoàn thành ${active.label}';
     }
     return active.label;
   }
@@ -333,6 +394,8 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
       case ActivityType.read: return Icons.file_open_rounded;
       case ActivityType.write: return Icons.edit_note_rounded;
       case ActivityType.execute: return Icons.terminal_rounded;
+      case ActivityType.image: return Icons.auto_awesome_rounded;
+      case ActivityType.canvas: return Icons.art_track_rounded;
     }
   }
 
@@ -346,6 +409,8 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
       case ActivityType.read: return Colors.cyan.shade700;
       case ActivityType.write: return Colors.teal.shade700;
       case ActivityType.execute: return Colors.deepPurple.shade700;
+      case ActivityType.image: return Colors.pink.shade400;
+      case ActivityType.canvas: return Colors.blue.shade600;
     }
   }
 }
