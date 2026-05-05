@@ -207,7 +207,7 @@ class ChatService {
       return SendMessageResult(
         isQueued: true,
         jobId: data['job_id'] as int?,
-        message: data['message'] as String?,
+        message: data['message'] ?? "Máy chủ đang bận",
       );
     } else {
       // Normal SSE stream — reuse the SAME response stream (no second request!)
@@ -276,15 +276,25 @@ class ChatService {
     }
   }
 
-  /// Submit tool result and resume streaming
-  static Stream<String> submitToolResult(
+  /// Send stop signal to backend
+  static Future<void> stopStreaming(int conversationId) async {
+    try {
+      await ApiService.post('${ApiConfig.chat}/stop/$conversationId');
+      print('>>> Stop signal sent for conversation $conversationId');
+    } catch (e) {
+      print('Error sending stop signal: $e');
+    }
+  }
+
+  /// Submit tool result with queue check
+  static Future<SendMessageResult> submitToolResultWithQueueCheck(
     int conversationId,
     String toolName,
     String result, {
     String? toolCallId,
     bool voiceEnabled = false,
     String? voiceId,
-  }) async* {
+  }) async {
     final body = {
       'tool_name': toolName,
       'result': result,
@@ -293,8 +303,40 @@ class ChatService {
       'voice_enabled': voiceEnabled,
       'voice_id': voiceId,
     };
-    
-    yield* ApiService.postStream(ApiConfig.chatToolResult, body);
+
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.chatToolResult}');
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    });
+    request.body = jsonEncode(body);
+
+    final streamedResponse = await ApiService.client.send(request);
+
+    if (streamedResponse.statusCode == 401) {
+      throw ApiException('Phiên đăng nhập hết hạn', 401);
+    }
+
+    final contentType = streamedResponse.headers['content-type'] ?? '';
+    if (contentType.contains('application/json')) {
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = ApiService.parseResponse(response) as Map<String, dynamic>;
+      return SendMessageResult(
+        isQueued: true,
+        jobId: data['job_id'] as int?,
+        message: data['message'] ?? "Máy chủ đang bận",
+      );
+    } else {
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+      return SendMessageResult(
+        isQueued: false,
+        stream: stream,
+      );
+    }
   }
 }
 

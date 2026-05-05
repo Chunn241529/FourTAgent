@@ -23,6 +23,7 @@ import 'simple_tool_indicator.dart';
 import 'code_execution_widget.dart';
 import 'activity_indicator.dart';
 import 'message_images_widget.dart';
+import 'music_player_widget.dart';
 
 class MessageBubble extends StatefulWidget {
   final Message message;
@@ -72,12 +73,16 @@ class _MessageBubbleState extends State<MessageBubble> {
         _targetLength = newLength;
         _startRevealAnimation();
       }
-    } else if (!widget.message.isStreaming) {
-      // Stream finished - show all content immediately
+    } else if (!widget.message.isStreaming && !_streamComplete) {
+      // Stream just finished - show all content immediately and stop animation
       _streamComplete = true;
       _displayedText = widget.message.content;
       _targetLength = widget.message.content.length;
       _revealTimer?.cancel();
+    } else if (!widget.message.isStreaming) {
+      // Already finished, just keep synchronized
+      _displayedText = widget.message.content;
+      _targetLength = widget.message.content.length;
     }
 
     // Note: Since message object reference might be the same,
@@ -563,6 +568,24 @@ class _MessageBubbleState extends State<MessageBubble> {
                     ),
                   ),
 
+                // Generated Music
+                if (widget.message.generatedMusic.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Column(
+                      children: widget.message.generatedMusic.map((filename) {
+                        // Assuming the file is accessible via cloud output API or static serving
+                        // For now, construct the URL based on the userId
+                        final encodedFilename = Uri.encodeComponent(filename);
+                        final url = '${ApiConfig.baseUrl}/cloud/${widget.message.userId}/output/$encodedFilename';
+                        return MusicPlayerWidget(
+                          audioUrl: url,
+                          title: filename,
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
                 // Bottom area: Transition between Streaming Status and Actions
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
@@ -1036,6 +1059,21 @@ class _MessageBubbleState extends State<MessageBubble> {
         ));
       }
 
+      // Add Music Generation
+      if (message.isMusicGenerating) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.music, // Use music or similar
+          label: 'Sáng tác nhạc',
+          isActive: true,
+        ));
+      } else if (message.generatedMusic.isNotEmpty && (message.isStreaming || isThinking)) {
+        activityGroup.add(ActivityItem(
+          type: ActivityType.music,
+          label: 'Sáng tác nhạc',
+          isCompleted: true,
+        ));
+      }
+
       // Add Canvas
       if (message.isCreatingCanvas) {
         activityGroup.add(ActivityItem(
@@ -1106,6 +1144,18 @@ class _MessageBubbleState extends State<MessageBubble> {
       } else if (['READ', 'CREATE', 'SEARCH_FILE'].contains(action)) {
         final tag = '$action:$target';
         if (message.completedFileActions.contains(tag)) isCompleted = true;
+      } else if (action == 'MUSIC') {
+        final tag = 'MUSIC:$target';
+        if (message.completedMusicActions.contains(tag)) isCompleted = true;
+      } else if (action == 'IMAGE') {
+        // Image generation is completed when we have images in the message
+        if (message.generatedImages.isNotEmpty) isCompleted = true;
+      } else if (action == 'RUN') {
+        // Python execution is usually completed by the time it shows up or handled via codeExecutions
+        if (message.codeExecutions.isNotEmpty) isCompleted = true;
+      } else if (action == 'CREATE_CANVAS' || action == 'UPDATE_CANVAS') {
+        // Canvas operations are usually instant or handled via onCanvasUpdate
+        isCompleted = true;
       }
 
       // Convert TOOL to ActivityItem
@@ -1118,6 +1168,10 @@ class _MessageBubbleState extends State<MessageBubble> {
         case 'CREATE': type = ActivityType.write; label = 'Tạo file $target'; break;
         case 'SEARCH_FILE': type = ActivityType.search; label = 'Tìm trong file $target'; break;
         case 'RUN': type = ActivityType.execute; label = 'Thực thi $target'; break;
+        case 'MUSIC': type = ActivityType.music; label = 'Sáng tác: $target'; break;
+        case 'IMAGE': type = ActivityType.image; label = 'Tạo ảnh: $target'; break;
+        case 'CREATE_CANVAS': type = ActivityType.write; label = 'Tạo Canvas: $target'; break;
+        case 'UPDATE_CANVAS': type = ActivityType.write; label = 'Cập nhật Canvas: $target'; break;
         default: type = ActivityType.tool; label = '$action $target';
       }
 

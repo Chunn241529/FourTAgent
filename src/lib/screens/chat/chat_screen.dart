@@ -482,14 +482,10 @@ class _ChatScreenState extends State<ChatScreen> {
                               },
                               shouldRebuild: (prev, next) => prev != next,
                               builder: (context, snapshot, _) {
-                                final messages = context
-                                    .read<ChatProvider>()
-                                    .messages;
-                                if (index >= messages.length)
-                                  return const SizedBox.shrink();
+                                final message = chatProvider.messages[index];
                                 return MessageBubble(
-                                  key: ValueKey('msg_${snapshot.id ?? index}'),
-                                  message: messages[index],
+                                  key: ValueKey(message.localId),
+                                  message: message,
                                 );
                               },
                             );

@@ -11,6 +11,7 @@ import 'tts_screen.dart';
 import 'affiliate/affiliate_screen.dart';
 import 'chat/chat_screen.dart';
 import 'image_studio/image_studio_screen.dart';
+import 'producer_studio/producer_studio_screen.dart';
 import '../widgets/music/floating_music_player.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
@@ -77,6 +78,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
       const AiSubtitleScreen(),
       const AffiliateScreen(),
       const ImageStudioScreen(),
+      const ProducerStudioScreen(),
     ];
 
     return Scaffold(
@@ -221,6 +223,14 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
             textColor: textColor,
             isActive: _selectedIndex == 4,
             onTap: () => _navigate(4),
+          ),
+          _buildMenuItem(
+            icon: Icons.music_note_outlined,
+            label: 'Tạo nhạc',
+            hoverColor: hoverColor,
+            textColor: textColor,
+            isActive: _selectedIndex == 5,
+            onTap: () => _navigate(5),
           ),
           _buildMenuItem(
             icon: Icons.record_voice_over_outlined,
@@ -639,6 +649,13 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
             onTap: () => _navigate(4),
             hoverColor: hoverColor,
             iconColor: _selectedIndex == 4 ? textColor : subtleColor,
+          ),
+          _SidebarIconBtn(
+            icon: Icons.music_note_outlined,
+            tooltip: 'Tạo nhạc',
+            onTap: () => _navigate(5),
+            hoverColor: hoverColor,
+            iconColor: _selectedIndex == 5 ? textColor : subtleColor,
           ),
           _SidebarIconBtn(
             icon: Icons.record_voice_over_outlined,

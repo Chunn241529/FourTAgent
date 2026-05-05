@@ -213,6 +213,25 @@ class ApiService {
       throw Exception('Failed to transcribe audio: ${response.body}');
     }
   }
+
+  /// Generic multipart file upload
+  static Future<http.Response> uploadFile(String endpoint, String filePath, {String fileKey = 'file'}) async {
+    final token = await StorageService.getToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    
+    var request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    
+    request.files.add(await http.MultipartFile.fromPath(fileKey, filePath));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    _checkStatus(response);
+    return response;
+  }
 }
 
 class ApiException implements Exception {

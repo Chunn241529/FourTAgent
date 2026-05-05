@@ -8,13 +8,15 @@ import 'package:path_provider/path_provider.dart';
 import '../../utils/wav_parser.dart';
 
 class WaveformPlayer extends StatefulWidget {
-  final Uint8List audioBytes; // Raw WAV bytes
+  final Uint8List audioBytes; // Raw audio bytes
   final VoidCallback? onDispose;
+  final List<double>? precalculatedAmplitudes;
   
   const WaveformPlayer({
     super.key,
     required this.audioBytes,
     this.onDispose,
+    this.precalculatedAmplitudes,
   });
 
   @override
@@ -96,7 +98,11 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
   }
 
   void _parseWaveform() {
-    _amplitudes = WavParser.getAmplitudes(widget.audioBytes, samples: _waveformResolution);
+    if (widget.precalculatedAmplitudes != null && widget.precalculatedAmplitudes!.isNotEmpty) {
+      _amplitudes = widget.precalculatedAmplitudes!;
+    } else {
+      _amplitudes = WavParser.getAmplitudes(widget.audioBytes, samples: _waveformResolution);
+    }
   }
 
   @override

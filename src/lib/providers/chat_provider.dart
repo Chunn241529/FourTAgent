@@ -734,7 +734,7 @@ class ChatProvider extends ChangeNotifier {
         
         // Process started events IMMEDIATELY (outside batch)
         // to prevent race condition where both started + generated land in same batch
-        if (line.contains('image_generation_started') || line.contains('canvas_generation_started')) {
+        if (line.contains('image_generation_started') || line.contains('canvas_generation_started') || line.contains('music_generation_started')) {
           String? jsonStr;
           if (line.startsWith('data: ')) {
             jsonStr = line.substring(6).trim();
@@ -758,6 +758,14 @@ class ChatProvider extends ChangeNotifier {
                   if (data.containsKey('canvas_generation_started')) {
                     _messages[lastIndex] = _messages[lastIndex].copyWith(
                       isCreatingCanvas: true
+                    );
+                    notifyListeners();
+                    return;
+                  }
+                  if (data.containsKey('music_generation_started')) {
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      isMusicGenerating: true,
+                      generationError: null
                     );
                     notifyListeners();
                     return;
@@ -795,7 +803,10 @@ class ChatProvider extends ChangeNotifier {
                   if (messageId != null) {
                     final lastIndex = _messages.length - 1;
                     if (lastIndex >= 0 && _messages[lastIndex].role == 'assistant') {
-                      _messages[lastIndex] = _messages[lastIndex].copyWith(id: messageId);
+                      _messages[lastIndex] = _messages[lastIndex].copyWith(
+                        id: messageId,
+                        localId: messageId.toString(), // Sync localId to DB id for stability
+                      );
                       shouldNotify = true;
                     }
                   }
@@ -913,9 +924,81 @@ class ChatProvider extends ChangeNotifier {
 
                       }
                   }
+                  // Handle Music Generation
+                  else if (name == 'generate_music') {
+                      final title = parsedArgs?['title'] as String?;
+                      final tags = parsedArgs?['tags'] as String?;
+                      final target = title ?? tags ?? 'Đang sáng tác nhạc...';
+                      
+                      if (target.isNotEmpty) {
+                          final marker = '\n\n<<<TOOL:MUSIC:${target.replaceAll('>', '')}>>>\n\n';
+                          // Smart Placement: If content is empty, put in thinking block
+                          if (fullResponse.trim().isEmpty) {
+                            if (!fullThinking.contains(marker.trim())) {
+                              fullThinking += marker;
+                              final lastIndex = _messages.length - 1;
+                              if (lastIndex >= 0) {
+                                _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                                shouldNotify = true;
+                              }
+                            }
+                          } else {
+                            if (!fullResponse.contains(marker.trim())) {
+                              fullResponse += marker;
+                              final lastIndex = _messages.length - 1;
+                              if (lastIndex >= 0) {
+                                _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse);
+                                shouldNotify = true;
+                              }
+                            }
+                          }
+                      }
+                  }
+                  // Handle Python Execution
+                  else if (name == 'execute_python') {
+                      final code = parsedArgs?['code'] as String?;
+                      if (code != null) {
+                         // Smart Placement: If content is empty, put in thinking block
+                         if (fullResponse.trim().isEmpty) {
+                            fullThinking += '\n\n<<<TOOL:RUN:Python Code>>>\n\n';
+                            final lastIndex = _messages.length - 1;
+                            if (lastIndex >= 0) {
+                               _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                               shouldNotify = true;
+                            }
+                         } else {
+                            fullResponse += '\n\n<<<TOOL:RUN:Python Code>>>\n\n';
+                            final lastIndex = _messages.length - 1;
+                            if (lastIndex >= 0) {
+                               _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse);
+                               shouldNotify = true;
+                            }
+                         }
+                      }
+                  }
                   // Handle Canvas Tools - open panel early
                   else if (name == 'create_canvas' || name == 'update_canvas') {
                       print('>>> Canvas tool detected: $name, opening panel early');
+                      final title = parsedArgs?['title'] as String? ?? 'Canvas';
+                      String action = name == 'create_canvas' ? 'CREATE_CANVAS' : 'UPDATE_CANVAS';
+                      
+                      // Add to Action Hub
+                      if (fullResponse.trim().isEmpty) {
+                         fullThinking += '\n\n<<<TOOL:$action:$title>>>\n\n';
+                         final lastIndex = _messages.length - 1;
+                         if (lastIndex >= 0) {
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(thinking: fullThinking);
+                            shouldNotify = true;
+                         }
+                      } else {
+                         fullResponse += '\n\n<<<TOOL:$action:$title>>>\n\n';
+                         final lastIndex = _messages.length - 1;
+                         if (lastIndex >= 0) {
+                            _messages[lastIndex] = _messages[lastIndex].copyWith(content: fullResponse);
+                            shouldNotify = true;
+                         }
+                      }
+
                       // Signal to open panel (with id=0 meaning "pending")
                       _onCanvasUpdate?.call(0);
                   }
@@ -1001,15 +1084,14 @@ class ChatProvider extends ChangeNotifier {
                   final currentCompleted = List<String>.from(_messages[lastIndex].completedFetches);
                   final currentFailed = List<String>.from(_messages[lastIndex].failedFetches);
                   
+                  // Use normalized matching
                   final normalizedUrl = url.replaceFirst(RegExp(r'/+$'), '');
-                  
-                  // Use robust matching (strip trailing slash and trim)
                   currentActive.removeWhere((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
                   
-                  bool isAlreadyDone = currentCompleted.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl) || 
-                                     currentFailed.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
-
-                  if (!isAlreadyDone) {
+                  bool isAlreadyPresent = currentCompleted.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl) || 
+                                         currentFailed.any((u) => u.trim().replaceFirst(RegExp(r'/+$'), '') == normalizedUrl);
+                  
+                  if (!isAlreadyPresent) {
                     if (success) {
                       currentCompleted.add(url);
                     } else {
@@ -1026,6 +1108,66 @@ class ChatProvider extends ChangeNotifier {
               }
             }
 
+            // Handle music_generation_started
+            if (data['music_generation_started'] != null) {
+              final lastIndex = _messages.length - 1;
+              if (lastIndex >= 0) {
+                _messages[lastIndex] = _messages[lastIndex].copyWith(
+                  isMusicGenerating: true,
+                  generationError: null
+                );
+                shouldNotify = true;
+              }
+            }
+
+            // Handle music_complete
+            if (data['music_complete'] != null) {
+              final title = (data['music_complete']['title'] as String?)?.trim();
+              final success = data['music_complete']['success'] as bool? ?? true;
+              
+              if (title != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentMusic = List<String>.from(_messages[lastIndex].completedMusicActions);
+                  final tag = 'MUSIC:$title';
+                  if (!currentMusic.contains(tag)) {
+                    if (success) {
+                      currentMusic.add(tag);
+                    }
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      completedMusicActions: currentMusic,
+                    );
+                    shouldNotify = true;
+                  }
+                }
+              }
+            }
+
+            // Handle music_generated
+            if (data['music_generated'] != null) {
+              final filename = data['music_generated']['filename'] as String?;
+              if (filename != null) {
+                final lastIndex = _messages.length - 1;
+                if (lastIndex >= 0) {
+                  final currentGenerated = List<String>.from(_messages[lastIndex].generatedMusic);
+                  if (!currentGenerated.contains(filename)) {
+                    currentGenerated.add(filename);
+                    _messages[lastIndex] = _messages[lastIndex].copyWith(
+                      generatedMusic: currentGenerated,
+                      isMusicGenerating: false,
+                    );
+                    shouldNotify = true;
+
+                    // Auto-play
+                    if (_musicPlayCallback != null) {
+                      final encodedFilename = Uri.encodeComponent(filename);
+                      final url = '${ApiConfig.baseUrl}/cloud/${_messages[lastIndex].userId}/output/$encodedFilename';
+                      _musicPlayCallback!(url, filename, null, null);
+                    }
+                  }
+                }
+              }
+            }
             
             // Handle code_execution_result
             if (data['code_execution_result'] != null) {
@@ -1411,6 +1553,11 @@ class ChatProvider extends ChangeNotifier {
   void stopStreaming() {
     _streamSubscription?.cancel();
     _isStreaming = false;
+    
+    if (_currentConversation != null) {
+      ChatService.stopStreaming(_currentConversation!.id);
+    }
+
     final lastIndex = _messages.length - 1;
     if (lastIndex >= 0 && _messages[lastIndex].isStreaming) {
       final partialMessage = _messages[lastIndex];
@@ -1529,7 +1676,7 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      final stream = ChatService.submitToolResult(
+      final response = await ChatService.submitToolResultWithQueueCheck(
         _currentConversation!.id,
         name,
         result,
@@ -1538,8 +1685,27 @@ class ChatProvider extends ChangeNotifier {
         voiceId: _currentVoiceId,
       );
       
+      if (response.isQueued) {
+        _queuedJobId = response.jobId;
+        _isQueued = true;
+        _queuedMessage = response.message;
+        
+        final lastIndex = _messages.length - 1;
+        if (lastIndex >= 0) {
+           _messages[lastIndex] = _messages[lastIndex].copyWith(
+             content: '${_messages[lastIndex].content}\n\n⏳ ${response.message ?? "Máy chủ đang bận"}',
+             isStreaming: false,
+           );
+        }
+        _isStreaming = false;
+        notifyListeners();
+        
+        await _pollJobStatus(response.jobId!);
+        return;
+      }
+
       final completer = Completer<void>();
-      _processStream(stream, completer);
+      _processStream(response.stream!, completer);
       await completer.future;
 
     } catch (e) {
@@ -1559,6 +1725,7 @@ class ChatProvider extends ChangeNotifier {
            List<String> completedSearches = List.from(msg.completedSearches);
            List<String> completedFetches = List.from(msg.completedFetches);
            List<String> completedFileActions = List.from(msg.completedFileActions);
+           List<String> musicActionsList = List.from(msg.completedMusicActions);
            
            try {
              List<dynamic> calls = [];
@@ -1618,7 +1785,29 @@ class ChatProvider extends ChangeNotifier {
                             changed = true;
                          }
                       }
-                   }
+                   } else if (name == 'generate_music') {
+                       action = 'MUSIC';
+                       target = (args['title'] as String?) ?? (args['tags'] as String?);
+                       
+                       if (target != null) {
+                          marker = '\n\n<<<TOOL:MUSIC:${target.replaceAll('>', '')}>>>\n\n';
+                          String tag = 'MUSIC:$target';
+                          if (!musicActionsList.contains(tag)) {
+                             musicActionsList.add(tag);
+                             changed = true;
+                          }
+                       }
+                    } else if (name == 'generate_image' || name == 'image_edit') {
+                         action = 'IMAGE';
+                         target = (args['description'] as String?) ?? (args['prompt'] as String?) ?? 'Ảnh';
+                         marker = '\n\n<<<TOOL:IMAGE:${target.replaceAll('>', '')}>>>\n\n';
+                      } else if (name == 'execute_python') {
+                        marker = '\n\n<<<TOOL:RUN:Python Code>>>\n\n';
+                     } else if (name == 'create_canvas' || name == 'update_canvas') {
+                        String action = name == 'create_canvas' ? 'CREATE_CANVAS' : 'UPDATE_CANVAS';
+                        String title = (args['title'] as String?) ?? 'Canvas';
+                        marker = '\n\n<<<TOOL:$action:$title>>>\n\n';
+                     }
                    
                    // Fallback logic: Only add if marker is missing from BOTH content and thinking
                    // Use the core tag (without newlines) for robust matching
@@ -1644,6 +1833,7 @@ class ChatProvider extends ChangeNotifier {
                    completedSearches: completedSearches,
                    completedFetches: completedFetches,
                    completedFileActions: completedFileActions,
+                   completedMusicActions: musicActionsList,
                 );
              }
            } catch (e) {

@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 /// Chat message model
 class Message {
   final int? id;
+  final String localId;
   final int userId;
   final int conversationId;
   final String content;
@@ -13,20 +15,24 @@ class Message {
   String? statusMessage; // Status update during pre-computation
   String? imageBase64; // Base64 encoded image for display
   List<String> activeSearches; // Active search queries being executed
+  List<String> activeMusicActions; // Active music generation tasks
   List<String> completedSearches; // Completed searches to keep visible
   List<String> activeFetches; // Active URL fetches being executed
   List<String> completedFetches; // Completed URL fetches to keep visible
   List<String> failedSearches; // Search queries that failed
   List<String> failedFetches; // URL fetches that failed
   List<String> completedFileActions; // Completed file actions (READ:path, CREATE:path)
+  List<String> completedMusicActions; // Completed music actions (MUSIC:title)
   List<String> deepSearchUpdates; // Deep Search status logs
   String? plan; // Research plan for Deep Search
   final String? toolName;
   final String? toolCallId;
   final dynamic toolCalls;
   List<String> generatedImages; // Generated images from ComfyUI
+  List<String> generatedMusic; // Generated music filenames/URLs
   List<Map<String, String>> codeExecutions; // Code execution history
   bool isGeneratingImage;
+  bool isMusicGenerating; // Active music generation state
   bool isCreatingCanvas; // Active canvas tool call loading state
   String? generationError;
   
@@ -39,6 +45,7 @@ class Message {
     required this.timestamp,
     this.isStreaming = false,
     this.isGeneratingImage = false,
+    this.isMusicGenerating = false,
     this.isCreatingCanvas = false,
     this.generationError,
     this.feedback,
@@ -46,30 +53,38 @@ class Message {
     this.statusMessage,
     this.imageBase64,
     List<String>? activeSearches,
+    List<String>? activeMusicActions,
     List<String>? completedSearches,
     List<String>? activeFetches,
     List<String>? completedFetches,
     List<String>? failedSearches,
     List<String>? failedFetches,
     List<String>? completedFileActions,
+    List<String>? completedMusicActions,
     List<String>? deepSearchUpdates,
     this.plan,
     this.toolName,
     this.toolCallId,
     this.toolCalls,
     List<String>? generatedImages,
+    List<String>? generatedMusic,
     List<Map<String, String>>? codeExecutions,
     this.deepSearchStartIndex,
     Map<String, dynamic>? deepSearchData,
-  }) : activeSearches = activeSearches ?? [],
+    String? localId,
+  }) : localId = localId ?? DateTime.now().microsecondsSinceEpoch.toString() + math.Random().nextInt(1000).toString(),
+       activeSearches = activeSearches ?? [],
+       activeMusicActions = activeMusicActions ?? [],
        completedSearches = completedSearches ?? [],
        activeFetches = activeFetches ?? [],
        completedFetches = completedFetches ?? [],
        failedSearches = failedSearches ?? [],
        failedFetches = failedFetches ?? [],
        completedFileActions = completedFileActions ?? [],
+       completedMusicActions = completedMusicActions ?? [],
        deepSearchUpdates = deepSearchUpdates ?? [],
        generatedImages = generatedImages ?? [],
+       generatedMusic = generatedMusic ?? [],
        codeExecutions = codeExecutions ?? [],
        deepSearchData = deepSearchData ?? {};
 
@@ -79,6 +94,7 @@ class Message {
     // Reconstruct completed searches and fetches from tool calls
     List<String> reconstructedSearches = [];
     List<String> reconstructedFetches = [];
+    List<String> reconstructedMusic = [];
     if (json['tool_calls'] != null) {
       final calls = json['tool_calls'];
       if (calls is List) {
@@ -97,6 +113,17 @@ class Message {
                 final args = call['function']['arguments'];
                 if (args is Map && args['url'] is String) {
                   reconstructedFetches.add(args['url']);
+                }
+              } catch (_) {}
+            } else if (name == 'generate_music') {
+              try {
+                final args = call['function']['arguments'];
+                String? target;
+                if (args is Map) {
+                  target = (args['title'] as String?) ?? (args['tags'] as String?);
+                }
+                if (target != null) {
+                  reconstructedMusic.add(target);
                 }
               } catch (_) {}
             }
@@ -121,8 +148,12 @@ class Message {
       generatedImages: json['generated_images'] != null 
           ? List<String>.from(json['generated_images']) 
           : null,
+      generatedMusic: json['generated_music'] != null
+          ? List<String>.from(json['generated_music'])
+          : null,
       completedSearches: reconstructedSearches,
       completedFetches: reconstructedFetches,
+      completedMusicActions: reconstructedMusic.map((m) => 'MUSIC:$m').toList(),
       deepSearchUpdates: json['deep_search_updates'] != null
           ? List<String>.from(json['deep_search_updates'])
           : null,
@@ -133,6 +164,7 @@ class Message {
       deepSearchData: json['deep_search_data'] != null
           ? Map<String, dynamic>.from(json['deep_search_data'])
           : null,
+      localId: json['id']?.toString() ?? json['localId']?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString(),
     );
     
     // Auto-fix for history loading:
@@ -207,7 +239,10 @@ class Message {
       'thinking': thinking,
       'status_message': statusMessage,
       'generated_images': generatedImages,
+      'generated_music': generatedMusic,
       'code_executions': codeExecutions,
+      'completed_music_actions': completedMusicActions,
+      'active_music_actions': activeMusicActions,
       'deep_search_updates': deepSearchUpdates,
       'deep_search_data': deepSearchData,
     };
@@ -218,6 +253,7 @@ class Message {
     String? content,
     bool? isStreaming,
     bool? isGeneratingImage,
+    bool? isMusicGenerating,
     bool? isCreatingCanvas,
     String? generationError,
     String? feedback,
@@ -225,24 +261,29 @@ class Message {
     String? statusMessage,
     String? imageBase64,
     List<String>? activeSearches,
+    List<String>? activeMusicActions,
     List<String>? completedSearches,
     List<String>? activeFetches,
     List<String>? completedFetches,
     List<String>? failedSearches,
     List<String>? failedFetches,
     List<String>? completedFileActions,
+    List<String>? completedMusicActions,
     List<String>? deepSearchUpdates,
     String? plan,
     String? toolName,
     String? toolCallId,
     dynamic toolCalls,
     List<String>? generatedImages,
+    List<String>? generatedMusic,
     List<Map<String, String>>? codeExecutions,
     int? deepSearchStartIndex,
     Map<String, dynamic>? deepSearchData,
+    String? localId,
   }) {
     return Message(
       id: id ?? this.id,
+      localId: localId ?? this.localId,
       userId: userId,
       conversationId: conversationId,
       content: content ?? this.content,
@@ -250,6 +291,7 @@ class Message {
       timestamp: timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
+      isMusicGenerating: isMusicGenerating ?? this.isMusicGenerating,
       isCreatingCanvas: isCreatingCanvas ?? this.isCreatingCanvas,
       generationError: generationError ?? this.generationError,
       feedback: feedback ?? this.feedback,
@@ -257,18 +299,21 @@ class Message {
       statusMessage: statusMessage ?? this.statusMessage,
       imageBase64: imageBase64 ?? this.imageBase64,
       activeSearches: activeSearches ?? this.activeSearches,
+      activeMusicActions: activeMusicActions ?? this.activeMusicActions,
       completedSearches: completedSearches ?? this.completedSearches,
       activeFetches: activeFetches ?? this.activeFetches,
       completedFetches: completedFetches ?? this.completedFetches,
       failedSearches: failedSearches ?? this.failedSearches,
       failedFetches: failedFetches ?? this.failedFetches,
       completedFileActions: completedFileActions ?? this.completedFileActions,
+      completedMusicActions: completedMusicActions ?? this.completedMusicActions,
       deepSearchUpdates: deepSearchUpdates ?? this.deepSearchUpdates,
       plan: plan ?? this.plan,
       toolName: toolName ?? this.toolName,
       toolCallId: toolCallId ?? this.toolCallId,
       toolCalls: toolCalls ?? this.toolCalls,
       generatedImages: generatedImages ?? this.generatedImages,
+      generatedMusic: generatedMusic ?? this.generatedMusic,
       codeExecutions: codeExecutions ?? this.codeExecutions,
       deepSearchStartIndex: deepSearchStartIndex ?? this.deepSearchStartIndex,
       deepSearchData: deepSearchData ?? this.deepSearchData,

@@ -58,6 +58,12 @@ class ApiConfig {
   // Translate endpoints
   static const String translate = '/generate/translate/stream';
   
+  // Music endpoints
+  static const String musicGenerate = '/music/generate';
+  static const String musicUpload = '/music/upload';
+  static const String musicKeyscales = '/music/keyscales';
+  static const String musicLanguages = '/music/languages';
+  
   // TTS endpoints
   static const String ttsTurboVoices = '/tts/turbo/voices';
   static const String ttsHqVoices = '/tts/hq/voices';

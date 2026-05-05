@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-enum ActivityType { thinking, search, tool, fetch, error, read, write, execute, image, canvas }
+enum ActivityType { thinking, search, tool, fetch, error, read, write, execute, image, canvas, music }
 
 class ActivityItem {
   final ActivityType type;
@@ -378,6 +378,9 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
     if (active.type == ActivityType.canvas && active.isActive) {
       return 'Đang khởi tạo không gian làm việc...';
     }
+    if (active.type == ActivityType.music && active.isActive) {
+      return 'Đang sáng tác nhạc...';
+    }
     if (active.isCompleted) {
       return 'Đã hoàn thành ${active.label}';
     }
@@ -396,6 +399,7 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
       case ActivityType.execute: return Icons.terminal_rounded;
       case ActivityType.image: return Icons.auto_awesome_rounded;
       case ActivityType.canvas: return Icons.art_track_rounded;
+      case ActivityType.music: return Icons.music_note_rounded;
     }
   }
 
@@ -411,6 +415,7 @@ class _ModernActivityIndicatorState extends State<ModernActivityIndicator>
       case ActivityType.execute: return Colors.deepPurple.shade700;
       case ActivityType.image: return Colors.pink.shade400;
       case ActivityType.canvas: return Colors.blue.shade600;
+      case ActivityType.music: return Colors.purple.shade400;
     }
   }
 }
