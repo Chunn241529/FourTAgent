@@ -72,18 +72,35 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
   
   Future<void> _initAudio() async {
     try {
-      // Write audio bytes to a temp file — BytesSource is unreliable on Linux desktop
+      // Detect audio format from magic bytes
+      final bytes = widget.audioBytes;
+      String ext = 'wav'; // default
+      if (bytes.length >= 3 &&
+          bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0) {
+        ext = 'mp3'; // MP3 sync word
+      } else if (bytes.length >= 3 &&
+          bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) {
+        ext = 'mp3'; // ID3 tag (MP3 with metadata)
+      } else if (bytes.length >= 4 &&
+          bytes[0] == 0x66 && bytes[1] == 0x4C && bytes[2] == 0x61 && bytes[3] == 0x43) {
+        ext = 'flac';
+      } else if (bytes.length >= 4 &&
+          bytes[0] == 0x4F && bytes[1] == 0x67 && bytes[2] == 0x67 && bytes[3] == 0x53) {
+        ext = 'ogg';
+      }
+      
+      // Write audio bytes to a temp file with correct extension
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/tts_preview_${DateTime.now().millisecondsSinceEpoch}.wav');
-      await tempFile.writeAsBytes(widget.audioBytes);
+      final tempFile = File('${tempDir.path}/audio_preview_${DateTime.now().millisecondsSinceEpoch}.$ext');
+      await tempFile.writeAsBytes(bytes);
       _tempFilePath = tempFile.path;
       
       // Set source from file
       await _player.setSource(DeviceFileSource(tempFile.path));
 
-      // Try to get duration from WAV header as fallback
-      if (_duration == Duration.zero) {
-        final wavDuration = WavParser.getDuration(widget.audioBytes);
+      // Try to get duration from WAV header as fallback (only for WAV files)
+      if (_duration == Duration.zero && ext == 'wav') {
+        final wavDuration = WavParser.getDuration(bytes);
         if (wavDuration != null && mounted) {
           setState(() => _duration = wavDuration);
         }
@@ -100,9 +117,62 @@ class _WaveformPlayerState extends State<WaveformPlayer> {
   void _parseWaveform() {
     if (widget.precalculatedAmplitudes != null && widget.precalculatedAmplitudes!.isNotEmpty) {
       _amplitudes = widget.precalculatedAmplitudes!;
-    } else {
-      _amplitudes = WavParser.getAmplitudes(widget.audioBytes, samples: _waveformResolution);
+      return;
     }
+    
+    final bytes = widget.audioBytes;
+    
+    // Check if it's actually a WAV file (starts with RIFF header)
+    final isWav = bytes.length >= 4 &&
+        bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46;
+    
+    if (isWav) {
+      _amplitudes = WavParser.getAmplitudes(bytes, samples: _waveformResolution);
+    } else {
+      // For MP3/FLAC/OGG: generate approximate waveform from raw byte energy
+      _amplitudes = _generateApproxAmplitudes(bytes, _waveformResolution);
+    }
+  }
+
+  /// Generate approximate amplitude data from raw compressed audio bytes.
+  /// This samples byte-level energy to create a visual waveform representation.
+  List<double> _generateApproxAmplitudes(Uint8List bytes, int samples) {
+    if (bytes.isEmpty || samples <= 0) return List.filled(samples, 0.0);
+    
+    // Skip initial metadata/headers (first ~10% of file is usually headers)
+    final int startOffset = (bytes.length * 0.05).toInt();
+    final int dataLength = bytes.length - startOffset;
+    if (dataLength <= 0) return List.filled(samples, 0.0);
+    
+    final int chunkSize = dataLength ~/ samples;
+    if (chunkSize <= 0) return List.filled(samples, 0.0);
+    
+    List<double> amps = [];
+    double maxEnergy = 0;
+    
+    // First pass: calculate energy per chunk
+    List<double> rawEnergy = [];
+    for (int i = 0; i < samples; i++) {
+      int offset = startOffset + (i * chunkSize);
+      double energy = 0;
+      int count = 0;
+      for (int j = 0; j < chunkSize && (offset + j) < bytes.length; j++) {
+        // Treat each byte as unsigned, center around 128
+        double sample = (bytes[offset + j] - 128).abs().toDouble();
+        energy += sample * sample;
+        count++;
+      }
+      double rms = count > 0 ? (energy / count) : 0;
+      rawEnergy.add(rms);
+      if (rms > maxEnergy) maxEnergy = rms;
+    }
+    
+    // Second pass: normalize
+    for (final e in rawEnergy) {
+      amps.add(maxEnergy > 0 ? (e / maxEnergy).clamp(0.0, 1.0) : 0.0);
+    }
+    
+    return amps;
   }
 
   @override
