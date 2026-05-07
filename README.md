@@ -52,14 +52,25 @@
 ### Key Features in Action
 
 ```mermaid
-graph LR
-    A[User] -->|Chat| B[Stella AI]
-    B -->|Generate| C[Images]
-    B -->|Play| D[Music]
-    B -->|Search| E[Web]
-    B -->|Analyze| F[Files]
+graph TD
+    A[User] -->|Prompt & Voice| B[Stella AI]
+    
+    subgraph "Creative Studio"
+        B -->|Generate & Edit| C[Visual Arts]
+        B -->|Compose & Remix| D[AI Music]
+    end
+    
+    subgraph "Intelligence"
+        B -->|RAG & Search| E[Knowledge]
+        B -->|Execute| F[Python Code]
+    end
+    
     style B fill:#4CAF50,stroke:#45a049,stroke-width:3px
     style A fill:#2196F3,stroke:#1976D2
+    style C fill:#FF9800,stroke:#F57C00
+    style D fill:#E91E63,stroke:#C2185B
+    style E fill:#00BCD4,stroke:#0097A7
+    style F fill:#9C27B0,stroke:#7B1FA2
 ```
 
 ---
