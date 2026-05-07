@@ -5,9 +5,9 @@
 **Your Personal AI Assistant with Voice, Chat & Creative Tools**
 
 [![Flutter Version](https://img.shields.io/badge/Flutter-3.10+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-[Features](#-features) • [Demo](#-demo) • [Installation](#-installation) • [Tech Stack](#-tech-stack) • [Architecture](#-architecture)
+[Features](#-features) • [Installation](#-installation) • [Tech Stack](#-tech-stack) • [Architecture](#-architecture)
 
 </div>
 
@@ -37,17 +37,7 @@
 
 ---
 
-## 🎬 Demo
-
-### Desktop App (Linux & Windows)
-
-<div align="center">
-
-|           Chat Interface           |             Voice Agent              |             Music Player             |
-| :--------------------------------: | :----------------------------------: | :----------------------------------: |
-| ![Chat](docs/screenshots/chat.png) | ![Voice](docs/screenshots/voice.png) | ![Music](docs/screenshots/music.png) |
-
-</div>
+*(Demo screenshots coming soon)*
 
 ### Key Features in Action
 
@@ -81,13 +71,18 @@ graph TD
 
 ```yaml
 Framework: Flutter 3.10+
-Platforms: Windows, Linux, macOS (coming soon)
+Platforms: Windows, Linux, macOS
 State Management: Provider
-Key Libraries:
-  - flutter_markdown: Rich text rendering
-  - audioplayers: Voice & music playback
-  - http: API communication
-  - media_kit: Advanced media handling
+UI & Animations: 
+  - Google Fonts: Premium typography
+  - Hugeicons: Modern icon system
+  - Animated Text Kit: Smooth text effects
+  - Shimmer: Elegant loading states
+Core Libraries:
+  - media_kit: High-performance audio/video playback
+  - flutter_secure_storage: Encrypted local data
+  - flutter_markdown: Rich content rendering
+  - record: High-quality voice capture
 ```
 
 ---
@@ -305,13 +300,12 @@ Contributions are welcome! Please follow these steps:
 - 🎵 Music player
 - 🗣️ Voice agent
 
-[View Full Changelog](CHANGELOG.md)
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ---
 
