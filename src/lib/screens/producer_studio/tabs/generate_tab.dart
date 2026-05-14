@@ -13,8 +13,7 @@ import '../../../services/storage_service.dart';
 
 class GenerateTab extends StatefulWidget {
   final String taskType; // text2music, cover, repaint
-  final TabController? tabController;
-  const GenerateTab({super.key, required this.taskType, this.tabController});
+  const GenerateTab({super.key, required this.taskType});
 
   @override
   State<GenerateTab> createState() => _GenerateTabState();
@@ -262,33 +261,30 @@ class _GenerateTabState extends State<GenerateTab> {
                   // ── LEFT: MAIN CANVAS (TAGS & LYRICS) ──
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(32),
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildWorkspaceHeader(studioTextPrimary, studioTextSecondary),
-                              _buildTabSwitcher(studioAccent, isDark),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
+                          _buildWorkspaceHeader(studioTextPrimary, studioTextSecondary),
+                          const SizedBox(height: 20),
                           // VIBE & GENRE (Tags)
-                          _buildInputStation(
-                            title: 'VIBE & GENRE',
-                            icon: Icons.auto_awesome_mosaic_rounded,
-                            controller: _tagsController,
-                            hint: 'Pop, electronic, cinematic, 90s hip hop, ethereal vocals...',
-                            studioSurface: studioSurface,
-                            studioBorder: studioBorder,
-                            textPrimary: studioTextPrimary,
-                            textSecondary: studioTextSecondary,
-                            height: 120,
+                          Expanded(
+                            flex: 2,
+                            child: _buildInputStation(
+                              title: 'VIBE & GENRE',
+                              icon: Icons.auto_awesome_mosaic_rounded,
+                              controller: _tagsController,
+                              hint: 'Pop, electronic, cinematic, 90s hip hop, ethereal vocals...',
+                              studioSurface: studioSurface,
+                              studioBorder: studioBorder,
+                              textPrimary: studioTextPrimary,
+                              textSecondary: studioTextSecondary,
+                            ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
                           // LYRICS (Takes remaining space)
                           Expanded(
+                            flex: 4,
                             child: _buildInputStation(
                               title: 'LYRICS (OPTIONAL)',
                               icon: Icons.lyrics_rounded,
@@ -409,37 +405,7 @@ class _GenerateTabState extends State<GenerateTab> {
     );
   }
 
-  Widget _buildTabSwitcher(Color accent, bool isDark) {
-    if (widget.tabController == null) return const SizedBox.shrink();
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: TabBar(
-        controller: widget.tabController,
-        dividerColor: Colors.transparent,
-        indicator: BoxDecoration(
-          color: isDark ? const Color(0xFF2D313E) : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: isDark ? null : [
-            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
-          ],
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-        unselectedLabelColor: isDark ? Colors.white38 : Colors.black45,
-        labelColor: isDark ? Colors.white : accent,
-        tabs: const [
-          Tab(text: 'TEXT2M'),
-          Tab(text: 'COVER'),
-          Tab(text: 'REPAINT'),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildSidebarSectionTitle(String title, Color textSecondary) {
     return Text(
@@ -587,13 +553,13 @@ class _GenerateTabState extends State<GenerateTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: textSecondary, fontSize: 9, fontWeight: FontWeight.w900)),
+        Text(label, style: TextStyle(color: textSecondary, fontSize: 10, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
+            color: textSecondary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: border),
           ),
           child: DropdownButtonHideUnderline(
@@ -601,7 +567,7 @@ class _GenerateTabState extends State<GenerateTab> {
               value: value,
               isExpanded: true,
               dropdownColor: Theme.of(context).colorScheme.surface,
-              style: TextStyle(color: textPrimary, fontSize: 13),
+              style: TextStyle(color: textPrimary, fontSize: 14),
               onChanged: onChanged,
               items: items.map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase()))).toList(),
             ),
@@ -634,10 +600,10 @@ class _GenerateTabState extends State<GenerateTab> {
       child: InkWell(
         onTap: () => setState(() => _outputBitrate = value),
         child: Container(
-          height: 36,
+          height: 44,
           decoration: BoxDecoration(
             color: isSelected ? accent : (isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05)),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: isSelected ? accent : (isDark ? Colors.white10 : Colors.black12)),
           ),
           alignment: Alignment.center,
@@ -645,7 +611,7 @@ class _GenerateTabState extends State<GenerateTab> {
             label,
             style: TextStyle(
               color: isSelected ? Colors.white : (isDark ? Colors.white38 : Colors.black45),
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -726,8 +692,8 @@ class _GenerateTabState extends State<GenerateTab> {
     final content = Container(
       decoration: BoxDecoration(
         color: studioSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: studioBorder),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: studioBorder, width: 1.5),
         boxShadow: Theme.of(context).brightness == Brightness.light ? [
           BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
         ] : null,
@@ -738,27 +704,40 @@ class _GenerateTabState extends State<GenerateTab> {
         children: [
           Row(
             children: [
-              Icon(icon, color: textSecondary, size: 18),
+              Icon(icon, color: textSecondary, size: 22),
               const SizedBox(width: 12),
               Text(
                 title,
-                style: TextStyle(color: textPrimary.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1),
+                style: TextStyle(color: textPrimary.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Expanded(
             child: TextField(
               controller: controller,
               maxLines: null,
               expands: true,
               textAlignVertical: TextAlignVertical.top,
-              style: TextStyle(color: textPrimary, fontSize: 15, height: 1.6),
+              style: TextStyle(color: textPrimary, fontSize: 16, height: 1.6),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: TextStyle(color: textSecondary.withOpacity(0.3), fontSize: 14),
-                border: InputBorder.none,
-                filled: false,
+                hintStyle: TextStyle(color: textSecondary.withOpacity(0.4), fontSize: 15, height: 1.6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: textPrimary.withOpacity(0.2), width: 1),
+                ),
+                filled: true,
+                fillColor: textSecondary.withOpacity(0.08),
+                contentPadding: const EdgeInsets.all(24),
               ),
             ),
           ),

@@ -62,6 +62,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
 
   // Job state
   bool _isProcessing = false;
+  bool _isSubmitting = false;
   String? _activeJobId;
   Map<String, dynamic>? _jobStatus;
   Timer? _pollTimer;
@@ -196,6 +197,8 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       return;
     }
 
+    setState(() => _isSubmitting = true);
+
     final transforms = <String>[];
     if (_stripMetadata) transforms.add('metadata');
     if (_mirror) transforms.add('mirror');
@@ -236,6 +239,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
         uploadedSubPath = await AffiliateService.uploadSubtitle(_subtitleFile!);
       } catch (e) {
         if (mounted) {
+          setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Upload subtitle thất bại: $e')),
           );
@@ -262,6 +266,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       );
 
       setState(() {
+        _isSubmitting = false;
         _activeJobId = jobId;
         _isProcessing = true;
         _jobStatus = {'status': 'pending', 'progress': 0};
@@ -269,6 +274,7 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
       _startPolling(jobId);
     } catch (e) {
       if (mounted) {
+        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Smart Reup error: $e')));
@@ -558,16 +564,22 @@ class _SmartReupScreenState extends State<SmartReupScreen> {
                 ],
               ),
               child: ElevatedButton(
-                onPressed: (_url != null || _videoFile != null) ? _startSmartReup : null,
+                onPressed: (_url != null || _videoFile != null) && !_isSubmitting ? _startSmartReup : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text(
-                  'Start Smart Reup',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text(
+                        'Start Smart Reup',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
               ),
             ),
           ),
