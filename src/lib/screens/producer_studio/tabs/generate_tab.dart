@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +6,6 @@ import 'package:http/http.dart' as http;
 import '../../../services/music_service.dart';
 import '../../../widgets/audio/waveform_player.dart';
 import '../../../widgets/common/custom_snackbar.dart';
-import '../../../config/api_config.dart';
 import '../../../services/api_service.dart';
 import '../../../services/storage_service.dart';
 
@@ -225,122 +223,91 @@ class _GenerateTabState extends State<GenerateTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    // Dynamic theme colors from Setting
-    final studioBg = theme.scaffoldBackgroundColor;
-    final studioSurface = isDark 
-        ? theme.colorScheme.surface 
-        : Colors.white;
-    final studioBorder = isDark 
-        ? theme.dividerColor.withOpacity(0.1) 
-        : Colors.black.withOpacity(0.08);
-    final studioAccent = theme.colorScheme.primary;
-    final studioTextPrimary = isDark ? Colors.white : Colors.black87;
-    final studioTextSecondary = isDark ? Colors.white54 : Colors.black45;
+    final accent = theme.colorScheme.primary;
+    final surface = isDark ? theme.colorScheme.surface : Colors.white;
+    final border = isDark ? theme.dividerColor.withOpacity(0.1) : Colors.black.withOpacity(0.08);
+    final tp = isDark ? Colors.white : Colors.black87;
+    final ts = isDark ? Colors.white54 : Colors.black45;
 
     return Theme(
       data: theme.copyWith(
         sliderTheme: theme.sliderTheme.copyWith(
           trackHeight: 2,
-          activeTrackColor: studioAccent,
-          inactiveTrackColor: studioAccent.withOpacity(0.1),
-          thumbColor: studioAccent,
-          overlayColor: studioAccent.withOpacity(0.1),
+          activeTrackColor: accent,
+          inactiveTrackColor: accent.withOpacity(0.1),
+          thumbColor: accent,
+          overlayColor: accent.withOpacity(0.1),
         ),
       ),
       child: Scaffold(
-        backgroundColor: studioBg,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: Row(
           children: [
-            // ── TOP: MAIN WORKSPACE & PROPERTIES ──
+            // ── LEFT: Main workspace (scrollable) ──
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              child: Column(
                 children: [
-                  // ── LEFT: MAIN CANVAS (TAGS & LYRICS) ──
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(32, 24, 32, 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildWorkspaceHeader(studioTextPrimary, studioTextSecondary),
-                          const SizedBox(height: 20),
-                          // VIBE & GENRE (Tags)
-                          Expanded(
-                            flex: 2,
-                            child: _buildInputStation(
-                              title: 'VIBE & GENRE',
-                              icon: Icons.auto_awesome_mosaic_rounded,
-                              controller: _tagsController,
-                              hint: 'Pop, electronic, cinematic, 90s hip hop, ethereal vocals...',
-                              studioSurface: studioSurface,
-                              studioBorder: studioBorder,
-                              textPrimary: studioTextPrimary,
-                              textSecondary: studioTextSecondary,
-                            ),
+                          // Header
+                          Text('Production Canvas',
+                            style: TextStyle(color: tp, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                          const SizedBox(height: 6),
+                          Text('Define the sonic identity of your track.',
+                            style: TextStyle(color: ts, fontSize: 14)),
+                          const SizedBox(height: 28),
+
+                          // Source audio (cover/repaint only)
+                          if (widget.taskType != 'text2music') ...[
+                            _sectionLabel('SOURCE AUDIO', ts),
+                            const SizedBox(height: 10),
+                            _buildSourceAudioPicker(border, accent, tp, ts, isDark),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Tags
+                          _sectionLabel('VIBE & GENRE', ts),
+                          const SizedBox(height: 10),
+                          _inputField(
+                            controller: _tagsController,
+                            hint: 'Pop, electronic, cinematic, 90s hip hop, ethereal vocals...',
+                            maxLines: 3,
+                            surface: surface, border: border, tp: tp, ts: ts,
                           ),
-                          const SizedBox(height: 16),
-                          // LYRICS (Takes remaining space)
-                          Expanded(
-                            flex: 4,
-                            child: _buildInputStation(
-                              title: 'LYRICS (OPTIONAL)',
-                              icon: Icons.lyrics_rounded,
-                              controller: _lyricsController,
-                              hint: '[Verse 1]\nWalking down the neon streets...\n\n[Chorus]\nAnd the lights go down...',
-                              studioSurface: studioSurface,
-                              studioBorder: studioBorder,
-                              textPrimary: studioTextPrimary,
-                              textSecondary: studioTextSecondary,
-                            ),
+                          const SizedBox(height: 24),
+
+                          // Lyrics
+                          _sectionLabel('LYRICS (OPTIONAL)', ts),
+                          const SizedBox(height: 10),
+                          _inputField(
+                            controller: _lyricsController,
+                            hint: '[Verse 1]\nWalking down the neon streets...\n\n[Chorus]\nAnd the lights go down...',
+                            maxLines: 10,
+                            surface: surface, border: border, tp: tp, ts: ts,
                           ),
                         ],
                       ),
                     ),
                   ),
 
-                  // ── RIGHT: PROPERTIES PANEL ──
+                  // ── Bottom bar: Generate + Output ──
                   Container(
-                    width: 320,
                     decoration: BoxDecoration(
-                      color: studioSurface,
-                      border: Border(left: BorderSide(color: studioBorder)),
+                      color: surface.withOpacity(isDark ? 0.85 : 1.0),
+                      border: Border(top: BorderSide(color: border)),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    child: Row(
                       children: [
-                        _buildStudioHeader(studioAccent, studioTextPrimary, 'PROPERTIES'),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (widget.taskType != 'text2music') ...[
-                                  _buildSidebarSectionTitle('SOURCE AUDIO', studioTextSecondary),
-                                  const SizedBox(height: 12),
-                                  _buildSourceAudioPicker(studioBorder, studioAccent, studioTextPrimary, studioTextSecondary, isDark),
-                                  const SizedBox(height: 32),
-                                ],
-                                _buildSidebarSectionTitle('ENGINE PARAMETERS', studioTextSecondary),
-                                const SizedBox(height: 20),
-                                _buildParameterSliders(studioAccent, studioTextPrimary),
-                                const SizedBox(height: 24),
-                                _buildDropdowns(studioBorder, studioTextSecondary, studioTextPrimary),
-                                const SizedBox(height: 24),
-                                _buildBitrateSelector(studioAccent, studioTextSecondary, isDark),
-                                if (widget.taskType != 'text2music') ...[
-                                  const SizedBox(height: 32),
-                                  _buildSidebarSectionTitle('ADVANCED', studioTextSecondary),
-                                  const SizedBox(height: 16),
-                                  _buildAdvancedSettings(studioAccent, studioTextPrimary),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
+                        _buildGenerateButton(accent),
+                        const SizedBox(width: 24),
+                        Container(height: 56, width: 1, color: border),
+                        const SizedBox(width: 24),
+                        Expanded(child: _buildOutputArea(accent, surface, border, ts, tp)),
                       ],
                     ),
                   ),
@@ -348,27 +315,61 @@ class _GenerateTabState extends State<GenerateTab> {
               ),
             ),
 
-            // ── BOTTOM: MASTER OUTPUT ──
+            // ── RIGHT: Properties sidebar (scrollable) ──
             Container(
+              width: 300,
               decoration: BoxDecoration(
-                color: studioSurface.withOpacity(isDark ? 0.8 : 1.0),
-                border: Border(top: BorderSide(color: studioBorder)),
-                boxShadow: isDark ? null : [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))
-                ],
+                color: surface,
+                border: Border(left: BorderSide(color: border)),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+              child: Column(
                 children: [
-                  // Generate Controls
-                  _buildGenerateButton(studioAccent),
-                  const SizedBox(width: 32),
-                  Container(height: 64, width: 1, color: studioBorder),
-                  const SizedBox(width: 32),
-                  // Master Results
+                  // Sidebar header
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: border))),
+                    child: Row(
+                      children: [
+                        Icon(Icons.tune_rounded, color: accent, size: 18),
+                        const SizedBox(width: 10),
+                        Text('PROPERTIES', style: TextStyle(color: tp, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      ],
+                    ),
+                  ),
                   Expanded(
-                    child: _buildMasterOutputDisplay(studioAccent, studioSurface, studioBorder, studioTextSecondary, studioTextPrimary),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionLabel('ENGINE', ts),
+                          const SizedBox(height: 16),
+                          _slider('BPM', _bpm, 60, 200, (v) => setState(() => _bpm = v), accent, tp),
+                          const SizedBox(height: 12),
+                          _slider('LENGTH', _duration, 30, 180, (v) => setState(() => _duration = v), accent, tp, unit: 's'),
+                          const SizedBox(height: 20),
+                          _dropdown('KEYSCALE', _selectedKeyscale, _keyscales, (v) => setState(() => _selectedKeyscale = v!), border, ts, tp),
+                          const SizedBox(height: 14),
+                          _dropdown('LANGUAGE', _selectedLanguage, _languages, (v) => setState(() => _selectedLanguage = v!), border, ts, tp),
+                          const SizedBox(height: 20),
+                          _sectionLabel('OUTPUT QUALITY', ts),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _bitrateChip('128k', 'STANDARD', accent, isDark),
+                              const SizedBox(width: 8),
+                              _bitrateChip('320k', 'HIGH-RES', accent, isDark),
+                            ],
+                          ),
+                          if (widget.taskType != 'text2music') ...[
+                            const SizedBox(height: 24),
+                            _sectionLabel('ADVANCED', ts),
+                            const SizedBox(height: 14),
+                            _buildAdvancedSettings(accent, tp),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -379,187 +380,66 @@ class _GenerateTabState extends State<GenerateTab> {
     );
   }
 
-  // ── HELPER WIDGETS ──
+  // ─── WIDGETS ───
 
-  Widget _buildStudioHeader(Color accent, Color textPrimary, String title) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: textPrimary.withOpacity(0.05))),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.settings_input_component_rounded, color: accent, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-        ],
-      ),
-    );
+  Widget _sectionLabel(String text, Color ts) {
+    return Text(text, style: TextStyle(color: ts, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2));
   }
 
-
-
-  Widget _buildSidebarSectionTitle(String title, Color textSecondary) {
-    return Text(
-      title,
-      style: TextStyle(
-        color: textSecondary,
-        fontSize: 10,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-
-  Widget _buildSourceAudioPicker(Color border, Color accent, Color textPrimary, Color textSecondary, bool isDark) {
-    return InkWell(
-      onTap: _isUploadingAudio ? null : _pickAndUploadAudio,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: _srcAudioServerPath != null ? accent.withOpacity(0.5) : border),
-          borderRadius: BorderRadius.circular(12),
-          color: _srcAudioServerPath != null 
-              ? accent.withOpacity(0.05) 
-              : (isDark ? Colors.black.withOpacity(0.2) : Colors.white),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _srcAudioServerPath != null ? Icons.check_circle_rounded : Icons.cloud_upload_rounded,
-              color: _srcAudioServerPath != null ? Colors.greenAccent : accent,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                _srcAudioFile?.path.split(Platform.pathSeparator).last ?? 'Select Audio File',
-                style: TextStyle(
-                  color: _srcAudioServerPath != null ? textPrimary : textSecondary,
-                  fontSize: 12,
-                  fontWeight: _srcAudioServerPath != null ? FontWeight.bold : FontWeight.normal,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildParameterSliders(Color accent, Color textPrimary) {
-    return Column(
-      children: [
-        _buildStudioSlider(
-          label: 'BPM',
-          value: _bpm,
-          min: 60,
-          max: 200,
-          onChanged: (v) => setState(() => _bpm = v),
-          accent: accent,
-          textPrimary: textPrimary,
-        ),
-        const SizedBox(height: 16),
-        _buildStudioSlider(
-          label: 'LENGTH',
-          value: _duration,
-          min: 30,
-          max: 180,
-          unit: 's',
-          onChanged: (v) => setState(() => _duration = v),
-          accent: accent,
-          textPrimary: textPrimary,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStudioSlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    String unit = '',
-    required ValueChanged<double> onChanged,
-    required Color accent,
-    required Color textPrimary,
+  Widget _inputField({
+    required TextEditingController controller,
+    required String hint,
+    required int maxLines,
+    required Color surface,
+    required Color border,
+    required Color tp,
+    required Color ts,
   }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      minLines: maxLines,
+      style: TextStyle(color: tp, fontSize: 15, height: 1.6),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: ts.withOpacity(0.5), fontSize: 14, height: 1.6),
+        filled: true,
+        fillColor: surface,
+        contentPadding: const EdgeInsets.all(20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: border)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: border)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: tp.withOpacity(0.25), width: 1.5)),
+      ),
+    );
+  }
+
+  Widget _slider(String label, double value, double min, double max, ValueChanged<double> onChanged, Color accent, Color tp, {String unit = ''}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: TextStyle(color: textPrimary.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.bold)),
+            Text(label, style: TextStyle(color: tp.withOpacity(0.6), fontSize: 11, fontWeight: FontWeight.bold)),
             Text('${value.toInt()}$unit', style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w900)),
           ],
         ),
-        Slider(
-          value: value, 
-          min: min, 
-          max: max, 
-          onChanged: onChanged,
-        ),
+        Slider(value: value, min: min, max: max, onChanged: onChanged),
       ],
     );
   }
 
-  Widget _buildDropdowns(Color border, Color textSecondary, Color textPrimary) {
-    return Column(
-      children: [
-        _buildStudioDropdown(
-          label: 'KEYSCALE',
-          value: _selectedKeyscale,
-          items: _keyscales,
-          onChanged: (v) => setState(() => _selectedKeyscale = v!),
-          border: border,
-          textSecondary: textSecondary,
-          textPrimary: textPrimary,
-        ),
-        const SizedBox(height: 16),
-        _buildStudioDropdown(
-          label: 'LANGUAGE',
-          value: _selectedLanguage,
-          items: _languages,
-          onChanged: (v) => setState(() => _selectedLanguage = v!),
-          border: border,
-          textSecondary: textSecondary,
-          textPrimary: textPrimary,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStudioDropdown({
-    required String label,
-    required String value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    required Color border,
-    required Color textSecondary,
-    required Color textPrimary,
-  }) {
+  Widget _dropdown(String label, String value, List<String> items, ValueChanged<String?> onChanged, Color border, Color ts, Color tp) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: textSecondary, fontSize: 10, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
+        Text(label, style: TextStyle(color: ts, fontSize: 10, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
           decoration: BoxDecoration(
-            color: textSecondary.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
+            color: ts.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: border),
           ),
           child: DropdownButtonHideUnderline(
@@ -567,7 +447,7 @@ class _GenerateTabState extends State<GenerateTab> {
               value: value,
               isExpanded: true,
               dropdownColor: Theme.of(context).colorScheme.surface,
-              style: TextStyle(color: textPrimary, fontSize: 14),
+              style: TextStyle(color: tp, fontSize: 13),
               onChanged: onChanged,
               items: items.map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase()))).toList(),
             ),
@@ -577,342 +457,178 @@ class _GenerateTabState extends State<GenerateTab> {
     );
   }
 
-  Widget _buildBitrateSelector(Color accent, Color textSecondary, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('OUTPUT QUALITY', style: TextStyle(color: textSecondary, fontSize: 9, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildBitrateChip('128k', 'STANDARD', accent, isDark),
-            const SizedBox(width: 8),
-            _buildBitrateChip('320k', 'HIGH-RES', accent, isDark),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBitrateChip(String value, String label, Color accent, bool isDark) {
-    final isSelected = _outputBitrate == value;
+  Widget _bitrateChip(String value, String label, Color accent, bool isDark) {
+    final sel = _outputBitrate == value;
     return Expanded(
       child: InkWell(
         onTap: () => setState(() => _outputBitrate = value),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          height: 44,
+          height: 40,
           decoration: BoxDecoration(
-            color: isSelected ? accent : (isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05)),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: isSelected ? accent : (isDark ? Colors.white10 : Colors.black12)),
+            color: sel ? accent : (isDark ? Colors.black26 : Colors.black.withOpacity(0.04)),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: sel ? accent : (isDark ? Colors.white10 : Colors.black12)),
           ),
           alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : (isDark ? Colors.white38 : Colors.black45),
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          child: Text(label, style: TextStyle(color: sel ? Colors.white : (isDark ? Colors.white38 : Colors.black45), fontSize: 10, fontWeight: FontWeight.w900)),
         ),
       ),
     );
   }
 
-  Widget _buildAdvancedSettings(Color accent, Color textPrimary) {
+  Widget _buildSourceAudioPicker(Color border, Color accent, Color tp, Color ts, bool isDark) {
+    return InkWell(
+      onTap: _isUploadingAudio ? null : _pickAndUploadAudio,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: _srcAudioServerPath != null ? accent.withOpacity(0.5) : border),
+          borderRadius: BorderRadius.circular(12),
+          color: _srcAudioServerPath != null ? accent.withOpacity(0.05) : (isDark ? Colors.black.withOpacity(0.2) : Colors.white),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _srcAudioServerPath != null ? Icons.check_circle_rounded : Icons.cloud_upload_rounded,
+              color: _srcAudioServerPath != null ? Colors.greenAccent : accent, size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _srcAudioFile?.path.split(Platform.pathSeparator).last ?? 'Select Audio File',
+                style: TextStyle(color: _srcAudioServerPath != null ? tp : ts, fontSize: 13,
+                  fontWeight: _srcAudioServerPath != null ? FontWeight.bold : FontWeight.normal),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_isUploadingAudio)
+              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdvancedSettings(Color accent, Color tp) {
     if (widget.taskType == 'cover') {
-      return _buildStudioSlider(
-        label: 'COVER STRENGTH',
-        value: _audioCoverStrength,
-        min: 0.1,
-        max: 1.0,
-        onChanged: (v) => setState(() => _audioCoverStrength = v),
-        accent: accent,
-        textPrimary: textPrimary,
-      );
+      return _slider('COVER STRENGTH', _audioCoverStrength, 0.1, 1.0, (v) => setState(() => _audioCoverStrength = v), accent, tp);
     }
     if (widget.taskType == 'repaint') {
       return Column(
         children: [
-          _buildStudioSlider(
-            label: 'START TIME',
-            value: _repaintingStart,
-            min: 0,
-            max: 180,
-            unit: 's',
-            onChanged: (v) => setState(() => _repaintingStart = v),
-            accent: accent,
-            textPrimary: textPrimary,
-          ),
-          const SizedBox(height: 16),
-          _buildStudioSlider(
-            label: 'END TIME',
-            value: _repaintingEnd,
-            min: -1,
-            max: 180,
-            onChanged: (v) => setState(() => _repaintingEnd = v),
-            accent: accent,
-            textPrimary: textPrimary,
-          ),
+          _slider('START TIME', _repaintingStart, 0, 180, (v) => setState(() => _repaintingStart = v), accent, tp, unit: 's'),
+          const SizedBox(height: 12),
+          _slider('END TIME', _repaintingEnd, -1, 180, (v) => setState(() => _repaintingEnd = v), accent, tp),
         ],
       );
     }
     return const SizedBox.shrink();
   }
 
-  Widget _buildWorkspaceHeader(Color textPrimary, Color textSecondary) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Production Canvas',
-          style: TextStyle(color: textPrimary, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Define the sonic identity of your track. Use comma-separated tags for best results.',
-          style: TextStyle(color: textSecondary, fontSize: 14),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInputStation({
-    required String title,
-    required IconData icon,
-    required TextEditingController controller,
-    required String hint,
-    required Color studioSurface,
-    required Color studioBorder,
-    required Color textPrimary,
-    required Color textSecondary,
-    double? height,
-  }) {
-    final content = Container(
-      decoration: BoxDecoration(
-        color: studioSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: studioBorder, width: 1.5),
-        boxShadow: Theme.of(context).brightness == Brightness.light ? [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
-        ] : null,
-      ),
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: textSecondary, size: 22),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: TextStyle(color: textPrimary.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              style: TextStyle(color: textPrimary, fontSize: 16, height: 1.6),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(color: textSecondary.withOpacity(0.4), fontSize: 15, height: 1.6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: textPrimary.withOpacity(0.2), width: 1),
-                ),
-                filled: true,
-                fillColor: textSecondary.withOpacity(0.08),
-                contentPadding: const EdgeInsets.all(24),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (height != null) {
-      return SizedBox(height: height, child: content);
-    }
-    return content;
-  }
-
   Widget _buildGenerateButton(Color accent) {
     return SizedBox(
-      width: 200,
-      height: 64,
+      width: 180,
+      height: 56,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleGenerate,
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: Colors.white,
           disabledBackgroundColor: accent.withOpacity(0.2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 6,
           shadowColor: accent.withOpacity(0.4),
         ),
         child: _isLoading
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.auto_fix_high_rounded, size: 22),
-                  SizedBox(width: 12),
-                  Text('GENERATE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                  Icon(Icons.auto_fix_high_rounded, size: 20),
+                  SizedBox(width: 10),
+                  Text('GENERATE', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                 ],
               ),
       ),
     );
   }
 
-  Widget _buildMasterOutputDisplay(Color accent, Color surface, Color border, Color textSecondary, Color textPrimary) {
+  Widget _buildOutputArea(Color accent, Color surface, Color border, Color ts, Color tp) {
     Widget content;
     if (_isLoading) {
-      content = _buildProcessingIndicator(accent, textPrimary, textSecondary);
+      content = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        child: Row(
+          children: [
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 14),
+            Expanded(child: Text('COMPOSING...', style: TextStyle(color: tp, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+            Text('~90s', style: TextStyle(color: ts, fontSize: 11)),
+          ],
+        ),
+      );
     } else if (_queuedMessage != null) {
-      content = _buildQueueState(accent);
+      content = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        child: Row(
+          children: [
+            Icon(Icons.hourglass_bottom_rounded, color: Colors.orangeAccent.withOpacity(0.6), size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(_queuedMessage!, style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+            IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => setState(() => _queuedMessage = null)),
+          ],
+        ),
+      );
     } else if (_audioBytes != null) {
-      content = _buildAudioResult(accent);
+      content = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: WaveformPlayer(
+                key: ValueKey(_audioBytes.hashCode),
+                audioBytes: _audioBytes!,
+                precalculatedAmplitudes: _amplitudes,
+              ),
+            ),
+            const SizedBox(width: 16),
+            InkWell(
+              onTap: _downloadAudio,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: accent.withOpacity(0.2))),
+                child: Icon(Icons.download_rounded, color: accent, size: 20),
+              ),
+            ),
+          ],
+        ),
+      );
     } else {
-      content = _buildEmptyOutputState(textSecondary);
+      content = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.album_rounded, color: ts.withOpacity(0.15), size: 28),
+              const SizedBox(width: 12),
+              Text('NO TRACK GENERATED', style: TextStyle(color: ts.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            ],
+          ),
+        ),
+      );
     }
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.black.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: content,
-      ),
-    );
-  }
-
-  Widget _buildEmptyOutputState(Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.album_rounded, color: textSecondary.withOpacity(0.1), size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'NO TRACK GENERATED',
-              style: TextStyle(color: textSecondary.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProcessingIndicator(Color accent, Color textPrimary, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  'ORCHESTRATING COMPOSITION...', 
-                  style: TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text('ETA: ~90s', style: TextStyle(color: textSecondary, fontSize: 12)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          LinearProgressIndicator(backgroundColor: accent.withOpacity(0.1), valueColor: AlwaysStoppedAnimation(accent)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQueueState(Color accent) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.hourglass_bottom_rounded, color: Colors.orangeAccent.withOpacity(0.5), size: 32),
-            const SizedBox(height: 12),
-            Text(
-              _queuedMessage ?? 'SYSTEM BUSY - QUEUED',
-              style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => setState(() => _queuedMessage = null),
-              child: const Text('DISMISS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAudioResult(Color accent) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: WaveformPlayer(
-              key: ValueKey(_audioBytes.hashCode),
-              audioBytes: _audioBytes!,
-              precalculatedAmplitudes: _amplitudes,
-            ),
-          ),
-          const SizedBox(width: 24),
-          _buildActionButton(Icons.download_rounded, 'DL', _downloadAudio, accent),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, String label, VoidCallback onTap, Color accent) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: accent.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withOpacity(0.2)),
-        ),
-        child: Icon(icon, color: accent, size: 20),
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(14), child: content),
     );
   }
 }
-
-
-
